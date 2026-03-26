@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gizmo Studio Ultra: AI Reviewer</title>
+    
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        
+        .answer-highlight { 
+            background-color: #fef08a; border-bottom: 3px solid #eab308;
+            padding: 0 6px; border-radius: 6px; font-weight: 800; color: #854d0e;
+        }
+
+        .quiz-input {
+            border-bottom: 3px solid #6366f1; background: #f8fafc; outline: none; 
+            padding: 0 10px; text-align: center; transition: all 0.3s ease;
+            font-weight: 800; color: #4338ca;
+        }
+
+        .modal-active { display: flex !important; animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+        .shake-error { animation: shake 0.4s ease-in-out; border: 2px solid #ef4444 !important; }
+        
+        #progressRing { transition: stroke-dashoffset 0.6s ease; }
+    </style>
+</head>
+<body class="h-screen overflow-hidden flex">
+
+    <!-- SIDEBAR -->
+    <aside class="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-sm z-10">
+        <div class="p-8">
+            <h1 class="text-2xl font-extrabold text-indigo-600 tracking-tighter italic">GIZMO.ULTRA</h1>
+            <button onclick="showModal('modalMainDeck')" class="mt-8 w-full bg-slate-900 hover:bg-indigo-600 text-white py-3.5 rounded-2xl font-bold text-sm shadow-xl shadow-slate-200 transition-all">
+                + New Collection
+            </button>
+        </div>
+        <nav id="sidebarNav" class="flex-1 overflow-y-auto custom-scroll px-4 space-y-1 pb-10"></nav>
+    </aside>
+
+    <!-- MAIN PANEL -->
+    <main class="flex-1 flex flex-col relative overflow-hidden">
+        <header class="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-10 shrink-0 z-20">
+            <div id="breadcrumb" class="text-xs font-bold text-slate-400 uppercase tracking-widest">Library / Collections</div>
+            
+            <div class="flex items-center gap-4">
+                <button onclick="showModal('modalMagicImport')" class="bg-amber-400 hover:bg-amber-500 text-white px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-lg shadow-amber-100">
+                    ✨ MAGIC IMPORT
+                </button>
+                <button onclick="showModal('modalSubDeck')" class="bg-white border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-50">
+                    + SUB-DECK
+                </button>
+                <button id="btnStartLearn" onclick="startLearning()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-2.5 rounded-xl text-xs font-black shadow-xl shadow-indigo-200 hidden">
+                    🚀 START LEARNING
+                </button>
+            </div>
+        </header>
+
+        <div id="workspace" class="flex-1 overflow-y-auto custom-scroll p-10">
+            <div class="max-w-5xl mx-auto space-y-12 pb-24">
+                
+                <!-- Manual Creator -->
+                <section class="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm">
+                    <h2 class="text-sm font-black text-slate-800 uppercase tracking-widest mb-6 underline decoration-indigo-200 decoration-4 underline-offset-8">Manual Card Creator</h2>
+                    <div id="editor" contenteditable="true" class="w-full min-h-[100px] bg-slate-50 border-2 border-slate-100 rounded-[2rem] p-8 text-2xl leading-relaxed focus:bg-white focus:border-indigo-400 transition-all outline-none mb-6"></div>
+                    <div class="flex gap-4">
+                        <button onclick="markAsAnswer()" class="bg-amber-100 text-amber-700 px-8 py-4 rounded-2xl font-bold text-sm hover:bg-amber-200 transition-all">✨ Highlight Answer</button>
+                        <button onclick="saveCard()" class="flex-1 bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black text-sm hover:bg-indigo-700 shadow-xl shadow-indigo-100">SAVE TO REPOSITORY</button>
+                    </div>
+                </section>
+
+                <!-- Sub-Folders -->
+                <section id="subFolderSection" class="hidden">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 ml-6 italic">Sub-Collections</h3>
+                    <div id="subFolderGrid" class="grid grid-cols-2 md:grid-cols-4 gap-6"></div>
+                </section>
+
+                <!-- Cards Grid -->
+                <section id="cardsSection">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 ml-6 italic">Active Reviewer Cards</h3>
+                    <div id="cardsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-8"></div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- MAGIC IMPORT MODAL -->
+    <div id="modalOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 hidden items-center justify-center p-4">
+        <div id="modalMagicImport" class="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl p-12 hidden flex-col">
+            <h3 class="text-3xl font-black mb-2 italic">Magic Importer ✨</h3>
+            <p class="text-slate-400 text-sm mb-8 font-medium">Upload .pdf, .docx, or .txt. We'll automatically detect terms and definitions.</p>
+            
+            <input type="file" id="magicFile" accept=".txt,.docx,.pdf" onchange="handleFileImport(event)" class="block w-full text-sm text-slate-500 file:mr-4 file:py-3 file:px-8 file:rounded-2xl file:border-0 file:text-xs file:font-black file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 mb-8 cursor-pointer">
+            
+            <textarea id="magicInput" placeholder="Or paste text here:&#10;Software&#10;- is a collection of data..." class="w-full h-40 bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 mb-6 outline-none text-xs font-mono"></textarea>
+
+            <div class="flex gap-4">
+                <button onclick="hideModals()" class="px-8 py-4 font-bold text-slate-400">Cancel</button>
+                <button onclick="processMagicImport(document.getElementById('magicInput').value)" class="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-amber-200 transition-all uppercase tracking-widest">Generate Reviewer</button>
+            </div>
+        </div>
+        
+        <div id="modalMainDeck" class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-10 hidden flex-col text-center">
+            <h3 class="text-2xl font-black mb-6">New Collection</h3>
+            <input id="inputMainDeck" type="text" placeholder="e.g. Finals 2024" class="w-full bg-slate-50 p-5 rounded-2xl mb-8 outline-indigo-500 font-bold text-lg">
+            <button onclick="actionCreateMainDeck()" class="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-indigo-100 transition-all">CREATE</button>
+        </div>
+
+        <div id="modalSubDeck" class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-10 hidden flex-col text-center">
+            <h3 class="text-2xl font-black mb-6">Add Sub-Folder</h3>
+            <input id="inputSubDeck" type="text" placeholder="e.g. Module 1" class="w-full bg-slate-50 p-5 rounded-2xl mb-8 outline-indigo-500 font-bold text-lg">
+            <button onclick="actionCreateSubDeck()" class="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-indigo-100 transition-all">ADD</button>
+        </div>
+    </div>
+
+    <!-- GAMIFIED LEARN OVERLAY -->
+    <div id="learnOverlay" class="fixed inset-0 bg-indigo-600 z-[60] translate-y-full transition-transform duration-700 flex flex-col items-center justify-center p-6">
+        <div class="absolute top-10 left-10 flex items-center gap-6">
+            <button onclick="exitLearning()" class="text-white/60 hover:text-white font-black text-xs tracking-widest uppercase">✕ QUIT</button>
+            <div class="flex items-center gap-2 text-white font-bold">🔥 STREAK: <span id="streakCount">0</span></div>
+        </div>
+
+        <div id="quizCard" class="bg-white w-full max-w-3xl rounded-[4rem] shadow-2xl p-16 text-center relative transition-all duration-300">
+            <!-- Circular Progress -->
+            <div class="absolute top-10 right-10 flex items-center justify-center">
+                <svg class="w-16 h-16 transform -rotate-90">
+                    <circle cx="32" cy="32" r="28" stroke="currentColor" stroke-width="6" fill="transparent" class="text-slate-100" />
+                    <circle id="progressRing" cx="32" cy="32" r="28" stroke="currentColor" stroke-width="6" fill="transparent" 
+                            class="text-indigo-600" stroke-dasharray="175.9" stroke-dashoffset="175.9" stroke-linecap="round" />
+                </svg>
+                <span id="quizProgressText" class="absolute text-[10px] font-black text-indigo-600">0%</span>
+            </div>
+
+            <div class="text-[10px] font-black text-indigo-300 tracking-[0.5em] mb-12 uppercase italic">Reviewing Deck</div>
+            <div id="quizContainer" class="text-3xl font-bold text-slate-800 leading-[1.6] mb-16"></div>
+            <div id="quizFeedback" class="mb-10 font-black text-2xl hidden"></div>
+            
+            <button id="btnCheck" onclick="checkAnswer()" class="w-full bg-indigo-600 text-white py-6 rounded-[2rem] font-black text-xl hover:scale-[1.02] transition-transform shadow-2xl shadow-indigo-200">CHECK ANSWER</button>
+            <button id="btnNext" onclick="nextQuestion()" class="hidden w-full bg-slate-900 text-white py-6 rounded-[2rem] font-black text-xl hover:scale-[1.02] transition-transform">NEXT CHALLENGE →</button>
+        </div>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        // State Management
+        let library = JSON.parse(localStorage.getItem('gizmo_v_final_ultra')) || [
+            { id: 1, name: "Psychology Reviewer", subDecks: [], cards: [{html: 'The <span class="answer-highlight">Limbic System</span> - is responsible for emotions.'}] }
+        ];
+        let activeDeck = library[0];
+        let queue = [], qIdx = 0, currentAnswers = [], streak = 0;
+
+        function init() { renderSidebar(); renderWorkspace(); }
+
+        // --- HIERARCHICAL STATE-BASED PARSER ---
+        function processMagicImport(rawText) {
+            if (!rawText.trim()) return;
+
+            // Split into sanitized lines, removing page headers and tiny noise
+            const lines = rawText.split(/\r?\n/)
+                .map(l => l.trim())
+                .filter(l => l.length > 3 && !/^Page \d+$/i.test(l) && !/^Module \d+$/i.test(l));
+
+            let count = 0;
+            let lastHeading = ""; 
+            let lastSubTopic = ""; 
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+
+                // Detect Definition Trigger (-, —, –, or starts with "is")
+                const isDefinition = /^[-—–]/.test(line) || line.toLowerCase().startsWith('is ');
+                // Detect Bullet/Numbering Trigger
+                const isBullet = /^[●•*○]/.test(line) || /^\d+\./.test(line);
+
+                if (isDefinition) {
+                    let answer = lastSubTopic || lastHeading;
+                    let context = (lastSubTopic && lastHeading) ? `(${lastHeading}) ` : "";
+
+                    if (answer) {
+                        activeDeck.cards.push({ 
+                            html: `<span class="answer-highlight">${answer}</span> ${context}${line}` 
+                        });
+                        count++;
+                    }
+                } 
+                else if (isBullet) {
+                    // This is a sub-topic (e.g. "Utility Software")
+                    lastSubTopic = line.replace(/^[●•*○\d\.]+\s*/, "");
+                } 
+                else {
+                    // This is a main heading (e.g. "System Software")
+                    lastHeading = line;
+                    lastSubTopic = ""; // Reset sub-topic for new heading
+                }
+            }
+
+            save(); renderWorkspace(); hideModals();
+            alert(`Successfully created ${count} individual flashcards.`);
+        }
+
+        // --- UNIVERSAL FILE HANDLER ---
+        async function handleFileImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const ext = file.name.split('.').pop().toLowerCase();
+            
+            try {
+                let fullText = "";
+                if (ext === 'txt') {
+                    fullText = await file.text();
+                } else if (ext === 'docx') {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const result = await mammoth.extractRawText({ arrayBuffer });
+                    fullText = result.value;
+                } else if (ext === 'pdf') {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        fullText += content.items.map(s => s.str).join(" ") + "\n";
+                    }
+                }
+                processMagicImport(fullText);
+            } catch (e) {
+                alert("File error: " + e.message);
+            }
+            event.target.value = '';
+        }
+
+        // --- GAMIFIED QUIZ ENGINE ---
+        function startLearning() {
+            queue = [...activeDeck.cards].sort(() => Math.random() - 0.5);
+            qIdx = 0; streak = 0;
+            document.getElementById('streakCount').innerText = streak;
+            document.getElementById('learnOverlay').classList.remove('translate-y-full');
+            loadQuestion();
+        }
+
+        function loadQuestion() {
+            const card = queue[qIdx];
+            const container = document.getElementById('quizContainer');
+            const cardEl = document.getElementById('quizCard');
+            
+            cardEl.classList.remove('shake-error');
+            document.getElementById('quizFeedback').className = "hidden";
+            document.getElementById('btnNext').className = "hidden";
+            document.getElementById('btnCheck').className = "w-full bg-indigo-600 text-white py-6 rounded-[2rem] font-black text-xl block";
+
+            const progress = (qIdx / queue.length) * 100;
+            const offset = 175.9 - (175.9 * (qIdx / queue.length));
+            document.getElementById('progressRing').style.strokeDashoffset = offset;
+            document.getElementById('quizProgressText').innerText = Math.round(progress) + "%";
+
+            let temp = document.createElement('div');
+            temp.innerHTML = card.html;
+            currentAnswers = [];
+            temp.querySelectorAll('.answer-highlight').forEach((h, i) => {
+                currentAnswers.push(h.innerText.trim().toLowerCase());
+                const inp = document.createElement('input');
+                inp.className = 'quiz-input';
+                inp.style.width = (h.innerText.length * 16 + 50) + 'px';
+                inp.dataset.idx = i;
+                h.parentNode.replaceChild(inp, h);
+            });
+            container.innerHTML = temp.innerHTML;
+            setTimeout(() => container.querySelector('input')?.focus(), 250);
+        }
+
+        function checkAnswer() {
+            const inputs = document.querySelectorAll('.quiz-input');
+            let isCorrect = true;
+
+            inputs.forEach(inp => {
+                const user = inp.value.trim().toLowerCase();
+                if (user === currentAnswers[inp.dataset.idx]) {
+                    inp.style.color = "#10b981"; inp.style.borderColor = "#10b981";
+                } else {
+                    inp.style.color = "#ef4444"; inp.style.borderColor = "#ef4444";
+                    isCorrect = false;
+                }
+                inp.disabled = true;
+            });
+
+            if (isCorrect) {
+                streak++;
+                confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#6366f1', '#10b981'] });
+            } else {
+                streak = 0;
+                document.getElementById('quizCard').classList.add('shake-error');
+            }
+
+            document.getElementById('streakCount').innerText = streak;
+            const fb = document.getElementById('quizFeedback');
+            fb.innerText = isCorrect ? "STREAK CONTINUES! CORRECT" : "KEEP TRYING! WRONG";
+            fb.className = `mb-10 font-black text-2xl block ${isCorrect ? 'text-emerald-500' : 'text-rose-500'}`;
+            
+            document.getElementById('btnCheck').className = "hidden";
+            document.getElementById('btnNext').className = "w-full bg-slate-900 text-white py-6 rounded-[2rem] font-black text-xl block";
+        }
+
+        function nextQuestion() {
+            qIdx++;
+            if (qIdx < queue.length) loadQuestion();
+            else { 
+                confetti({ particleCount: 300, spread: 100 }); 
+                alert("Deck Cleared! Returning to home."); 
+                exitLearning(); 
+            }
+        }
+
+        // --- SIDEBAR & WORKSPACE MGMT ---
+        function renderSidebar(decks = library, container = document.getElementById('sidebarNav'), level = 0) {
+            if (level === 0) container.innerHTML = '';
+            decks.forEach(deck => {
+                const active = activeDeck.id === deck.id;
+                const div = document.createElement('div');
+                div.onclick = () => selectDeck(deck.id);
+                div.className = `px-4 py-3 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-all ${active ? 'bg-indigo-50 text-indigo-700 shadow-sm shadow-indigo-50' : 'text-slate-400 hover:bg-slate-50'}`;
+                div.style.marginLeft = (level * 12) + "px";
+                div.innerText = deck.name;
+                container.appendChild(div);
+                if (deck.subDecks) renderSidebar(deck.subDecks, container, level + 1);
+            });
+        }
+
+        function renderWorkspace() {
+            document.getElementById('breadcrumb').innerText = `Collections / ${activeDeck.name}`;
+            document.getElementById('btnStartLearn').style.display = activeDeck.cards.length > 0 ? 'block' : 'none';
+            
+            const fGrid = document.getElementById('subFolderGrid');
+            fGrid.innerHTML = '';
+            if (activeDeck.subDecks && activeDeck.subDecks.length > 0) {
+                document.getElementById('subFolderSection').classList.remove('hidden');
+                activeDeck.subDecks.forEach(sub => {
+                    fGrid.innerHTML += `<div onclick="selectDeck(${sub.id})" class="bg-white p-6 rounded-2xl border-2 border-slate-100 hover:border-indigo-400 cursor-pointer text-center group">
+                        <div class="text-3xl mb-2 group-hover:scale-110 transition-transform">📂</div><h4 class="text-xs font-bold truncate">${sub.name}</h4>
+                    </div>`;
+                });
+            } else document.getElementById('subFolderSection').classList.add('hidden');
+
+            const cGrid = document.getElementById('cardsGrid');
+            cGrid.innerHTML = '';
+            activeDeck.cards.forEach((card, idx) => {
+                cGrid.innerHTML += `<div class="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative group">
+                    <button onclick="deleteCard(${idx})" class="absolute top-6 right-6 text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">✕</button>
+                    <div class="text-xl text-slate-700 leading-relaxed">${card.html}</div>
+                </div>`;
+            });
+        }
+
+        // --- SYSTEM HELPERS ---
+        function findDeck(id, list = library) {
+            for (let d of list) { if (d.id === id) return d; if(d.subDecks) { let f = findDeck(id, d.subDecks); if (f) return f; } }
+        }
+        function selectDeck(id) { activeDeck = findDeck(id, library); renderSidebar(); renderWorkspace(); }
+        function showModal(id) { document.getElementById('modalOverlay').classList.add('modal-active'); document.getElementById(id).classList.remove('hidden'); document.getElementById(id).classList.add('flex'); }
+        function hideModals() { document.getElementById('modalOverlay').classList.remove('modal-active'); document.querySelectorAll('#modalOverlay > div').forEach(d => d.classList.add('hidden')); }
+        function actionCreateMainDeck() {
+            const n = document.getElementById('inputMainDeck').value;
+            if (n) { library.push({ id: Date.now(), name: n, subDecks: [], cards: [] }); save(); renderSidebar(); hideModals(); }
+        }
+        function actionCreateSubDeck() {
+            const n = document.getElementById('inputSubDeck').value;
+            if (n) { activeDeck.subDecks.push({ id: Date.now(), name: n, subDecks: [], cards: [] }); save(); renderSidebar(); renderWorkspace(); hideModals(); }
+        }
+        function markAsAnswer() {
+            const sel = window.getSelection();
+            if (!sel.rangeCount || sel.isCollapsed) return;
+            const span = document.createElement('span'); span.className = 'answer-highlight';
+            sel.getRangeAt(0).surroundContents(span);
+        }
+        function saveCard() {
+            const ed = document.getElementById('editor');
+            if (!ed.innerText.trim()) return;
+            activeDeck.cards.push({ html: ed.innerHTML.trim() });
+            ed.innerHTML = ''; save(); renderWorkspace();
+        }
+        function deleteCard(idx) { if(confirm('Delete?')) { activeDeck.cards.splice(idx, 1); save(); renderWorkspace(); } }
+        function save() { localStorage.setItem('gizmo_v_final_ultra', JSON.stringify(library)); }
+        function exitLearning() { document.getElementById('learnOverlay').classList.add('translate-y-full'); }
+
+        init();
+    </script>
+</body>
+</html>
