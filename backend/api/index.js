@@ -140,5 +140,12 @@ app.post('/api/verify', async (req, res) => {
     }
 });
 
+const PORT = process.env.PORT || 3000;
+
+// 2. Start the server (Render needs this to detect the port)
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ Backend Server is live on port ${PORT}`);
+});
+
 // --- EXPORT FOR VERCEL ---
 module.exports = app;
