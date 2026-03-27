@@ -1,561 +1,705 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Saulado.ai | Typo-Tolerant AI Reviewer</title>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Saulado.ai | Your AI Reviewer Buddy</title>
-
-    <!-- Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-
-        body {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            background-color: #f8fafc;
-            color: #1e293b;
+      @import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap");
+      body {
+        font-family: "Plus Jakarta Sans", sans-serif;
+        background-color: #f8fafc;
+        color: #1e293b;
+      }
+      .custom-scroll::-webkit-scrollbar {
+        width: 5px;
+      }
+      .custom-scroll::-webkit-scrollbar-thumb {
+        background: #e2e8f0;
+        border-radius: 10px;
+      }
+      .answer-highlight {
+        background-color: #eff6ff;
+        border-bottom: 2px solid #6366f1;
+        padding: 0 4px;
+        border-radius: 4px;
+        font-weight: 700;
+        color: #4338ca;
+      }
+      .modal-active {
+        display: flex !important;
+        animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      @keyframes popIn {
+        from {
+          opacity: 0;
+          transform: scale(0.9) translateY(20px);
         }
-
-        .custom-scroll::-webkit-scrollbar {
-            width: 5px;
+        to {
+          opacity: 1;
+          transform: scale(1) translateY(0);
         }
-
-        .custom-scroll::-webkit-scrollbar-thumb {
-            background: #e2e8f0;
-            border-radius: 10px;
+      }
+      .lado-float {
+        animation: bounce-slow 3s ease-in-out infinite;
+      }
+      @keyframes bounce-slow {
+        0%,
+        100% {
+          transform: translateY(0);
         }
-
-        .answer-highlight {
-            background-color: #eff6ff;
-            border-bottom: 2px solid #6366f1;
-            padding: 0 4px;
-            border-radius: 4px;
-            font-weight: 700;
-            color: #4338ca;
+        50% {
+          transform: translateY(-10px);
         }
-
-        .modal-active {
-            display: flex !important;
-            animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-
-        @keyframes popIn {
-            from {
-                opacity: 0;
-                transform: scale(0.9) translateY(20px);
-            }
-
-            to {
-                opacity: 1;
-                transform: scale(1) translateY(0);
-            }
-        }
-
-        @keyframes bounce-slow {
-
-            0%,
-            100% {
-                transform: translateY(0);
-            }
-
-            50% {
-                transform: translateY(-10px);
-            }
-        }
-
-        .lado-float {
-            animation: bounce-slow 3s ease-in-out infinite;
-        }
-
-        @keyframes shake {
-
-            0%,
-            100% {
-                transform: translateX(0);
-            }
-
-            25% {
-                transform: translateX(-8px);
-            }
-
-            75% {
-                transform: translateX(8px);
-            }
-        }
-
-        .shake-error {
-            animation: shake 0.3s ease-in-out;
-            border-color: #ef4444 !important;
-        }
+      }
+      .chevron {
+        transition: transform 0.2s ease;
+        display: inline-block;
+        width: 12px;
+        cursor: pointer;
+      }
+      .chevron.open {
+        transform: rotate(90deg);
+      }
+      .sidebar-item:hover .study-btn-sm {
+        opacity: 1;
+      }
+      .study-btn-sm {
+        opacity: 0;
+        transition: all 0.2s;
+      }
     </style>
-</head>
-
-<body class="h-screen overflow-hidden flex">
-
+  </head>
+  <body class="h-screen overflow-hidden flex">
     <!-- SIDEBAR -->
-    <aside class="w-72 bg-white border-r border-slate-200 flex flex-col shrink-0 z-10 shadow-sm">
-        <div class="p-8">
-            <div class="flex items-center gap-2 mb-8">
-                <div class="text-3xl lado-float">🦉</div>
-                <h1 class="text-xl font-extrabold text-slate-900 tracking-tighter">SAULADO<span
-                        class="text-indigo-600">.AI</span></h1>
-            </div>
-            <button onclick="showModal('modalMainDeck')"
-                class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 rounded-2xl font-bold text-sm transition-all shadow-lg shadow-indigo-100">
-                + Bagong Collection
-            </button>
-        </div>
-        <nav id="sidebarNav" class="flex-1 overflow-y-auto custom-scroll px-4 space-y-1 pb-10"></nav>
+    <aside
+      class="w-72 bg-white border-r border-slate-200 flex flex-col shrink-0 z-10 shadow-sm"
+    >
+      <div class="p-8 text-center">
+        <div class="text-3xl lado-float mb-2">🦉</div>
+        <h1 class="text-xl font-extrabold text-slate-900 tracking-tighter mb-6">
+          SAULADO<span class="text-indigo-600">.AI</span>
+        </h1>
+        <button
+          onclick="showModal('modalMainDeck')"
+          class="w-full bg-indigo-600 text-white py-3.5 rounded-2xl font-bold text-sm shadow-lg shadow-indigo-100"
+        >
+          + Bagong Collection
+        </button>
+      </div>
+      <nav
+        id="sidebarNav"
+        class="flex-1 overflow-y-auto custom-scroll px-4 space-y-1 pb-10"
+      ></nav>
     </aside>
 
     <!-- MAIN PANEL -->
     <main class="flex-1 flex flex-col relative overflow-hidden">
-        <header
-            class="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-10 shrink-0 z-20">
-            <div>
-                <div id="breadcrumb" class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Library
-                </div>
-                <div id="activeDeckTitle" class="text-sm font-bold text-slate-800">Pumili ng Reviewer</div>
-            </div>
-
-            <div class="flex items-center gap-3">
-                <button onclick="showModal('modalMagicImport')"
-                    class="bg-amber-400 hover:bg-amber-500 text-white px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2">
-                    ✨ MAGIC IMPORT
-                </button>
-                <button id="btnStartLearn" onclick="startLearning()"
-                    class="hidden bg-slate-900 hover:bg-indigo-600 text-white px-8 py-2.5 rounded-xl text-xs font-black shadow-xl transition-all">
-                    🚀 SIMULAN NA!
-                </button>
-            </div>
-        </header>
-
-        <div id="workspace" class="flex-1 overflow-y-auto custom-scroll p-10">
-            <div id="emptyState" class="hidden flex flex-col items-center justify-center h-full text-center space-y-4">
-                <div class="text-7xl lado-float">🦉</div>
-                <h2 class="text-xl font-extrabold text-slate-800">"Uy, wala pang laman dito!"</h2>
-                <p class="text-slate-400 text-sm max-w-xs">Mag-import ka na ng PDF o gumawa ng card para simulan na
-                    natin ang pag-aaral.</p>
-            </div>
-
-            <div id="contentArea" class="max-w-4xl mx-auto space-y-10 pb-24">
-                <!-- Creator -->
-                <section class="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                    <div id="editor" contenteditable="true" placeholder="I-type ang definition dito..."
-                        class="w-full min-h-[60px] text-xl leading-relaxed focus:outline-none mb-6 empty:before:content-[attr(placeholder)] empty:before:text-slate-300">
-                    </div>
-                    <div class="flex gap-3">
-                        <button onclick="markAsAnswer()"
-                            class="bg-indigo-50 text-indigo-600 px-6 py-3 rounded-xl font-bold text-xs hover:bg-indigo-100 transition-all">✨
-                            Highlight Answer</button>
-                        <button onclick="saveCard()"
-                            class="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-xl font-black text-xs">SAVE
-                            CARD</button>
-                    </div>
-                </section>
-
-                <section id="subFolderSection" class="hidden">
-                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-2 italic">
-                        Sub-Folders</h3>
-                    <div id="subFolderGrid" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
-                </section>
-
-                <section id="cardsSection">
-                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-2 italic">
-                        Reviewer Cards</h3>
-                    <div id="cardsGrid" class="grid grid-cols-1 gap-4"></div>
-                </section>
-            </div>
+      <header
+        class="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-10 shrink-0 z-20"
+      >
+        <div>
+          <div
+            id="breadcrumb"
+            class="text-[10px] font-black text-slate-400 uppercase tracking-widest"
+          >
+            Library
+          </div>
+          <div id="activeDeckTitle" class="text-sm font-bold text-slate-800">
+            Pumili ng Reviewer
+          </div>
         </div>
+        <div class="flex items-center gap-3">
+          <button
+            onclick="showModal('modalMagicImport')"
+            class="bg-amber-400 text-white px-5 py-2.5 rounded-xl text-xs font-black"
+          >
+            ✨ MAGIC IMPORT
+          </button>
+          <button
+            id="btnStartLearn"
+            onclick="startLearning()"
+            class="hidden bg-slate-900 text-white px-8 py-2.5 rounded-xl text-xs font-black shadow-xl"
+          >
+            🚀 SIMULAN NA!
+          </button>
+        </div>
+      </header>
+
+      <div id="workspace" class="flex-1 overflow-y-auto custom-scroll p-10">
+        <div class="max-w-4xl mx-auto space-y-10 pb-24">
+          <!-- Creator -->
+          <section
+            class="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm"
+          >
+            <div
+              id="editor"
+              contenteditable="true"
+              placeholder="I-type ang definition dito..."
+              class="w-full min-h-[60px] text-xl leading-relaxed focus:outline-none mb-6 empty:before:content-[attr(placeholder)] empty:before:text-slate-300"
+            ></div>
+            <div class="flex gap-3">
+              <button
+                onclick="markAsAnswer()"
+                class="bg-indigo-50 text-indigo-600 px-6 py-3 rounded-xl font-bold text-xs"
+              >
+                ✨ Highlight Answer
+              </button>
+              <button
+                onclick="saveCard()"
+                class="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-xl font-black text-xs"
+              >
+                SAVE CARD
+              </button>
+            </div>
+          </section>
+
+          <!-- Sub-Folders -->
+          <section id="subFolderSection">
+            <div class="flex justify-between items-center mb-4 ml-2">
+              <h3
+                class="text-[10px] font-black text-slate-400 uppercase tracking-widest italic"
+              >
+                Sub-Folders
+              </h3>
+              <button
+                onclick="showModal('modalSubDeck')"
+                class="text-[10px] bg-slate-100 text-indigo-600 px-3 py-1 rounded-full font-bold"
+              >
+                + ADD SUB-DECK
+              </button>
+            </div>
+            <div
+              id="subFolderGrid"
+              class="grid grid-cols-2 md:grid-cols-4 gap-4"
+            ></div>
+          </section>
+
+          <!-- Cards Grid -->
+          <section id="cardsSection">
+            <div class="flex justify-between items-center mb-4 ml-2">
+              <h3
+                class="text-[10px] font-black text-slate-400 uppercase tracking-widest italic"
+              >
+                Reviewer Cards
+              </h3>
+
+              <!-- SHUFFLE CONTROLS -->
+              <div id="shuffleControls" class="flex gap-2 hidden">
+                <button
+                  onclick="shuffleCards()"
+                  class="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1 rounded-full font-bold transition-all"
+                >
+                  🔀 SHUFFLE
+                </button>
+                <button
+                  onclick="resetOrder()"
+                  class="text-[10px] bg-slate-100 hover:bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full font-bold transition-all"
+                >
+                  🕒 DEFAULT ORDER
+                </button>
+              </div>
+            </div>
+            <div id="cardsGrid" class="grid grid-cols-1 gap-4"></div>
+          </section>
+        </div>
+      </div>
     </main>
 
-    <!-- MODALS -->
-    <div id="modalOverlay"
-        class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-        <div id="modalMagicImport" class="bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl p-10 hidden flex-col">
-            <h3 class="text-2xl font-black mb-2 italic">Magic Import ✨</h3>
-            <p class="text-slate-400 text-xs mb-6 font-medium italic">"Ako na ang bahala mag-extract ng keywords para
-                sa'yo." - Lado</p>
-            <input type="file" id="magicFile" accept=".txt,.docx,.pdf" onchange="handleFileImport(event)"
-                class="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-indigo-600 file:text-white mb-6">
-            <textarea id="magicInput" placeholder="O kaya i-paste ang text dito: Term - Definition..."
-                class="w-full h-32 bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 mb-6 outline-none text-xs font-mono"></textarea>
-            <div class="flex gap-3">
-                <button onclick="hideModals()" class="px-6 py-3 font-bold text-slate-400 text-xs">Cancel</button>
-                <button onclick="processMagicImport(document.getElementById('magicInput').value)"
-                    class="flex-1 bg-amber-500 text-white py-3 rounded-xl font-black text-xs">Generate Reviewer</button>
-            </div>
+    <!-- QUIZ OVERLAY -->
+    <div
+      id="learnOverlay"
+      class="fixed inset-0 bg-slate-50 z-[60] translate-y-full transition-transform duration-500 flex flex-col items-center justify-center p-6"
+    >
+      <div
+        class="absolute top-0 left-0 w-full p-8 flex justify-between items-center"
+      >
+        <button
+          onclick="exitLearning()"
+          class="font-black text-[10px] text-slate-400 uppercase tracking-widest"
+        >
+          ← EXIT STUDY
+        </button>
+        <div
+          class="flex-1 max-w-xs mx-10 h-2 bg-slate-200 rounded-full overflow-hidden"
+        >
+          <div
+            id="quizProgressBar"
+            class="h-full bg-indigo-600 transition-all"
+            style="width: 0%"
+          ></div>
         </div>
+        <div
+          class="bg-white px-4 py-2 rounded-xl border font-black text-slate-700"
+        >
+          🔥 <span id="streakCount">0</span>
+        </div>
+      </div>
 
-        <div id="modalMainDeck" class="bg-white w-full max-w-sm rounded-[2.5rem] p-10 hidden flex-col text-center">
-            <h3 class="text-xl font-black mb-6 italic">Bagong Collection</h3>
-            <input id="inputMainDeck" type="text" placeholder="Hal: Science Quiz"
-                class="w-full bg-slate-50 p-4 rounded-xl mb-6 outline-indigo-500 font-bold">
-            <button onclick="actionCreateMainDeck()"
-                class="w-full bg-indigo-600 text-white py-4 rounded-xl font-black">LIKA NA!</button>
+      <div id="quizContainer" class="w-full max-w-2xl">
+        <div id="ladoChar" class="text-7xl text-center mb-6">🦉</div>
+        <div
+          id="questionBox"
+          class="bg-white rounded-[3.5rem] shadow-xl p-12 border border-slate-100 text-center"
+        >
+          <div
+            id="quizPrompt"
+            class="text-2xl font-bold text-slate-800 mb-10"
+          ></div>
+          <div id="interactionZone" class="space-y-3"></div>
+          <div
+            id="quizFeedback"
+            class="mt-8 font-bold text-lg min-h-[2rem]"
+          ></div>
         </div>
+        <button
+          id="btnAction"
+          onclick="handleMainAction()"
+          class="mt-8 w-full bg-indigo-600 text-white py-5 rounded-3xl font-black shadow-lg uppercase tracking-widest"
+        >
+          Suriin ang Sagot
+        </button>
+      </div>
+
+      <div id="resultsScreen" class="hidden w-full max-w-lg text-center">
+        <h2 class="text-3xl font-black mb-8">Tapos na! 🎉</h2>
+        <canvas
+          id="scoreChart"
+          class="mx-auto mb-8"
+          width="250"
+          height="250"
+        ></canvas>
+        <button
+          onclick="exitLearning()"
+          class="w-full bg-slate-900 text-white py-5 rounded-3xl font-black"
+        >
+          BUMALIK SA LIBRARY
+        </button>
+      </div>
     </div>
 
-    <!-- MINIMALIST LEARN OVERLAY -->
-    <div id="learnOverlay"
-        class="fixed inset-0 bg-slate-50 z-[60] translate-y-full transition-transform duration-500 flex flex-col items-center justify-center p-6">
-        <!-- Progress -->
-        <div class="absolute top-0 left-0 w-full p-8 flex justify-between items-center">
-            <button onclick="exitLearning()"
-                class="group flex items-center gap-2 text-slate-400 hover:text-slate-900 transition-all">
-                <span class="text-2xl group-hover:-translate-x-1 transition-transform">←</span>
-                <span class="font-bold text-[10px] tracking-widest uppercase">Exit Study</span>
-            </button>
-            <div class="flex flex-col items-center flex-1 max-w-sm px-10">
-                <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                    <div id="quizProgressBar" class="h-full bg-indigo-600 transition-all duration-700"
-                        style="width: 0%"></div>
-                </div>
-            </div>
-            <div class="flex items-center gap-3 bg-white px-5 py-2.5 rounded-2xl border border-slate-200 shadow-sm">
-                <span class="text-orange-500">🔥</span>
-                <span id="streakCount" class="font-black text-slate-700">0</span>
-            </div>
-        </div>
-
-        <!-- Character & Quiz -->
-        <div class="w-full max-w-2xl relative">
-            <!-- Lado Feedback Character -->
-            <div id="ladoChar"
-                class="absolute -top-24 left-1/2 -translate-x-1/2 text-7xl transition-all duration-300 scale-100">
-                🦉
-            </div>
-
-            <div id="questionBox"
-                class="bg-white rounded-[3.5rem] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.06)] p-12 border border-slate-100 transition-all">
-                <div id="quizCategory"
-                    class="text-[10px] font-black text-indigo-400 tracking-[0.4em] mb-10 uppercase text-center">SAULADO
-                    MODE</div>
-
-                <div id="quizPrompt"
-                    class="text-2xl md:text-3xl font-bold text-slate-800 leading-relaxed text-center mb-12"></div>
-
-                <div id="interactionZone" class="space-y-3"></div>
-
-                <div id="quizFeedback" class="mt-8 text-center font-bold text-lg hidden"></div>
-            </div>
-
-            <div class="mt-8 flex gap-4">
-                <button id="btnToggleMode" onclick="toggleMode()"
-                    class="flex-1 bg-white border-2 border-slate-100 text-slate-500 py-5 rounded-3xl font-bold hover:bg-slate-100 transition-all text-sm">
-                    Hindi sigurado? (Choices)
-                </button>
-                <button id="btnAction" onclick="handleMainAction()"
-                    class="flex-[2] bg-indigo-600 text-white py-5 rounded-3xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all uppercase tracking-widest text-sm">
-                    Check Answer
-                </button>
-            </div>
-        </div>
+    <!-- MODALS -->
+    <div
+      id="modalOverlay"
+      class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden items-center justify-center p-4"
+    >
+      <div
+        id="modalMainDeck"
+        class="bg-white w-full max-w-sm rounded-[2.5rem] p-10 hidden flex-col"
+      >
+        <h3 class="text-center font-black mb-6">Bagong Collection</h3>
+        <input
+          id="inputMainDeck"
+          type="text"
+          placeholder="Hal: Science"
+          class="w-full bg-slate-50 p-4 rounded-xl mb-4 font-bold"
+        />
+        <button
+          onclick="actionCreateMainDeck()"
+          class="w-full bg-indigo-600 text-white py-4 rounded-xl font-black"
+        >
+          LIKA NA!
+        </button>
+      </div>
+      <div
+        id="modalSubDeck"
+        class="bg-white w-full max-w-sm rounded-[2.5rem] p-10 hidden flex-col"
+      >
+        <h3 class="text-center font-black mb-6">Bagong Sub-Deck</h3>
+        <input
+          id="inputSubDeck"
+          type="text"
+          placeholder="Hal: Chapter 1"
+          class="w-full bg-slate-50 p-4 rounded-xl mb-4 font-bold"
+        />
+        <button
+          onclick="actionCreateSubDeck()"
+          class="w-full bg-indigo-600 text-white py-4 rounded-xl font-black"
+        >
+          IDAGDAG
+        </button>
+      </div>
+      <div
+        id="modalMagicImport"
+        class="bg-white w-full max-w-xl rounded-[2.5rem] p-10 hidden flex-col"
+      >
+        <h3 class="font-black mb-4">Magic Import ✨</h3>
+        <textarea
+          id="magicInput"
+          placeholder="Term - Definition..."
+          class="w-full h-32 bg-slate-50 border p-4 rounded-2xl mb-4 font-mono text-sm"
+        ></textarea>
+        <button
+          onclick="
+            processMagicImport(document.getElementById('magicInput').value)
+          "
+          class="w-full bg-amber-500 text-white py-4 rounded-xl font-black"
+        >
+          GENERATE
+        </button>
+        <button onclick="hideModals()" class="mt-4 text-slate-400 font-bold">
+          Cancel
+        </button>
+      </div>
     </div>
 
     <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+      // Start time for the session to act as a base for old cards
+      const SESSION_START = Date.now();
 
-        let library = JSON.parse(localStorage.getItem('saulado_data')) || [
-            { id: 1, name: "Sample Subject", subDecks: [], cards: [{ html: '<span class="answer-highlight">Kabisado</span> ang tawag sa taong saulado na ang lahat.' }] }
-        ];
-        let activeDeck = library[0];
-        let queue = [], qIdx = 0, streak = 0;
-        let currentMode = 'type';
-        let currentCorrectAnswer = "";
-        let quizState = 'asking';
+      let library = JSON.parse(localStorage.getItem("saulado_data")) || [
+        {
+          id: 1,
+          name: "Sample",
+          subDecks: [],
+          cards: [
+            {
+              html: '<span class="answer-highlight">Rizal</span> is the national hero.',
+              order: SESSION_START,
+            },
+          ],
+        },
+      ];
+      let activeDeck = library[0];
+      let expandedDecks = new Set([1]);
+      let queue = [],
+        qIdx = 0,
+        streak = 0,
+        correctCount = 0,
+        currentCorrectAnswer = "",
+        quizState = "asking",
+        chartInstance = null;
 
-        function init() { renderSidebar(); renderWorkspace(); }
-        function save() { localStorage.setItem('saulado_data', JSON.stringify(library)); }
+      function init() {
+        renderSidebar();
+        renderWorkspace();
+      }
+      function save() {
+        localStorage.setItem("saulado_data", JSON.stringify(library));
+      }
 
-        // --- LADO CHARACTER REACTIONS ---
-        const LADO_MOODS = {
-            idle: '🦉',
-            thinking: '🧐',
-            correct: '🎓',
-            wrong: '✍️',
-            finish: '🎉'
+      // --- FIXED ORDER LOGIC ---
+      function shuffleCards() {
+        if (activeDeck.cards.length < 2) return;
+        for (let i = activeDeck.cards.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [activeDeck.cards[i], activeDeck.cards[j]] = [
+            activeDeck.cards[j],
+            activeDeck.cards[i],
+          ];
+        }
+        save();
+        renderWorkspace();
+      }
+
+      function resetOrder() {
+        // Sort by the 'order' property we set when creating cards
+        activeDeck.cards.sort((a, b) => (a.order || 0) - (b.order || 0));
+        save();
+        renderWorkspace();
+      }
+
+      // --- RECURSIVE CARD COLLECTOR ---
+      function getAllCardsRecursively(deck) {
+        let cards = [...deck.cards];
+        if (deck.subDecks && deck.subDecks.length > 0) {
+          deck.subDecks.forEach((sub) => {
+            cards = cards.concat(getAllCardsRecursively(sub));
+          });
+        }
+        return cards;
+      }
+
+      // --- AI TYPO CHECKER ---
+      async function verifyAnswerWithAI(userAnswer, correctAnswer) {
+        try {
+          const response = await fetch("http://localhost:3000/verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userAnswer, correctAnswer }),
+          });
+          const data = await response.json();
+          return data.isCorrect;
+        } catch (e) {
+          return (
+            userAnswer.toLowerCase().trim() ===
+            correctAnswer.toLowerCase().trim()
+          );
+        }
+      }
+
+      // --- QUIZ FUNCTIONS ---
+      function startLearning(deckOverride) {
+        const target = deckOverride || activeDeck;
+        const combined = getAllCardsRecursively(target);
+        if (combined.length === 0) return;
+        document.getElementById("quizContainer").classList.remove("hidden");
+        document.getElementById("resultsScreen").classList.add("hidden");
+        queue = [...combined].sort(() => 0.5 - Math.random());
+        qIdx = 0;
+        streak = 0;
+        correctCount = 0;
+        document
+          .getElementById("learnOverlay")
+          .classList.remove("translate-y-full");
+        loadQuestion();
+      }
+
+      function loadQuestion() {
+        quizState = "asking";
+        const card = queue[qIdx];
+        const temp = document.createElement("div");
+        temp.innerHTML = card.html;
+        currentCorrectAnswer =
+          temp.querySelector(".answer-highlight")?.innerText || "";
+        document.getElementById("quizPrompt").innerHTML = card.html.replace(
+          /<span class="answer-highlight">.*?<\/span>/g,
+          '<span class="text-indigo-500 font-black border-b-2 border-indigo-100 px-2">_______</span>',
+        );
+        document.getElementById("interactionZone").innerHTML =
+          `<input id="userAnswer" autofocus class="w-full p-5 rounded-2xl border-2 border-slate-100 text-center text-xl font-bold outline-indigo-500" placeholder="I-type ang sagot...">`;
+        document.getElementById("quizFeedback").innerText = "";
+        document.getElementById("btnAction").innerText = "Suriin ang Sagot";
+        document.getElementById("quizProgressBar").style.width =
+          (qIdx / queue.length) * 100 + "%";
+        document.getElementById("userAnswer").addEventListener("keyup", (e) => {
+          if (e.key === "Enter") handleMainAction();
+        });
+        setTimeout(() => document.getElementById("userAnswer").focus(), 500);
+      }
+
+      async function handleMainAction() {
+        if (quizState === "asking") {
+          const input = document.getElementById("userAnswer");
+          const val = input.value.trim();
+          if (!val) return;
+          quizState = "checking";
+          const fb = document.getElementById("quizFeedback");
+          fb.classList.remove("hidden");
+          fb.innerText = "Sinisiyasat ni Lado... 🧐";
+          const isCorrect = await verifyAnswerWithAI(val, currentCorrectAnswer);
+          quizState = "feedback";
+          if (isCorrect) {
+            streak++;
+            correctCount++;
+            fb.innerText =
+              val.toLowerCase() === currentCorrectAnswer.toLowerCase()
+                ? "Tama! ✨"
+                : `Pwede na! (Sagot: ${currentCorrectAnswer}) ✨`;
+            fb.className = "mt-8 text-emerald-500 font-bold";
+            confetti({ particleCount: 30, spread: 50, origin: { y: 0.8 } });
+          } else {
+            streak = 0;
+            fb.innerText = `Mali! Ang tamang sagot ay: ${currentCorrectAnswer}`;
+            fb.className = "mt-8 text-rose-500 font-bold";
+          }
+          document.getElementById("streakCount").innerText = streak;
+          document.getElementById("btnAction").innerText = "Susunod →";
+        } else if (quizState === "feedback") {
+          qIdx++;
+          if (qIdx < queue.length) loadQuestion();
+          else showResults();
+        }
+      }
+
+      // --- SIDEBAR & WORKSPACE ---
+      function renderSidebar() {
+        const container = document.getElementById("sidebarNav");
+        container.innerHTML = "";
+        const renderRecursive = (decks, level = 0) => {
+          decks.forEach((deck) => {
+            const isActive = activeDeck.id === deck.id;
+            const isExpanded = expandedDecks.has(deck.id);
+            const hasSubs = deck.subDecks && deck.subDecks.length > 0;
+            const cardsCount = getAllCardsRecursively(deck).length;
+            const div = document.createElement("div");
+            div.className = `sidebar-item flex items-center justify-between px-4 py-2 rounded-xl cursor-pointer text-sm font-bold transition-all ${isActive ? "bg-indigo-50 text-indigo-700" : "text-slate-500 hover:bg-slate-50"}`;
+            div.style.marginLeft = level * 12 + "px";
+            div.onclick = () => selectDeck(deck.id);
+            const arrow = hasSubs
+              ? `<span onclick="event.stopPropagation(); toggleFolder(${deck.id})" class="chevron ${isExpanded ? "open" : ""}">▶</span>`
+              : `<span class="w-3"></span>`;
+            div.innerHTML = `<div class="flex items-center truncate">${arrow} <span class="ml-2">${deck.name}</span></div>
+                    ${cardsCount > 0 ? `<button onclick="event.stopPropagation(); startLearningById(${deck.id})" class="study-btn-sm text-indigo-400">🚀</button>` : ""}`;
+            container.appendChild(div);
+            if (hasSubs && isExpanded)
+              renderRecursive(deck.subDecks, level + 1);
+          });
         };
+        renderRecursive(library);
+      }
 
-        function setLadoMood(mood) {
-            const el = document.getElementById('ladoChar');
-            el.innerText = LADO_MOODS[mood] || '🦉';
-            el.classList.add('scale-125');
-            setTimeout(() => el.classList.remove('scale-125'), 300);
+      function renderWorkspace() {
+        document.getElementById("activeDeckTitle").innerText = activeDeck.name;
+        const totalCards = getAllCardsRecursively(activeDeck).length;
+        document.getElementById("btnStartLearn").style.display =
+          totalCards > 0 ? "block" : "none";
+        document
+          .getElementById("shuffleControls")
+          .classList.toggle("hidden", activeDeck.cards.length < 2);
+
+        const fGrid = document.getElementById("subFolderGrid");
+        fGrid.innerHTML = "";
+        activeDeck.subDecks.forEach((sub) => {
+          const count = getAllCardsRecursively(sub).length;
+          const card = document.createElement("div");
+          card.className =
+            "bg-white p-5 rounded-[2.5rem] border border-slate-100 shadow-sm text-center cursor-pointer hover:border-indigo-400 transition-all flex flex-col items-center justify-center";
+          card.onclick = () => selectDeck(sub.id);
+          card.innerHTML = `<div class="text-3xl mb-1">📂</div><h4 class="text-[10px] font-bold uppercase truncate">${sub.name}</h4><p class="text-[8px] text-slate-400">${count} Cards</p>
+                ${count > 0 ? `<button onclick="event.stopPropagation(); startLearningById(${sub.id})" class="mt-3 w-full py-2 bg-slate-900 text-white text-[8px] font-black rounded-lg">STUDY</button>` : ""}`;
+          fGrid.appendChild(card);
+        });
+
+        const cGrid = document.getElementById("cardsGrid");
+        cGrid.innerHTML = "";
+        activeDeck.cards.forEach((card, idx) => {
+          const div = document.createElement("div");
+          div.className = "bg-white p-6 rounded-[2rem] border relative group";
+          div.innerHTML = `<button onclick="deleteCard(${idx})" class="absolute top-4 right-4 text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">✕</button>
+                <div class="text-slate-700">${card.html}</div>`;
+          cGrid.appendChild(div);
+        });
+      }
+
+      // --- CARD CREATION FIX ---
+      function saveCard() {
+        const ed = document.getElementById("editor");
+        if (!ed.innerText.trim()) return;
+        // Use SESSION_START + cards length to ensure absolute chronological order
+        activeDeck.cards.push({
+          html: ed.innerHTML,
+          order: Date.now(),
+        });
+        ed.innerHTML = "";
+        save();
+        renderWorkspace();
+      }
+
+      function processMagicImport(txt) {
+        const lines = txt.split("\n").filter((l) => l.includes("-"));
+        const baseTime = Date.now();
+        lines.forEach((l, index) => {
+          const [t, d] = l.split("-");
+          activeDeck.cards.push({
+            html: `<span class="answer-highlight">${t.trim()}</span> - ${d.trim()}`,
+            order: baseTime + index, // Adding index ensures every card has a UNIQUE sequential order
+          });
+        });
+        save();
+        renderWorkspace();
+        hideModals();
+      }
+
+      // --- GENERAL UTILS ---
+      function findDeck(id, list) {
+        for (let d of list) {
+          if (d.id === id) return d;
+          if (d.subDecks) {
+            let f = findDeck(id, d.subDecks);
+            if (f) return f;
+          }
         }
-
-        // --- CORE NAV ---
-        function selectDeck(id) {
-            activeDeck = findDeck(id, library);
-            renderSidebar();
-            renderWorkspace();
+      }
+      function selectDeck(id) {
+        activeDeck = findDeck(id, library);
+        renderSidebar();
+        renderWorkspace();
+      }
+      function toggleFolder(id) {
+        expandedDecks.has(id)
+          ? expandedDecks.delete(id)
+          : expandedDecks.add(id);
+        renderSidebar();
+      }
+      function startLearningById(id) {
+        startLearning(findDeck(id, library));
+      }
+      function showModal(id) {
+        document.getElementById("modalOverlay").classList.add("modal-active");
+        document.getElementById(id).classList.remove("hidden");
+        document.getElementById(id).classList.add("flex");
+      }
+      function hideModals() {
+        document
+          .getElementById("modalOverlay")
+          .classList.remove("modal-active");
+        document
+          .querySelectorAll("#modalOverlay > div")
+          .forEach((d) => d.classList.add("hidden"));
+      }
+      function actionCreateMainDeck() {
+        const n = document.getElementById("inputMainDeck").value;
+        if (n) {
+          library.push({ id: Date.now(), name: n, subDecks: [], cards: [] });
+          save();
+          init();
+          hideModals();
         }
-
-        function findDeck(id, list) {
-            for (let d of list) {
-                if (d.id === id) return d;
-                if (d.subDecks) { let f = findDeck(id, d.subDecks); if (f) return f; }
-            }
+      }
+      function actionCreateSubDeck() {
+        const n = document.getElementById("inputSubDeck").value;
+        if (n) {
+          activeDeck.subDecks.push({
+            id: Date.now(),
+            name: n,
+            subDecks: [],
+            cards: [],
+          });
+          expandedDecks.add(activeDeck.id);
+          save();
+          init();
+          hideModals();
         }
-
-        // --- MAGIC ENGINE ---
-        async function handleFileImport(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            try {
-                let text = "";
-                const ext = file.name.split('.').pop().toLowerCase();
-                if (ext === 'txt') text = await file.text();
-                else if (ext === 'docx') {
-                    const res = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
-                    text = res.value;
-                } else if (ext === 'pdf') {
-                    const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        const page = await pdf.getPage(i);
-                        const content = await page.getTextContent();
-                        text += content.items.map(s => s.str).join(" ") + "\n";
-                    }
-                }
-                processMagicImport(text);
-            } catch (e) { alert("Lado had trouble reading that file!"); }
+      }
+      function markAsAnswer() {
+        const sel = window.getSelection();
+        if (sel.rangeCount) {
+          const span = document.createElement("span");
+          span.className = "answer-highlight";
+          sel.getRangeAt(0).surroundContents(span);
         }
-
-        function processMagicImport(rawText) {
-            if (!rawText.trim()) return;
-            const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 5);
-            let count = 0;
-            lines.forEach(line => {
-                const separators = [/ - /, /: /, / – /];
-                for (let sep of separators) {
-                    if (sep.test(line)) {
-                        const parts = line.split(sep);
-                        const term = parts.shift().trim();
-                        const def = parts.join(' ').trim();
-                        activeDeck.cards.push({ html: `<span class="answer-highlight">${term}</span> - ${def}` });
-                        count++;
-                        break;
-                    }
-                }
-            });
-            save(); renderWorkspace(); hideModals();
-            alert(`Lado created ${count} cards for you!`);
+      }
+      function deleteCard(idx) {
+        if (confirm("Burahin ito?")) {
+          activeDeck.cards.splice(idx, 1);
+          save();
+          renderWorkspace();
         }
+      }
+      function exitLearning() {
+        document
+          .getElementById("learnOverlay")
+          .classList.add("translate-y-full");
+      }
+      function showResults() {
+        document.getElementById("quizContainer").classList.add("hidden");
+        document.getElementById("resultsScreen").classList.remove("hidden");
+        const ctx = document.getElementById("scoreChart").getContext("2d");
+        if (chartInstance) chartInstance.destroy();
+        chartInstance = new Chart(ctx, {
+          type: "doughnut",
+          data: {
+            datasets: [
+              {
+                data: [correctCount, queue.length - correctCount],
+                backgroundColor: ["#6366f1", "#f1f5f9"],
+              },
+            ],
+          },
+          options: { cutout: "80%", plugins: { legend: { display: false } } },
+        });
+        confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+      }
 
-        // --- GAMIFIED LEARN ENGINE ---
-        function startLearning() {
-            if (activeDeck.cards.length === 0) return;
-            queue = [...activeDeck.cards].sort(() => Math.random() - 0.5);
-            qIdx = 0; streak = 0;
-            document.getElementById('streakCount').innerText = streak;
-            document.getElementById('learnOverlay').classList.remove('translate-y-full');
-            loadQuestion();
-        }
-
-        function loadQuestion() {
-            quizState = 'asking';
-            currentMode = 'type';
-            setLadoMood('idle');
-            const card = queue[qIdx];
-
-            const temp = document.createElement('div');
-            temp.innerHTML = card.html;
-            const answerSpan = temp.querySelector('.answer-highlight');
-            currentCorrectAnswer = answerSpan ? answerSpan.innerText.trim() : "";
-
-            let promptHtml = card.html.replace(/<span class="answer-highlight">.*?<\/span>/g, '<span class="px-2 border-b-2 border-indigo-200 text-indigo-500/0 select-none">__________</span>');
-            document.getElementById('quizPrompt').innerHTML = promptHtml;
-
-            document.getElementById('quizFeedback').classList.add('hidden');
-            document.getElementById('btnAction').innerText = "Suriin ang Sagot";
-            document.getElementById('btnToggleMode').classList.remove('hidden');
-            document.getElementById('btnToggleMode').innerText = "Hindi sigurado? (Choices)";
-
-            const prog = ((qIdx + 1) / queue.length) * 100;
-            document.getElementById('quizProgressBar').style.width = prog + "%";
-            renderInteraction();
-        }
-
-        function renderInteraction() {
-            const zone = document.getElementById('interactionZone');
-            zone.innerHTML = '';
-
-            if (currentMode === 'type') {
-                document.getElementById('quizCategory').innerText = "Kabisado Mode";
-                const input = document.createElement('input');
-                input.type = "text";
-                input.id = "userAnswer";
-                input.placeholder = "Isulat ang sagot...";
-                input.className = "w-full bg-slate-50 border-2 border-slate-100 rounded-3xl p-5 text-center text-xl font-bold focus:border-indigo-500 outline-none transition-all";
-                input.onkeyup = (e) => { if (e.key === 'Enter') handleMainAction(); };
-                zone.appendChild(input);
-                setTimeout(() => input.focus(), 400);
-            } else {
-                document.getElementById('quizCategory').innerText = "Recognition Mode";
-                setLadoMood('thinking');
-                const choices = generateChoices();
-                choices.forEach(choice => {
-                    const btn = document.createElement('button');
-                    btn.className = "w-full bg-white border-2 border-slate-100 p-4 rounded-2xl text-lg font-bold hover:border-indigo-500 hover:bg-indigo-50 transition-all text-slate-700";
-                    btn.innerText = choice;
-                    btn.onclick = () => submitAnswer(choice);
-                    zone.appendChild(btn);
-                });
-            }
-        }
-
-        function generateChoices() {
-            const correct = currentCorrectAnswer.toLowerCase();
-            if (correct === 'true' || correct === 'false') return ['True', 'False'];
-
-            let pool = [];
-            activeDeck.cards.forEach(c => {
-                const t = document.createElement('div');
-                t.innerHTML = c.html;
-                const ans = t.querySelector('.answer-highlight')?.innerText;
-                if (ans && ans.toLowerCase() !== correct) pool.push(ans);
-            });
-
-            let decoys = [...new Set(pool)].sort(() => 0.5 - Math.random()).slice(0, 3);
-            return [currentCorrectAnswer, ...decoys].sort(() => 0.5 - Math.random());
-        }
-
-        function toggleMode() {
-            currentMode = (currentMode === 'type') ? 'choice' : 'type';
-            document.getElementById('btnToggleMode').innerText = currentMode === 'type' ? "Hindi sigurado? (Choices)" : "Bumalik sa Pag-type";
-            renderInteraction();
-        }
-
-        function handleMainAction() {
-            if (quizState === 'asking') {
-                const val = document.getElementById('userAnswer')?.value;
-                if (val) submitAnswer(val);
-            } else { nextQuestion(); }
-        }
-
-        function submitAnswer(userVal) {
-            const isCorrect = userVal.trim().toLowerCase() === currentCorrectAnswer.toLowerCase();
-            const feedback = document.getElementById('quizFeedback');
-
-            quizState = 'feedback';
-            feedback.classList.remove('hidden');
-
-            if (isCorrect) {
-                streak++;
-                setLadoMood('correct');
-                feedback.innerText = "Ang galing! Saulado mo na! ✨";
-                feedback.className = "mt-8 text-center font-bold text-emerald-500 animate-bounce";
-                confetti({ particleCount: 80, spread: 60, origin: { y: 0.8 } });
-            } else {
-                streak = 0;
-                setLadoMood('wrong');
-                feedback.innerText = `Mali, ang tamang sagot ay: ${currentCorrectAnswer}`;
-                feedback.className = "mt-8 text-center font-bold text-rose-500";
-                document.getElementById('questionBox').classList.add('shake-error');
-                setTimeout(() => document.getElementById('questionBox').classList.remove('shake-error'), 400);
-            }
-
-            document.getElementById('streakCount').innerText = streak;
-            document.getElementById('btnAction').innerText = "Susunod →";
-            document.getElementById('btnToggleMode').classList.add('hidden');
-
-            if (currentMode === 'type') document.getElementById('userAnswer').disabled = true;
-            else document.querySelectorAll('#interactionZone button').forEach(b => b.disabled = true);
-        }
-
-        function nextQuestion() {
-            qIdx++;
-            if (qIdx < queue.length) loadQuestion();
-            else {
-                setLadoMood('finish');
-                confetti({ particleCount: 200, spread: 100 });
-                alert("Yown! Saulado mo na ang buong deck!");
-                exitLearning();
-            }
-        }
-
-        function exitLearning() { document.getElementById('learnOverlay').classList.add('translate-y-full'); }
-
-        // --- UI ---
-        function renderSidebar() {
-            const container = document.getElementById('sidebarNav');
-            container.innerHTML = '';
-            const renderRecursive = (decks, level = 0) => {
-                decks.forEach(deck => {
-                    const isActive = activeDeck.id === deck.id;
-                    const div = document.createElement('div');
-                    div.onclick = () => selectDeck(deck.id);
-                    div.className = `px-4 py-3 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-all ${isActive ? 'bg-indigo-50 text-indigo-700' : 'text-slate-400 hover:bg-slate-50'}`;
-                    div.style.marginLeft = (level * 15) + "px";
-                    div.innerText = (level > 0 ? "↳ " : "") + deck.name;
-                    container.appendChild(div);
-                    if (deck.subDecks) renderRecursive(deck.subDecks, level + 1);
-                });
-            };
-            renderRecursive(library);
-        }
-
-        function renderWorkspace() {
-            document.getElementById('activeDeckTitle').innerText = activeDeck.name;
-            document.getElementById('btnStartLearn').style.display = activeDeck.cards.length > 0 ? 'block' : 'none';
-
-            const hasContent = activeDeck.cards.length > 0 || activeDeck.subDecks.length > 0;
-            document.getElementById('emptyState').style.display = hasContent ? 'none' : 'flex';
-            document.getElementById('contentArea').style.display = hasContent ? 'block' : 'none';
-
-            const fGrid = document.getElementById('subFolderGrid');
-            fGrid.innerHTML = '';
-            if (activeDeck.subDecks.length > 0) {
-                document.getElementById('subFolderSection').classList.remove('hidden');
-                activeDeck.subDecks.forEach(sub => {
-                    fGrid.innerHTML += `<div onclick="selectDeck(${sub.id})" class="bg-white p-5 rounded-[2rem] border border-slate-100 hover:border-indigo-400 cursor-pointer text-center shadow-sm transition-all group">
-                        <div class="text-2xl mb-1 group-hover:scale-110 transition-transform">📂</div><h4 class="text-[10px] font-bold truncate uppercase tracking-tighter">${sub.name}</h4>
-                    </div>`;
-                });
-            } else document.getElementById('subFolderSection').classList.add('hidden');
-
-            const cGrid = document.getElementById('cardsGrid');
-            cGrid.innerHTML = '';
-            activeDeck.cards.forEach((card, idx) => {
-                cGrid.innerHTML += `<div class="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative group">
-                    <button onclick="deleteCard(${idx})" class="absolute top-6 right-6 text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">✕</button>
-                    <div class="text-lg text-slate-700 leading-relaxed">${card.html}</div>
-                </div>`;
-            });
-        }
-
-        function showModal(id) { document.getElementById('modalOverlay').classList.add('modal-active'); document.getElementById(id).classList.remove('hidden'); document.getElementById(id).classList.add('flex'); }
-        function hideModals() { document.getElementById('modalOverlay').classList.remove('modal-active'); document.querySelectorAll('#modalOverlay > div').forEach(d => d.classList.add('hidden')); }
-
-        function actionCreateMainDeck() {
-            const n = document.getElementById('inputMainDeck').value;
-            if (n) { library.push({ id: Date.now(), name: n, subDecks: [], cards: [] }); save(); renderSidebar(); hideModals(); }
-        }
-
-        function markAsAnswer() {
-            const sel = window.getSelection();
-            if (sel.rangeCount) {
-                const span = document.createElement('span'); span.className = 'answer-highlight';
-                sel.getRangeAt(0).surroundContents(span);
-            }
-        }
-
-        function saveCard() {
-            const ed = document.getElementById('editor');
-            if (!ed.innerText.trim()) return;
-            activeDeck.cards.push({ html: ed.innerHTML });
-            ed.innerHTML = ''; save(); renderWorkspace();
-        }
-
-        function deleteCard(idx) { if (confirm('Burahin ito?')) { activeDeck.cards.splice(idx, 1); save(); renderWorkspace(); } }
-
-        init();
+      init();
     </script>
-</body>
-
+  </body>
 </html>
