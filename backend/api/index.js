@@ -12,14 +12,14 @@ app.use(cors());
 
 // --- CONFIGURATION ---
 // Use process.env for security! Input these in the Vercel Dashboard Settings
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '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' });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const db = mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'saulado_db',
-    port: process.env.DB_PORT || 3306,
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    port: process.env.DB_PORT ,
     // REQUIRED for Cloud Databases (Aiven/Railway)
     ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
 });
