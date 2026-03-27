@@ -336,41 +336,54 @@ function App() {
     temp.innerHTML = card.html;
 
     setQuizPhase("checking");
+
     try {
       const res = await fetch(`${API_URL}/api/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userAnswer: userVal, correctAnswer: correct }),
       });
+
+      if (!res.ok) throw new Error("Server error");
+
       const data = await res.json();
-      fetch(`${API_URL}/api/cards/${card.id}/track`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isCorrect: data.isCorrect }),
-      });
-
-      if (data.isCorrect) {
-        setCorrectCount((c) => c + 1);
-        setStreak((s) => s + 1);
-        confetti({ particleCount: 30, spread: 50 });
-      } else {
-        setStreak(0);
-        setMistakesQueue((prev) => [...prev, card]);
-      }
-
-      setSessionHistory((prev) => [
-        ...prev,
-        {
-          prompt: temp.innerText.replace(correct, "_______"),
-          correct,
-          user: userVal,
-          isCorrect: data.isCorrect,
-        },
-      ]);
-      setQuizPhase("feedback");
+      handleResult(data.isCorrect, userVal, correct, temp.innerText, card.id);
     } catch (e) {
-      setQuizPhase("asking");
+      console.error("Network error, using basic matching...");
+      // FALLBACK: Kung walang internet, i-check kung eksaktong pareho ang sagot
+      const isCorrectLocally =
+        userVal.trim().toLowerCase() === correct.trim().toLowerCase();
+      handleResult(isCorrectLocally, userVal, correct, temp.innerText, card.id);
     }
+  };
+
+  // Helper function para hindi paulit-ulit ang logic
+  const handleResult = (isCorrect, userVal, correct, promptText, cardId) => {
+    fetch(`${API_URL}/api/cards/${cardId}/track`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isCorrect }),
+    }).catch(() => console.log("Mastery sync failed, offline mode."));
+
+    if (isCorrect) {
+      setCorrectCount((c) => c + 1);
+      setStreak((s) => s + 1);
+      confetti({ particleCount: 30, spread: 50 });
+    } else {
+      setStreak(0);
+      setMistakesQueue((prev) => [...prev, quizQueue[currentIdx]]);
+    }
+
+    setSessionHistory((prev) => [
+      ...prev,
+      {
+        prompt: promptText.replace(correct, "_______"),
+        correct,
+        user: userVal,
+        isCorrect,
+      },
+    ]);
+    setQuizPhase("feedback");
   };
 
   const generateDecoys = (correct) => {
