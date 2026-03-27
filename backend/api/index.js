@@ -4,7 +4,9 @@ const cors = require('cors');
 const { Groq } = require('groq-sdk');
 
 const app = express();
+const compression = require('compression');
 
+app.use(compression()); // Shrinks JSON data for faster travel
 // --- MIDDLEWARE ---
 app.use(express.json());
 // Allow both local development and deployed frontend
@@ -19,7 +21,7 @@ const db = mysql.createConnection({
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    port: process.env.DB_PORT ,
+    port: process.env.DB_PORT,
     // REQUIRED for Cloud Databases (Aiven/Railway)
     ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
 });
@@ -36,19 +38,27 @@ db.connect(err => {
 // IMPORTANT: All routes here start with /api to match your Vercel rewrites
 
 app.get('/api/library', (req, res) => {
-    const deckQuery = 'SELECT * FROM decks';
-    const cardQuery = 'SELECT * FROM cards ORDER BY order_val ASC';
+    const deckQuery = 'SELECT id, name, parent_id FROM decks';
+    const cardQuery = 'SELECT id, deck_id, html, order_val, correct_count, attempt_count FROM cards ORDER BY order_val ASC';
 
     db.query(deckQuery, (err, decks) => {
         if (err) return res.status(500).json(err);
         db.query(cardQuery, (err, cards) => {
             if (err) return res.status(500).json(err);
+
+            // SPEED BOOST: Group cards by deck_id first
+            const cardsByDeck = cards.reduce((acc, card) => {
+                if (!acc[card.deck_id]) acc[card.deck_id] = [];
+                acc[card.deck_id].push(card);
+                return acc;
+            }, {});
+
             const buildTree = (parentId = null) => {
                 return decks
                     .filter(d => d.parent_id === parentId)
                     .map(d => ({
                         ...d,
-                        cards: cards.filter(c => c.deck_id === d.id),
+                        cards: cardsByDeck[d.id] || [], // Instant lookup
                         subDecks: buildTree(d.id)
                     }));
             };
@@ -124,11 +134,14 @@ app.post('/api/verify', async (req, res) => {
             messages: [
                 {
                     role: "system",
-                    content: "You are a quiz checker. Compare the user's answer to the correct answer. If it is a minor typo, sounds similar, or represents the same person/place/concept, return JSON: {\"isCorrect\": true}. Otherwise, return {\"isCorrect\": false}. Return only valid JSON."
+                    content: "You are a quiz checker. Return JSON: {\"isCorrect\": boolean}. Minor typos or same concept = true. JSON ONLY."
                 },
-                { role: "user", content: `Correct: "${correctAnswer}", User: "${userAnswer}"` }
+                // Using shorter labels (C/U) saves processing time (tokens)
+                { role: "user", content: `C: "${correctAnswer}", U: "${userAnswer}"` }
             ],
-            model: "llama-3.1-8b-instant",
+            model: "llama-3.1-8b-instant", // Keep using the instant model
+            temperature: 0.1, // Set to 0.1 for faster, more decisive results
+            max_tokens: 15,    // Very small token limit = much faster response
             response_format: { type: "json_object" }
         });
 

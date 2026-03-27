@@ -160,18 +160,46 @@ function App() {
 
   const saveCard = async () => {
     const html = editorRef.current.innerHTML;
-    if (!editorRef.current.innerText.trim() || !activeDeck) return;
-    await fetch(`${API_URL}/api/cards`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        deck_id: activeDeck.id,
-        html,
-        order_val: Date.now(),
-      }),
-    });
+    const plainText = editorRef.current.innerText.trim();
+    if (!plainText || !activeDeck) return;
+
+    // 1. Create a temporary "Optimistic" card
+    const tempId = Date.now();
+    const newCard = {
+      id: tempId,
+      deck_id: activeDeck.id,
+      html: html,
+      order_val: tempId,
+      correct_count: 0,
+      attempt_count: 0,
+    };
+
+    // 2. UPDATE UI IMMEDIATELY (Don't wait for server)
+    setActiveDeck((prev) => ({
+      ...prev,
+      cards: [...prev.cards, newCard],
+    }));
+
+    // 3. Clear editor immediately
     editorRef.current.innerHTML = "";
-    fetchLibrary();
+
+    // 4. Sync with server in the background
+    try {
+      await fetch(`${API_URL}/api/cards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deck_id: activeDeck.id,
+          html,
+          order_val: tempId,
+        }),
+      });
+      // Silently refresh to get the real DB ID
+      fetchLibrary();
+    } catch (error) {
+      console.error("Save failed, rolling back...");
+      fetchLibrary(); // Refresh to original state on error
+    }
   };
 
   const editCard = async (card) => {
