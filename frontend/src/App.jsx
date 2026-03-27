@@ -8,7 +8,7 @@ import * as pdfjs from "pdfjs-dist";
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-const API_URL = 'https://saulado.onrender.com';
+const API_URL = "https://saulado.onrender.com";
 
 function App() {
   // --- CORE STATE ---
@@ -309,7 +309,7 @@ function App() {
 
     setQuizPhase("checking");
     try {
-      const res = await fetch(`${API_URL}/verify`, {
+      const res = await fetch(`${API_URL}/api/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userAnswer: userVal, correctAnswer: correct }),
