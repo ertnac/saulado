@@ -1,49 +1,40 @@
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
-const path = require('path');
 const { Groq } = require('groq-sdk');
 
 const app = express();
 
 // --- MIDDLEWARE ---
 app.use(express.json());
-app.use(cors({ origin: 'http://localhost:5173' }));
-
-// CRITICAL: This serves your index.html, heat.html, css, and js files automatically
-// This fixes the 404 error you were seeing
-app.use(express.static(__dirname));
-
-const PORT = process.env.PORT || 3000;
+// Allow both local development and deployed frontend
+app.use(cors());
 
 // --- CONFIGURATION ---
-const groq = new Groq({ apiKey: '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' });
+// Use process.env for security! Input these in the Vercel Dashboard Settings
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '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' });
 
-// MySQL Connection (Local XAMPP)
 const db = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: '', // Default XAMPP password is empty
-    database: 'saulado_db'
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'saulado_db',
+    port: process.env.DB_PORT || 3306,
+    // REQUIRED for Cloud Databases (Aiven/Railway)
+    ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
 });
 
 db.connect(err => {
     if (err) {
         console.error('❌ MySQL Connection Failed:', err.message);
     } else {
-        console.log('✅ MySQL Connected & AI Backend Ready');
+        console.log('✅ MySQL Connected');
     }
 });
 
-// --- FRONTEND ROUTE ---
-// Manually serve index.html when visiting the root "/"
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
+// --- API ROUTES ---
+// IMPORTANT: All routes here start with /api to match your Vercel rewrites
 
-// --- DECK API ---
-
-// Fetch Full Library (Recursive Tree)
 app.get('/api/library', (req, res) => {
     const deckQuery = 'SELECT * FROM decks';
     const cardQuery = 'SELECT * FROM cards ORDER BY order_val ASC';
@@ -66,7 +57,6 @@ app.get('/api/library', (req, res) => {
     });
 });
 
-// Create Deck (Main or Sub)
 app.post('/api/decks', (req, res) => {
     const { name, parent_id } = req.body;
     db.query('INSERT INTO decks (name, parent_id) VALUES (?, ?)', [name, parent_id], (err, result) => {
@@ -75,7 +65,6 @@ app.post('/api/decks', (req, res) => {
     });
 });
 
-// Delete Deck (Cascade deletes subdecks and cards)
 app.delete('/api/decks/:id', (req, res) => {
     db.query('DELETE FROM decks WHERE id = ?', [req.params.id], (err) => {
         if (err) return res.status(500).json(err);
@@ -83,7 +72,6 @@ app.delete('/api/decks/:id', (req, res) => {
     });
 });
 
-// Delete All Cards in a specific deck
 app.delete('/api/decks/:id/cards', (req, res) => {
     db.query('DELETE FROM cards WHERE deck_id = ?', [req.params.id], (err) => {
         if (err) return res.status(500).json(err);
@@ -91,9 +79,6 @@ app.delete('/api/decks/:id/cards', (req, res) => {
     });
 });
 
-// --- CARD API ---
-
-// Create Card
 app.post('/api/cards', (req, res) => {
     const { deck_id, html, order_val } = req.body;
     db.query('INSERT INTO cards (deck_id, html, order_val) VALUES (?, ?, ?)',
@@ -103,7 +88,6 @@ app.post('/api/cards', (req, res) => {
         });
 });
 
-// NEW: Update Card HTML (Required for "Edit Highlights" button)
 app.put('/api/cards/:id', (req, res) => {
     const { html } = req.body;
     db.query('UPDATE cards SET html = ? WHERE id = ?', [html, req.params.id], (err) => {
@@ -112,7 +96,6 @@ app.put('/api/cards/:id', (req, res) => {
     });
 });
 
-// Delete Single Card
 app.delete('/api/cards/:id', (req, res) => {
     db.query('DELETE FROM cards WHERE id = ?', [req.params.id], (err) => {
         if (err) return res.status(500).json(err);
@@ -120,11 +103,9 @@ app.delete('/api/cards/:id', (req, res) => {
     });
 });
 
-// Update Mastery Stats (Track Progress)
 app.put('/api/cards/:id/track', (req, res) => {
     const { isCorrect } = req.body;
     const correctIncrement = isCorrect ? 1 : 0;
-
     db.query(
         'UPDATE cards SET attempt_count = attempt_count + 1, correct_count = correct_count + ? WHERE id = ?',
         [correctIncrement, req.params.id],
@@ -135,9 +116,8 @@ app.put('/api/cards/:id/track', (req, res) => {
     );
 });
 
-// --- AI TYPO TOLERANCE ---
-
-app.post('/verify', async (req, res) => {
+// Changed from /verify to /api/verify to keep everything consistent
+app.post('/api/verify', async (req, res) => {
     const { userAnswer, correctAnswer } = req.body;
     try {
         const chatCompletion = await groq.chat.completions.create({
@@ -146,24 +126,19 @@ app.post('/verify', async (req, res) => {
                     role: "system",
                     content: "You are a quiz checker. Compare the user's answer to the correct answer. If it is a minor typo, sounds similar, or represents the same person/place/concept, return JSON: {\"isCorrect\": true}. Otherwise, return {\"isCorrect\": false}. Return only valid JSON."
                 },
-                {
-                    role: "user",
-                    content: `Correct Answer: "${correctAnswer}", User's Answer: "${userAnswer}"`
-                }
+                { role: "user", content: `Correct: "${correctAnswer}", User: "${userAnswer}"` }
             ],
             model: "llama-3.1-8b-instant",
             response_format: { type: "json_object" }
         });
 
         const result = JSON.parse(chatCompletion.choices[0].message.content);
-        console.log(`AI Check: "${userAnswer}" for "${correctAnswer}" -> ${result.isCorrect}`);
         res.json(result);
     } catch (error) {
-        console.error('Groq Error:', error.message);
         const fallback = userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
         res.json({ isCorrect: fallback });
     }
 });
 
-// --- START SERVER ---
+// --- EXPORT FOR VERCEL ---
 module.exports = app;
