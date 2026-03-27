@@ -17,6 +17,7 @@ function App() {
   const [expandedDecks, setExpandedDecks] = useState(new Set());
   const [isModalOpen, setIsModalOpen] = useState(null);
   const [isQuizOpen, setIsQuizOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile Sidebar State
 
   // Magic & UI State
   const [magicText, setMagicText] = useState("");
@@ -55,7 +56,7 @@ function App() {
     }
   };
 
-  // --- UTILS ---
+  // --- NAVIGATION & UTILS ---
   const findDeck = (id, list) => {
     for (let d of list) {
       if (d.id === id) return d;
@@ -76,6 +77,12 @@ function App() {
       }
     }
     return null;
+  };
+
+  const handleBack = () => {
+    if (!activeDeck || !activeDeck.parent_id) return;
+    const parent = findParentDeck(activeDeck.parent_id, library);
+    if (parent) setActiveDeck(parent);
   };
 
   const getAllCardsRecursively = (deck) => {
@@ -163,27 +170,18 @@ function App() {
     const plainText = editorRef.current.innerText.trim();
     if (!plainText || !activeDeck) return;
 
-    // 1. Create a temporary "Optimistic" card
     const tempId = Date.now();
     const newCard = {
       id: tempId,
       deck_id: activeDeck.id,
-      html: html,
+      html,
       order_val: tempId,
       correct_count: 0,
       attempt_count: 0,
     };
-
-    // 2. UPDATE UI IMMEDIATELY (Don't wait for server)
-    setActiveDeck((prev) => ({
-      ...prev,
-      cards: [...prev.cards, newCard],
-    }));
-
-    // 3. Clear editor immediately
+    setActiveDeck((prev) => ({ ...prev, cards: [...prev.cards, newCard] }));
     editorRef.current.innerHTML = "";
 
-    // 4. Sync with server in the background
     try {
       await fetch(`${API_URL}/api/cards`, {
         method: "POST",
@@ -194,11 +192,9 @@ function App() {
           order_val: tempId,
         }),
       });
-      // Silently refresh to get the real DB ID
       fetchLibrary();
     } catch (error) {
-      console.error("Save failed, rolling back...");
-      fetchLibrary(); // Refresh to original state on error
+      fetchLibrary();
     }
   };
 
@@ -214,7 +210,6 @@ function App() {
     editorRef.current.focus();
   };
 
-  // --- DATABASE ACTIONS ---
   const handleCreateDeck = async (parentId = null) => {
     if (!newDeckName) return;
     const res = await fetch(`${API_URL}/api/decks`, {
@@ -229,7 +224,6 @@ function App() {
     await fetchLibrary();
   };
 
-  // --- SHUFFLE & ORDER ---
   const shuffleCards = () => {
     if (!activeDeck) return;
     const shuffled = [...activeDeck.cards].sort(() => Math.random() - 0.5);
@@ -244,7 +238,6 @@ function App() {
     setActiveDeck({ ...activeDeck, cards: ordered });
   };
 
-  // --- MAGIC IMPORT ---
   const handleFileImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -308,11 +301,10 @@ function App() {
     fetchLibrary();
   };
 
-  // --- QUIZ ENGINE ---
   const startQuiz = (limit) => {
     let pool = getAllCardsRecursively(activeDeck);
     if (studyFilter === "new") pool = pool.filter((c) => c.attempt_count === 0);
-    if (pool.length === 0) return alert("Walang cards na tumutugma!");
+    if (pool.length === 0) return alert("No cards match your filter!");
 
     const shuffled = [...pool]
       .sort(() => 0.5 - Math.random())
@@ -336,35 +328,32 @@ function App() {
     temp.innerHTML = card.html;
 
     setQuizPhase("checking");
-
     try {
       const res = await fetch(`${API_URL}/api/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userAnswer: userVal, correctAnswer: correct }),
       });
-
-      if (!res.ok) throw new Error("Server error");
-
+      if (!res.ok) throw new Error();
       const data = await res.json();
       handleResult(data.isCorrect, userVal, correct, temp.innerText, card.id);
     } catch (e) {
-      console.error("Network error, using basic matching...");
-      // FALLBACK: Kung walang internet, i-check kung eksaktong pareho ang sagot
-      const isCorrectLocally =
-        userVal.trim().toLowerCase() === correct.trim().toLowerCase();
-      handleResult(isCorrectLocally, userVal, correct, temp.innerText, card.id);
+      handleResult(
+        userVal.trim().toLowerCase() === correct.trim().toLowerCase(),
+        userVal,
+        correct,
+        temp.innerText,
+        card.id,
+      );
     }
   };
 
-  // Helper function para hindi paulit-ulit ang logic
   const handleResult = (isCorrect, userVal, correct, promptText, cardId) => {
     fetch(`${API_URL}/api/cards/${cardId}/track`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isCorrect }),
-    }).catch(() => console.log("Mastery sync failed, offline mode."));
-
+    });
     if (isCorrect) {
       setCorrectCount((c) => c + 1);
       setStreak((s) => s + 1);
@@ -373,7 +362,6 @@ function App() {
       setStreak(0);
       setMistakesQueue((prev) => [...prev, quizQueue[currentIdx]]);
     }
-
     setSessionHistory((prev) => [
       ...prev,
       {
@@ -400,8 +388,11 @@ function App() {
     return decks.map((deck) => (
       <div key={deck.id}>
         <div
-          onClick={() => setActiveDeck(deck)}
-          className={`group flex items-center justify-between px-4 py-2 rounded-xl cursor-pointer mb-1 transition-all ${activeDeck?.id === deck.id ? "bg-indigo-50 text-indigo-700 font-bold shadow-sm" : "text-slate-500 hover:bg-slate-50"}`}
+          onClick={() => {
+            setActiveDeck(deck);
+            if (window.innerWidth < 768) setIsSidebarOpen(false);
+          }}
+          className={`group flex items-center justify-between px-4 py-3 md:py-2 rounded-xl cursor-pointer mb-1 transition-all ${activeDeck?.id === deck.id ? "bg-indigo-50 text-indigo-700 font-bold shadow-sm" : "text-slate-500 hover:bg-slate-50"}`}
           style={{ marginLeft: `${level * 12}px` }}
         >
           <div className="flex items-center truncate">
@@ -418,7 +409,7 @@ function App() {
                 ▶
               </span>
             )}
-            <span>{deck.name}</span>
+            <span className="truncate">{deck.name}</span>
           </div>
         </div>
         {expandedDecks.has(deck.id) &&
@@ -429,9 +420,19 @@ function App() {
   };
 
   return (
-    <div className="h-screen flex overflow-hidden bg-[#f8fafc] font-jakarta">
+    <div className="h-screen flex overflow-hidden bg-[#f8fafc] font-jakarta relative">
+      {/* MOBILE SIDEBAR OVERLAY */}
+      {isSidebarOpen && (
+        <div
+          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 bg-slate-900/40 z-40 md:hidden backdrop-blur-sm"
+        />
+      )}
+
       {/* SIDEBAR */}
-      <aside className="w-72 bg-white border-r hidden md:flex flex-col shrink-0 shadow-sm">
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r transform transition-transform duration-300 md:relative md:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} flex flex-col shrink-0 shadow-sm`}
+      >
         <div className="p-8 text-center">
           <div className="text-3xl mb-2">🦉</div>
           <h1 className="text-xl font-extrabold text-slate-900 tracking-tighter mb-6 uppercase">
@@ -439,7 +440,7 @@ function App() {
           </h1>
           <button
             onClick={() => setIsModalOpen("mainDeck")}
-            className="w-full bg-indigo-600 text-white py-3 rounded-2xl font-bold text-sm shadow-lg"
+            className="w-full bg-indigo-600 text-white py-3 rounded-2xl font-bold text-sm shadow-lg hover:bg-indigo-700"
           >
             + Collection
           </button>
@@ -450,19 +451,34 @@ function App() {
       </aside>
 
       {/* MAIN VIEW */}
-      <main className="flex-1 flex flex-col relative overflow-hidden">
-        <header className="h-20 bg-white/80 backdrop-blur-md border-b flex items-center justify-between px-10 shrink-0 z-20">
-          <div className="flex items-center gap-4">
+      <main className="flex-1 flex flex-col relative overflow-hidden w-full">
+        <header className="h-20 bg-white/80 backdrop-blur-md border-b flex items-center justify-between px-4 md:px-10 shrink-0 z-20 gap-2">
+          <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 bg-slate-100 rounded-lg md:hidden text-slate-600"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
             {activeDeck?.parent_id && (
               <button
-                onClick={() => {
-                  const parent = findParentDeck(activeDeck.parent_id, library);
-                  if (parent) setActiveDeck(parent);
-                }}
-                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors text-slate-600"
+                onClick={handleBack}
+                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600"
               >
                 <svg
-                  className="w-5 h-5"
+                  className="w-4 h-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -476,49 +492,54 @@ function App() {
                 </svg>
               </button>
             )}
-            <div className="text-sm font-bold text-slate-800 uppercase tracking-tight">
-              {activeDeck?.name || "Select Collection"}
+            <div className="truncate">
+              <div className="text-sm font-bold text-slate-800 uppercase tracking-tight truncate">
+                {activeDeck?.name || "Select Collection"}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setIsModalOpen("magic")}
-              className="bg-amber-400 text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-sm uppercase tracking-tighter"
+              className="bg-amber-400 text-white p-2.5 md:px-5 rounded-xl text-[10px] md:text-xs font-black shadow-sm uppercase whitespace-nowrap"
             >
-              ✨ Magic Import
+              ✨ <span className="hidden md:inline">Magic Import</span>
             </button>
             <button
               onClick={() => {
                 setCardLimit(getAllCardsRecursively(activeDeck).length);
                 setIsModalOpen("settings");
               }}
-              className="bg-slate-900 text-white px-8 py-2.5 rounded-xl text-xs font-black shadow-xl uppercase tracking-tighter"
+              className="bg-slate-900 text-white p-2.5 md:px-8 rounded-xl text-[10px] md:text-xs font-black shadow-xl uppercase whitespace-nowrap"
             >
-              🚀 Simulan Na!
+              🚀 <span className="hidden md:inline">Simulan Na!</span>
+              <span className="md:hidden">Start</span>
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-10 custom-scroll">
+        <div className="flex-1 overflow-y-auto p-4 md:p-10 custom-scroll">
           {activeDeck ? (
-            <div className="max-w-4xl mx-auto space-y-8 pb-24">
-              <div className="bg-white p-6 rounded-[2rem] border shadow-sm">
+            <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-24">
+              {/* Mastery */}
+              <div className="bg-white p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border shadow-sm">
                 <div className="flex justify-between items-center mb-2 text-[10px] font-black text-slate-400 uppercase">
                   Knowledge Mastery{" "}
                   <span className="text-indigo-600">
                     {calculateMastery(getAllCardsRecursively(activeDeck))}%
                   </span>
                 </div>
-                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-indigo-500 transition-all duration-1000"
                     style={{
                       width: `${calculateMastery(getAllCardsRecursively(activeDeck))}%`,
                     }}
-                  ></div>
+                  />
                 </div>
               </div>
 
+              {/* Subfolders */}
               <section>
                 <div className="flex justify-between items-center mb-4 ml-2">
                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
@@ -526,19 +547,19 @@ function App() {
                   </h3>
                   <button
                     onClick={() => setIsModalOpen("subDeck")}
-                    className="text-[10px] bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full font-bold hover:bg-indigo-600 hover:text-white transition-all"
+                    className="text-[10px] bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-full font-bold hover:bg-indigo-600 hover:text-white transition-all"
                   >
-                    + ADD SUB-DECK
+                    + SUB-DECK
                   </button>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                   {activeDeck.subDecks?.map((sub) => (
                     <div
                       key={sub.id}
                       onClick={() => setActiveDeck(sub)}
-                      className="bg-white p-5 rounded-[2rem] border border-slate-100 cursor-pointer hover:border-indigo-400 text-center transition-all group"
+                      className="bg-white p-4 md:p-5 rounded-[1.5rem] md:rounded-[2rem] border border-slate-100 cursor-pointer hover:border-indigo-400 text-center transition-all group shadow-sm"
                     >
-                      <div className="text-3xl mb-1 group-hover:scale-110 transition-transform">
+                      <div className="text-2xl mb-1 group-hover:scale-110 transition-transform">
                         📂
                       </div>
                       <h4 className="text-[10px] font-bold uppercase truncate">
@@ -549,50 +570,52 @@ function App() {
                 </div>
               </section>
 
-              <section className="bg-white p-8 rounded-[2.5rem] border shadow-sm">
+              {/* Editor */}
+              <section className="bg-white p-5 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border shadow-sm">
                 <div
                   ref={editorRef}
                   contentEditable
                   placeholder="Type or paste here..."
-                  className="w-full min-h-[100px] text-xl outline-none mb-6 empty:before:content-[attr(placeholder)] empty:before:text-slate-300 leading-relaxed"
+                  className="w-full min-h-[80px] md:min-h-[100px] text-lg md:text-xl outline-none mb-6 empty:before:content-[attr(placeholder)] empty:before:text-slate-300 leading-relaxed"
                 />
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={toggleHighlight}
-                    className="bg-indigo-50 text-indigo-600 px-5 py-3 rounded-xl font-bold text-xs hover:bg-indigo-100 transition-all"
+                    className="flex-1 md:flex-none bg-indigo-50 text-indigo-600 px-4 py-3 rounded-xl font-bold text-xs hover:bg-indigo-100 transition-all"
                   >
                     ✨ Highlight
                   </button>
                   <button
                     onClick={formatAsBulletedList}
-                    className="bg-amber-50 text-amber-600 px-5 py-3 rounded-xl font-bold text-xs hover:bg-amber-100 transition-all"
+                    className="flex-1 md:flex-none bg-amber-50 text-amber-600 px-4 py-3 rounded-xl font-bold text-xs hover:bg-amber-100 transition-all"
                   >
                     • Bullet List
                   </button>
                   <button
                     onClick={saveCard}
-                    className="flex-1 bg-indigo-600 text-white px-5 py-3 rounded-xl font-black text-xs shadow-lg uppercase"
+                    className="w-full md:flex-1 bg-indigo-600 text-white px-5 py-3 rounded-xl font-black text-xs shadow-lg uppercase"
                   >
                     Save Card
                   </button>
                 </div>
               </section>
 
+              {/* Card List Controls */}
               <section>
-                <div className="flex justify-between items-center mb-4 ml-2">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4 gap-3 px-2">
                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
                     Reviewer Cards
                   </h3>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={shuffleCards}
-                      className="text-[10px] bg-slate-50 text-slate-400 px-3 py-1 rounded-full font-bold hover:bg-slate-200"
+                      className="text-[9px] md:text-[10px] bg-slate-50 text-slate-400 px-3 py-1.5 rounded-full font-bold hover:bg-slate-200"
                     >
                       Shuffle
                     </button>
                     <button
                       onClick={resetOrder}
-                      className="text-[10px] bg-slate-50 text-slate-400 px-3 py-1 rounded-full font-bold hover:bg-slate-200"
+                      className="text-[9px] md:text-[10px] bg-slate-50 text-slate-400 px-3 py-1.5 rounded-full font-bold hover:bg-slate-200"
                     >
                       Default
                     </button>
@@ -606,7 +629,7 @@ function App() {
                           fetchLibrary();
                         }
                       }}
-                      className="text-[10px] bg-rose-50 text-rose-500 px-3 py-1 rounded-full font-bold hover:bg-rose-500 hover:text-white uppercase"
+                      className="text-[9px] md:text-[10px] bg-rose-50 text-rose-500 px-3 py-1.5 rounded-full font-bold hover:bg-rose-500 hover:text-white uppercase"
                     >
                       Clear All
                     </button>
@@ -620,7 +643,7 @@ function App() {
                           fetchLibrary();
                         }
                       }}
-                      className="text-[10px] bg-rose-50 text-rose-500 px-3 py-1 rounded-full font-bold hover:bg-rose-500 hover:text-white uppercase"
+                      className="text-[9px] md:text-[10px] bg-rose-50 text-rose-500 px-3 py-1.5 rounded-full font-bold hover:bg-rose-500 hover:text-white uppercase"
                     >
                       Del Deck
                     </button>
@@ -630,9 +653,9 @@ function App() {
                   {activeDeck.cards.map((card) => (
                     <div
                       key={card.id}
-                      className="bg-white p-6 rounded-[2rem] border relative group transition-all hover:shadow-md"
+                      className="bg-white p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border relative group transition-all hover:shadow-md"
                     >
-                      <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className="absolute top-4 right-4 flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
                         <button
                           onClick={() => editCard(card)}
                           className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"
@@ -652,7 +675,7 @@ function App() {
                         </button>
                       </div>
                       <div
-                        className="text-slate-700 leading-relaxed pr-10"
+                        className="text-slate-700 leading-relaxed pr-12 text-sm md:text-base"
                         dangerouslySetInnerHTML={{ __html: card.html }}
                       />
                     </div>
@@ -673,21 +696,22 @@ function App() {
 
       {/* QUIZ OVERLAY */}
       {isQuizOpen && (
-        <div className="fixed inset-0 bg-[#f8fafc] z-[60] flex flex-col items-center justify-center p-6 overflow-y-auto custom-scroll">
-          <div className="absolute top-8 left-8 flex items-center gap-4">
+        <div className="fixed inset-0 bg-[#f8fafc] z-[60] flex flex-col items-center justify-center p-4 md:p-6 overflow-y-auto custom-scroll">
+          <div className="absolute top-4 md:top-8 left-4 md:left-8 flex items-center gap-4">
             <button
               onClick={() => setIsQuizOpen(false)}
-              className="font-black text-slate-400 text-xs uppercase tracking-widest"
+              className="font-black text-slate-400 text-[10px] uppercase tracking-widest"
             >
               ← EXIT
             </button>
-            <div className="bg-white px-4 py-2 rounded-xl border font-black text-orange-500 shadow-sm">
+            <div className="bg-white px-3 py-1.5 rounded-xl border font-black text-orange-500 shadow-sm text-xs">
               🔥 {streak}
             </div>
           </div>
+
           {quizPhase !== "results" ? (
-            <div className="w-full max-w-2xl text-center">
-              <div className="text-7xl mb-6 transition-transform">
+            <div className="w-full max-w-2xl text-center mt-12 md:mt-0">
+              <div className="text-5xl md:text-7xl mb-6 transition-transform">
                 {quizPhase === "feedback"
                   ? sessionHistory[currentIdx]?.isCorrect
                     ? "🎓"
@@ -696,8 +720,8 @@ function App() {
                     ? "🧐"
                     : "🦉"}
               </div>
-              <div className="bg-white rounded-[3.5rem] shadow-2xl p-12 border border-slate-100 transition-all">
-                <div className="text-2xl font-bold text-slate-800 mb-10 leading-relaxed">
+              <div className="bg-white rounded-[2rem] md:rounded-[3.5rem] shadow-2xl p-8 md:p-12 border border-slate-100 transition-all">
+                <div className="text-lg md:text-2xl font-bold text-slate-800 mb-8 md:mb-10 leading-relaxed">
                   <div
                     dangerouslySetInnerHTML={{
                       __html: quizQueue[currentIdx]?.html.replace(
@@ -712,8 +736,8 @@ function App() {
                     {quizMode === "type" ? (
                       <input
                         autoFocus
-                        className="w-full p-5 rounded-2xl border-2 border-slate-100 text-center text-xl font-bold outline-indigo-500 shadow-sm"
-                        placeholder="I-type ang sagot..."
+                        className="w-full p-4 md:p-5 rounded-xl md:rounded-2xl border-2 border-slate-100 text-center text-lg md:text-xl font-bold outline-indigo-500 shadow-sm"
+                        placeholder="Type answer..."
                         onKeyUp={(e) =>
                           e.key === "Enter" && submitAnswer(e.target.value)
                         }
@@ -726,7 +750,7 @@ function App() {
                           <button
                             key={i}
                             onClick={() => submitAnswer(ans)}
-                            className="p-4 bg-white border-2 border-slate-100 rounded-2xl font-bold hover:border-indigo-500 hover:bg-indigo-50 transition-all text-slate-600"
+                            className="p-3 md:p-4 bg-white border-2 border-slate-100 rounded-xl md:rounded-2xl font-bold hover:border-indigo-500 hover:bg-indigo-50 transition-all text-slate-600 text-sm md:text-base"
                           >
                             {ans}
                           </button>
@@ -744,14 +768,14 @@ function App() {
                   </div>
                 )}
                 {quizPhase === "checking" && (
-                  <div className="py-4 font-black text-slate-400 animate-pulse italic uppercase tracking-widest text-sm">
+                  <div className="py-4 font-black text-slate-400 animate-pulse italic uppercase tracking-widest text-xs md:text-sm">
                     Thinking... 🧐
                   </div>
                 )}
                 {quizPhase === "feedback" && (
                   <div className="space-y-6">
                     <p
-                      className={`text-xl font-black ${sessionHistory[currentIdx]?.isCorrect ? "text-emerald-500" : "text-rose-500"}`}
+                      className={`text-lg md:text-xl font-black ${sessionHistory[currentIdx]?.isCorrect ? "text-emerald-500" : "text-rose-500"}`}
                     >
                       {sessionHistory[currentIdx]?.isCorrect
                         ? "Ang galing! ✨"
@@ -768,7 +792,7 @@ function App() {
                           confetti({ particleCount: 150, spread: 70 });
                         }
                       }}
-                      className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black shadow-lg uppercase"
+                      className="w-full bg-indigo-600 text-white py-4 rounded-xl md:rounded-2xl font-black shadow-lg uppercase"
                     >
                       Next Card →
                     </button>
@@ -777,12 +801,12 @@ function App() {
               </div>
             </div>
           ) : (
-            <div className="w-full max-w-2xl py-10">
-              <h2 className="text-4xl font-black text-center mb-10 text-slate-800 uppercase tracking-tighter">
+            <div className="w-full max-w-2xl py-6 md:py-10">
+              <h2 className="text-3xl md:text-4xl font-black text-center mb-8 md:mb-10 text-slate-800 uppercase tracking-tighter">
                 Session Complete! 🎉
               </h2>
-              <div className="bg-white p-10 rounded-[3rem] shadow-xl mb-10 text-center relative">
-                <div className="w-48 h-48 mx-auto mb-6">
+              <div className="bg-white p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] shadow-xl mb-8 md:mb-10 text-center relative">
+                <div className="w-32 h-32 md:w-48 md:h-48 mx-auto mb-6">
                   <Doughnut
                     data={{
                       labels: ["Tama", "Mali"],
@@ -800,11 +824,11 @@ function App() {
                     }}
                   />
                 </div>
-                <div className="absolute inset-0 flex flex-col items-center justify-center pt-8">
-                  <span className="text-4xl font-black text-indigo-600">
+                <div className="absolute inset-0 flex flex-col items-center justify-center pt-6 md:pt-8">
+                  <span className="text-2xl md:text-4xl font-black text-indigo-600">
                     {Math.round((correctCount / quizQueue.length) * 100)}%
                   </span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  <span className="text-[8px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                     {correctCount} / {quizQueue.length} Correct
                   </span>
                 </div>
@@ -822,28 +846,31 @@ function App() {
                     setSessionHistory([]);
                     setQuizPhase("asking");
                   }}
-                  className="w-full bg-amber-500 text-white py-5 rounded-3xl font-black shadow-xl mb-10 uppercase tracking-widest"
+                  className="w-full bg-amber-500 text-white py-4 md:py-5 rounded-2xl md:rounded-3xl font-black shadow-xl mb-8 md:mb-10 uppercase text-xs md:text-sm tracking-widest"
                 >
                   🎯 Re-study Mistakes
                 </button>
               )}
               <div className="space-y-3 mb-10">
+                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest ml-4">
+                  Detailed Review
+                </h3>
                 {sessionHistory.map((item, i) => (
                   <div
                     key={i}
-                    className="bg-white p-5 rounded-3xl border flex justify-between items-center shadow-sm"
+                    className="bg-white p-4 md:p-5 rounded-2xl md:rounded-3xl border flex flex-col md:flex-row md:justify-between md:items-center shadow-sm gap-2"
                   >
-                    <div className="flex-1 pr-4">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">
+                    <div className="flex-1 md:pr-4">
+                      <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">
                         Question
                       </p>
                       <p className="text-sm font-bold text-slate-700 leading-tight">
                         {item.prompt}
                       </p>
                     </div>
-                    <div className="text-right leading-none">
+                    <div className="text-left md:text-right border-t md:border-t-0 pt-2 md:pt-0">
                       <p
-                        className={`text-[10px] font-black uppercase mb-1 ${item.isCorrect ? "text-emerald-500" : "text-rose-400"}`}
+                        className={`text-[9px] font-black uppercase mb-1 ${item.isCorrect ? "text-emerald-500" : "text-rose-400"}`}
                       >
                         {item.isCorrect ? "Correct" : "Incorrect"}
                       </p>
@@ -859,7 +886,7 @@ function App() {
                   setIsQuizOpen(false);
                   fetchLibrary();
                 }}
-                className="w-full bg-slate-900 text-white py-5 rounded-3xl font-black shadow-xl uppercase"
+                className="w-full bg-slate-900 text-white py-4 md:py-5 rounded-2xl md:rounded-3xl font-black shadow-xl uppercase text-xs md:text-sm tracking-widest"
               >
                 Back to Library
               </button>
@@ -870,25 +897,25 @@ function App() {
 
       {/* MODALS */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
           <div
-            className={`bg-white w-full rounded-[2.5rem] p-10 flex flex-col ${isModalOpen === "magic" ? "max-w-xl" : "max-w-sm"}`}
+            className={`bg-white w-full rounded-[1.5rem] md:rounded-[2.5rem] p-6 md:p-10 flex flex-col ${isModalOpen === "magic" ? "max-w-xl" : "max-w-sm"}`}
           >
             {isModalOpen === "settings" && (
               <>
-                <h3 className="font-black text-xl mb-6 text-center italic uppercase tracking-tighter text-slate-800 leading-none">
+                <h3 className="font-black text-xl mb-6 text-center italic uppercase tracking-tighter text-slate-800">
                   Study Settings 🚀
                 </h3>
-                <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
+                <div className="flex bg-slate-100 p-1 rounded-xl md:rounded-2xl mb-6">
                   <button
                     onClick={() => setStudyFilter("all")}
-                    className={`flex-1 py-3 rounded-xl font-bold text-xs uppercase transition-all ${studyFilter === "all" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400"}`}
+                    className={`flex-1 py-2 md:py-3 rounded-lg md:rounded-xl font-bold text-[10px] md:text-xs uppercase transition-all ${studyFilter === "all" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400"}`}
                   >
                     All Cards
                   </button>
                   <button
                     onClick={() => setStudyFilter("new")}
-                    className={`flex-1 py-3 rounded-xl font-bold text-xs uppercase transition-all ${studyFilter === "new" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400"}`}
+                    className={`flex-1 py-2 md:py-3 rounded-lg md:rounded-xl font-bold text-[10px] md:text-xs uppercase transition-all ${studyFilter === "new" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400"}`}
                   >
                     New Only
                   </button>
@@ -904,7 +931,7 @@ function App() {
                 />
                 <button
                   onClick={() => startQuiz(cardLimit)}
-                  className="bg-indigo-600 text-white py-4 rounded-xl font-black shadow-lg uppercase tracking-widest"
+                  className="bg-indigo-600 text-white py-4 rounded-xl font-black shadow-lg uppercase tracking-widest text-xs"
                 >
                   Start Study
                 </button>
@@ -919,11 +946,11 @@ function App() {
                   value={newDeckName}
                   onChange={(e) => setNewDeckName(e.target.value)}
                   className="bg-slate-50 p-4 rounded-xl font-bold mb-4 outline-indigo-500"
-                  placeholder="e.g. UML Basics"
+                  placeholder="e.g. Science"
                 />
                 <button
                   onClick={() => handleCreateDeck(null)}
-                  className="bg-indigo-600 text-white py-4 rounded-xl font-black shadow-lg uppercase"
+                  className="bg-indigo-600 text-white py-4 rounded-xl font-black shadow-lg uppercase text-xs"
                 >
                   Create
                 </button>
@@ -942,7 +969,7 @@ function App() {
                 />
                 <button
                   onClick={() => handleCreateDeck(activeDeck.id)}
-                  className="bg-indigo-600 text-white py-4 rounded-xl font-black shadow-lg uppercase"
+                  className="bg-indigo-600 text-white py-4 rounded-xl font-black shadow-lg uppercase text-xs"
                 >
                   Add
                 </button>
@@ -957,7 +984,7 @@ function App() {
                   type="file"
                   accept=".txt,.docx,.pdf"
                   onChange={handleFileImport}
-                  className="mb-4 text-xs font-bold text-slate-500"
+                  className="mb-4 text-[10px] md:text-xs font-bold text-slate-500"
                 />
                 <textarea
                   value={magicText}
@@ -968,7 +995,7 @@ function App() {
                 <button
                   onClick={processMagic}
                   disabled={isImporting}
-                  className="bg-amber-500 text-white py-4 rounded-xl font-black shadow-md uppercase"
+                  className="bg-amber-500 text-white py-4 rounded-xl font-black shadow-md uppercase text-xs"
                 >
                   {isImporting ? "Processing..." : "Generate Reviewer"}
                 </button>
