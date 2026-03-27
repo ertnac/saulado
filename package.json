@@ -18,5 +18,11 @@
   "bugs": {
     "url": "https://github.com/ertnac/saulado/issues"
   },
-  "homepage": "https://github.com/ertnac/saulado#readme"
+  "homepage": "https://github.com/ertnac/saulado#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "groq-sdk": "^1.1.2",
+    "mysql2": "^3.20.0"
+  }
 }
