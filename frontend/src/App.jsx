@@ -8,7 +8,7 @@ import * as pdfjs from "pdfjs-dist";
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-const API_URL = '/api';
+const API_URL = '';
 
 function App() {
   // --- CORE STATE ---
