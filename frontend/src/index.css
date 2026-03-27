@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-jakarta bg-[#f8fafc] text-[#1e293b];
+  }
+}
+
+.answer-highlight {
+  background-color: #eff6ff;
+  border-bottom: 2px solid #6366f1;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-weight: 700;
+  color: #4338ca;
+}
