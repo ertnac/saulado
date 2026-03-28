@@ -9,6 +9,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/$
 ChartJS.register(ArcElement, Tooltip, Legend);
 
 const API_URL = "https://saulado.onrender.com";
+const LOCAL_STORAGE_KEY = "saulado_offline_data";
 
 function App() {
   // --- CORE STATE ---
@@ -18,6 +19,7 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(null);
   const [isQuizOpen, setIsQuizOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   // Magic & UI State
   const [magicText, setMagicText] = useState("");
@@ -35,28 +37,58 @@ function App() {
   const [sessionHistory, setSessionHistory] = useState([]);
   const [mistakesQueue, setMistakesQueue] = useState([]);
   const [cardLimit, setCardLimit] = useState(0);
-  const [studyFilter, setStudyFilter] = useState("all"); // 'all' or 'new'
+  const [studyFilter, setStudyFilter] = useState("all");
 
+  // --- CONNECTIVITY MONITOR ---
   useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
     fetchLibrary();
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
   }, []);
 
   const fetchLibrary = async () => {
     try {
       const res = await fetch(`${API_URL}/api/library`);
+      if (!res.ok) throw new Error();
       const data = await res.json();
+
       setLibrary(data);
+      // AUTO-SAVE TO LOCAL STORAGE FOR OFFLINE USE
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+      setIsOffline(false);
+
       if (data.length > 0 && !activeDeck) setActiveDeck(data[0]);
       if (activeDeck) {
         const updated = findDeck(activeDeck.id, data);
         setActiveDeck(updated || (data.length > 0 ? data[0] : null));
       }
     } catch (e) {
-      console.error("Backend offline");
+      console.warn("Using offline cached data...");
+      setIsOffline(true);
+      const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (cached) {
+        const data = JSON.parse(cached);
+        setLibrary(data);
+        if (data.length > 0 && !activeDeck) setActiveDeck(data[0]);
+      }
     }
   };
 
-  // --- NAVIGATION & UTILS ---
+  const syncForOffline = () => {
+    fetchLibrary();
+    confetti({ particleCount: 50, origin: { y: 1 } });
+    alert(
+      "Library downloaded! You can now use Saulado even without internet. 🦉",
+    );
+  };
+
+  // --- UTILS ---
   const findDeck = (id, list) => {
     for (let d of list) {
       if (d.id === id) return d;
@@ -165,6 +197,8 @@ function App() {
   };
 
   const saveCard = async () => {
+    if (isOffline)
+      return alert("Please go online to save new cards to the database.");
     const html = editorRef.current.innerHTML;
     const plainText = editorRef.current.innerText.trim();
     if (!plainText || !activeDeck) return;
@@ -196,6 +230,7 @@ function App() {
   };
 
   const editCard = async (card) => {
+    if (isOffline) return alert("Go online to edit and sync cards.");
     if (
       editorRef.current.innerText.trim() !== "" &&
       !confirm("Overwrite editor?")
@@ -208,6 +243,7 @@ function App() {
   };
 
   const handleCreateDeck = async (parentId = null) => {
+    if (isOffline) return alert("Go online to create new collections.");
     if (!newDeckName) return;
     const res = await fetch(`${API_URL}/api/decks`, {
       method: "POST",
@@ -260,6 +296,7 @@ function App() {
   };
 
   const processMagic = async () => {
+    if (isOffline) return alert("Go online to use Magic Import.");
     setIsImporting(true);
     const lines = magicText.split("\n");
     const baseTime = Date.now();
@@ -310,18 +347,10 @@ function App() {
   const prepareStudy = () => {
     const total = getAllCardsRecursively(activeDeck).length;
     if (total === 0) return alert("Walang cards!");
-    setStudyFilter("all"); // Reset to 'all' by default
+    setStudyFilter("all");
     setCardLimit(total);
     setIsModalOpen("settings");
   };
-
-  // Auto-adjust limit when toggling filter in modal
-  useEffect(() => {
-    if (isModalOpen === "settings") {
-      const poolSize = getFilteredPool().length;
-      setCardLimit(poolSize);
-    }
-  }, [studyFilter]);
 
   const startQuiz = (limit) => {
     const pool = getFilteredPool();
@@ -346,6 +375,15 @@ function App() {
     const correct = getAnswerFromHtml(card.html);
     const temp = document.createElement("div");
     temp.innerHTML = card.html;
+
+    if (isOffline) {
+      // OFFLINE CHECKER: Exact Match (Case Insensitive)
+      const isMatch =
+        userVal.trim().toLowerCase() === correct.trim().toLowerCase();
+      handleResult(isMatch, userVal, correct, temp.innerText, card.id);
+      return;
+    }
+
     setQuizPhase("checking");
     try {
       const res = await fetch(`${API_URL}/api/verify`, {
@@ -353,12 +391,8 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userAnswer: userVal, correctAnswer: correct }),
       });
-      const data = (await res.ok)
-        ? await res.json()
-        : {
-            isCorrect:
-              userVal.trim().toLowerCase() === correct.trim().toLowerCase(),
-          };
+      if (!res.ok) throw new Error();
+      const data = await res.json();
       handleResult(data.isCorrect, userVal, correct, temp.innerText, card.id);
     } catch (e) {
       handleResult(
@@ -372,11 +406,13 @@ function App() {
   };
 
   const handleResult = (isCorrect, userVal, correct, promptText, cardId) => {
-    fetch(`${API_URL}/api/cards/${cardId}/track`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isCorrect }),
-    });
+    if (!isOffline) {
+      fetch(`${API_URL}/api/cards/${cardId}/track`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isCorrect }),
+      });
+    }
     if (isCorrect) {
       setCorrectCount((c) => c + 1);
       setStreak((s) => s + 1);
@@ -460,9 +496,15 @@ function App() {
           </h1>
           <button
             onClick={() => setIsModalOpen("mainDeck")}
-            className="w-full bg-indigo-600 text-white py-3 rounded-2xl font-bold text-sm shadow-lg hover:bg-indigo-700 transition-all"
+            className="w-full bg-indigo-600 text-white py-3 rounded-2xl font-bold text-sm shadow-lg hover:bg-indigo-700 transition-all mb-2"
           >
             + Collection
+          </button>
+          <button
+            onClick={syncForOffline}
+            className="w-full bg-slate-100 text-slate-500 py-2 rounded-xl font-bold text-[10px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+          >
+            📥 Sync for Offline
           </button>
         </div>
         <nav className="flex-1 overflow-y-auto px-4 pb-10 custom-scroll text-sm">
@@ -491,28 +533,18 @@ function App() {
                 />
               </svg>
             </button>
-            {activeDeck?.parent_id && (
-              <button
-                onClick={handleBack}
-                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 shrink-0"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="3"
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </button>
-            )}
-            <div className="text-sm font-bold text-slate-800 uppercase tracking-tight truncate">
-              {activeDeck?.name || "Select Collection"}
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-2 h-2 rounded-full ${isOffline ? "bg-amber-400 animate-pulse" : "bg-emerald-500"}`}
+                ></div>
+                <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                  {isOffline ? "Offline Mode" : "Online"}
+                </span>
+              </div>
+              <div className="text-sm font-bold text-slate-800 uppercase tracking-tight truncate">
+                {activeDeck?.name || "Select Collection"}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -559,7 +591,7 @@ function App() {
                   </h3>
                   <button
                     onClick={() => setIsModalOpen("subDeck")}
-                    className="text-[10px] bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-full font-bold hover:bg-indigo-600 transition-all"
+                    className="text-[10px] bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-full font-bold hover:bg-indigo-600 hover:text-white transition-all"
                   >
                     + SUB-DECK
                   </button>
@@ -706,6 +738,7 @@ function App() {
         </div>
       </main>
 
+      {/* QUIZ OVERLAY */}
       {isQuizOpen && (
         <div className="fixed inset-0 bg-[#f8fafc] z-[60] flex flex-col items-center justify-center p-4 md:p-6 overflow-y-auto custom-scroll">
           <div className="absolute top-4 md:top-8 left-4 md:left-8 flex items-center gap-4">
@@ -803,7 +836,7 @@ function App() {
                           confetti({ particleCount: 150, spread: 70 });
                         }
                       }}
-                      className="w-full bg-indigo-600 text-white py-4 rounded-xl md:rounded-2xl font-black shadow-lg uppercase transition-all active:scale-95"
+                      className="w-full bg-indigo-600 text-white py-4 rounded-xl md:rounded-2xl font-black shadow-lg uppercase"
                     >
                       Next Card →
                     </button>
@@ -903,6 +936,7 @@ function App() {
         </div>
       )}
 
+      {/* MODALS */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
           <div

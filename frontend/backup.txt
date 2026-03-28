@@ -17,7 +17,7 @@ function App() {
   const [expandedDecks, setExpandedDecks] = useState(new Set());
   const [isModalOpen, setIsModalOpen] = useState(null);
   const [isQuizOpen, setIsQuizOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile Sidebar State
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Magic & UI State
   const [magicText, setMagicText] = useState("");
@@ -35,7 +35,7 @@ function App() {
   const [sessionHistory, setSessionHistory] = useState([]);
   const [mistakesQueue, setMistakesQueue] = useState([]);
   const [cardLimit, setCardLimit] = useState(0);
-  const [studyFilter, setStudyFilter] = useState("all");
+  const [studyFilter, setStudyFilter] = useState("all"); // 'all' or 'new'
 
   useEffect(() => {
     fetchLibrary();
@@ -117,8 +117,7 @@ function App() {
     const range = sel.getRangeAt(0);
     let parent = sel.anchorNode.parentNode;
     if (parent.classList.contains("answer-highlight")) {
-      const text = parent.innerText;
-      parent.replaceWith(document.createTextNode(text));
+      parent.replaceWith(document.createTextNode(parent.innerText));
     } else {
       const span = document.createElement("span");
       span.className = "answer-highlight";
@@ -169,7 +168,6 @@ function App() {
     const html = editorRef.current.innerHTML;
     const plainText = editorRef.current.innerText.trim();
     if (!plainText || !activeDeck) return;
-
     const tempId = Date.now();
     const newCard = {
       id: tempId,
@@ -181,7 +179,6 @@ function App() {
     };
     setActiveDeck((prev) => ({ ...prev, cards: [...prev.cards, newCard] }));
     editorRef.current.innerHTML = "";
-
     try {
       await fetch(`${API_URL}/api/cards`, {
         method: "POST",
@@ -238,6 +235,7 @@ function App() {
     setActiveDeck({ ...activeDeck, cards: ordered });
   };
 
+  // --- MAGIC IMPORT ---
   const handleFileImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -301,11 +299,33 @@ function App() {
     fetchLibrary();
   };
 
-  const startQuiz = (limit) => {
-    let pool = getAllCardsRecursively(activeDeck);
-    if (studyFilter === "new") pool = pool.filter((c) => c.attempt_count === 0);
-    if (pool.length === 0) return alert("No cards match your filter!");
+  // --- QUIZ ENGINE ---
+  const getFilteredPool = () => {
+    const all = getAllCardsRecursively(activeDeck);
+    if (studyFilter === "new")
+      return all.filter((c) => !c.attempt_count || c.attempt_count === 0);
+    return all;
+  };
 
+  const prepareStudy = () => {
+    const total = getAllCardsRecursively(activeDeck).length;
+    if (total === 0) return alert("Walang cards!");
+    setStudyFilter("all"); // Reset to 'all' by default
+    setCardLimit(total);
+    setIsModalOpen("settings");
+  };
+
+  // Auto-adjust limit when toggling filter in modal
+  useEffect(() => {
+    if (isModalOpen === "settings") {
+      const poolSize = getFilteredPool().length;
+      setCardLimit(poolSize);
+    }
+  }, [studyFilter]);
+
+  const startQuiz = (limit) => {
+    const pool = getFilteredPool();
+    if (pool.length === 0) return alert("No cards match your filter!");
     const shuffled = [...pool]
       .sort(() => 0.5 - Math.random())
       .slice(0, limit || pool.length);
@@ -326,7 +346,6 @@ function App() {
     const correct = getAnswerFromHtml(card.html);
     const temp = document.createElement("div");
     temp.innerHTML = card.html;
-
     setQuizPhase("checking");
     try {
       const res = await fetch(`${API_URL}/api/verify`, {
@@ -334,8 +353,12 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userAnswer: userVal, correctAnswer: correct }),
       });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const data = (await res.ok)
+        ? await res.json()
+        : {
+            isCorrect:
+              userVal.trim().toLowerCase() === correct.trim().toLowerCase(),
+          };
       handleResult(data.isCorrect, userVal, correct, temp.innerText, card.id);
     } catch (e) {
       handleResult(
@@ -421,15 +444,12 @@ function App() {
 
   return (
     <div className="h-screen flex overflow-hidden bg-[#f8fafc] font-jakarta relative">
-      {/* MOBILE SIDEBAR OVERLAY */}
       {isSidebarOpen && (
         <div
           onClick={() => setIsSidebarOpen(false)}
           className="fixed inset-0 bg-slate-900/40 z-40 md:hidden backdrop-blur-sm"
         />
       )}
-
-      {/* SIDEBAR */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r transform transition-transform duration-300 md:relative md:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} flex flex-col shrink-0 shadow-sm`}
       >
@@ -440,7 +460,7 @@ function App() {
           </h1>
           <button
             onClick={() => setIsModalOpen("mainDeck")}
-            className="w-full bg-indigo-600 text-white py-3 rounded-2xl font-bold text-sm shadow-lg hover:bg-indigo-700"
+            className="w-full bg-indigo-600 text-white py-3 rounded-2xl font-bold text-sm shadow-lg hover:bg-indigo-700 transition-all"
           >
             + Collection
           </button>
@@ -450,10 +470,9 @@ function App() {
         </nav>
       </aside>
 
-      {/* MAIN VIEW */}
       <main className="flex-1 flex flex-col relative overflow-hidden w-full">
         <header className="h-20 bg-white/80 backdrop-blur-md border-b flex items-center justify-between px-4 md:px-10 shrink-0 z-20 gap-2">
-          <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
+          <div className="flex items-center gap-2 overflow-hidden">
             <button
               onClick={() => setIsSidebarOpen(true)}
               className="p-2 bg-slate-100 rounded-lg md:hidden text-slate-600"
@@ -475,7 +494,7 @@ function App() {
             {activeDeck?.parent_id && (
               <button
                 onClick={handleBack}
-                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600"
+                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 shrink-0"
               >
                 <svg
                   className="w-4 h-4"
@@ -492,10 +511,8 @@ function App() {
                 </svg>
               </button>
             )}
-            <div className="truncate">
-              <div className="text-sm font-bold text-slate-800 uppercase tracking-tight truncate">
-                {activeDeck?.name || "Select Collection"}
-              </div>
+            <div className="text-sm font-bold text-slate-800 uppercase tracking-tight truncate">
+              {activeDeck?.name || "Select Collection"}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -506,11 +523,8 @@ function App() {
               ✨ <span className="hidden md:inline">Magic Import</span>
             </button>
             <button
-              onClick={() => {
-                setCardLimit(getAllCardsRecursively(activeDeck).length);
-                setIsModalOpen("settings");
-              }}
-              className="bg-slate-900 text-white p-2.5 md:px-8 rounded-xl text-[10px] md:text-xs font-black shadow-xl uppercase whitespace-nowrap"
+              onClick={prepareStudy}
+              className="bg-slate-900 text-white p-2.5 md:px-8 rounded-xl text-[10px] md:text-xs font-black shadow-xl uppercase whitespace-nowrap transition-all hover:scale-105 active:scale-95"
             >
               🚀 <span className="hidden md:inline">Simulan Na!</span>
               <span className="md:hidden">Start</span>
@@ -521,7 +535,6 @@ function App() {
         <div className="flex-1 overflow-y-auto p-4 md:p-10 custom-scroll">
           {activeDeck ? (
             <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-24">
-              {/* Mastery */}
               <div className="bg-white p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border shadow-sm">
                 <div className="flex justify-between items-center mb-2 text-[10px] font-black text-slate-400 uppercase">
                   Knowledge Mastery{" "}
@@ -539,7 +552,6 @@ function App() {
                 </div>
               </div>
 
-              {/* Subfolders */}
               <section>
                 <div className="flex justify-between items-center mb-4 ml-2">
                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
@@ -547,7 +559,7 @@ function App() {
                   </h3>
                   <button
                     onClick={() => setIsModalOpen("subDeck")}
-                    className="text-[10px] bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-full font-bold hover:bg-indigo-600 hover:text-white transition-all"
+                    className="text-[10px] bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-full font-bold hover:bg-indigo-600 transition-all"
                   >
                     + SUB-DECK
                   </button>
@@ -570,7 +582,6 @@ function App() {
                 </div>
               </section>
 
-              {/* Editor */}
               <section className="bg-white p-5 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border shadow-sm">
                 <div
                   ref={editorRef}
@@ -593,14 +604,13 @@ function App() {
                   </button>
                   <button
                     onClick={saveCard}
-                    className="w-full md:flex-1 bg-indigo-600 text-white px-5 py-3 rounded-xl font-black text-xs shadow-lg uppercase"
+                    className="w-full md:flex-1 bg-indigo-600 text-white px-5 py-3 rounded-xl font-black text-xs shadow-lg uppercase transition-all hover:bg-indigo-700"
                   >
                     Save Card
                   </button>
                 </div>
               </section>
 
-              {/* Card List Controls */}
               <section>
                 <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4 gap-3 px-2">
                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
@@ -609,13 +619,13 @@ function App() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={shuffleCards}
-                      className="text-[9px] md:text-[10px] bg-slate-50 text-slate-400 px-3 py-1.5 rounded-full font-bold hover:bg-slate-200"
+                      className="text-[9px] md:text-[10px] bg-slate-50 text-slate-400 px-3 py-1.5 rounded-full font-bold hover:bg-slate-200 uppercase"
                     >
                       Shuffle
                     </button>
                     <button
                       onClick={resetOrder}
-                      className="text-[9px] md:text-[10px] bg-slate-50 text-slate-400 px-3 py-1.5 rounded-full font-bold hover:bg-slate-200"
+                      className="text-[9px] md:text-[10px] bg-slate-50 text-slate-400 px-3 py-1.5 rounded-full font-bold hover:bg-slate-200 uppercase"
                     >
                       Default
                     </button>
@@ -664,10 +674,12 @@ function App() {
                         </button>
                         <button
                           onClick={async () => {
-                            await fetch(`${API_URL}/api/cards/${card.id}`, {
-                              method: "DELETE",
-                            });
-                            fetchLibrary();
+                            if (confirm("Delete?")) {
+                              await fetch(`${API_URL}/api/cards/${card.id}`, {
+                                method: "DELETE",
+                              });
+                              fetchLibrary();
+                            }
                           }}
                           className="p-2 bg-rose-50 text-rose-500 rounded-lg"
                         >
@@ -694,7 +706,6 @@ function App() {
         </div>
       </main>
 
-      {/* QUIZ OVERLAY */}
       {isQuizOpen && (
         <div className="fixed inset-0 bg-[#f8fafc] z-[60] flex flex-col items-center justify-center p-4 md:p-6 overflow-y-auto custom-scroll">
           <div className="absolute top-4 md:top-8 left-4 md:left-8 flex items-center gap-4">
@@ -737,7 +748,7 @@ function App() {
                       <input
                         autoFocus
                         className="w-full p-4 md:p-5 rounded-xl md:rounded-2xl border-2 border-slate-100 text-center text-lg md:text-xl font-bold outline-indigo-500 shadow-sm"
-                        placeholder="Type answer..."
+                        placeholder="I-type ang sagot..."
                         onKeyUp={(e) =>
                           e.key === "Enter" && submitAnswer(e.target.value)
                         }
@@ -792,7 +803,7 @@ function App() {
                           confetti({ particleCount: 150, spread: 70 });
                         }
                       }}
-                      className="w-full bg-indigo-600 text-white py-4 rounded-xl md:rounded-2xl font-black shadow-lg uppercase"
+                      className="w-full bg-indigo-600 text-white py-4 rounded-xl md:rounded-2xl font-black shadow-lg uppercase transition-all active:scale-95"
                     >
                       Next Card →
                     </button>
@@ -852,9 +863,6 @@ function App() {
                 </button>
               )}
               <div className="space-y-3 mb-10">
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest ml-4">
-                  Detailed Review
-                </h3>
                 {sessionHistory.map((item, i) => (
                   <div
                     key={i}
@@ -895,7 +903,6 @@ function App() {
         </div>
       )}
 
-      {/* MODALS */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
           <div
@@ -921,17 +928,21 @@ function App() {
                   </button>
                 </div>
                 <p className="text-[10px] text-slate-400 uppercase font-black mb-2 text-center">
-                  How many cards to answer?
+                  Ilang cards sasagutan? ({getFilteredPool().length} available)
                 </p>
                 <input
                   type="number"
                   value={cardLimit}
-                  onChange={(e) => setCardLimit(e.target.value)}
+                  onChange={(e) =>
+                    setCardLimit(
+                      Math.min(e.target.value, getFilteredPool().length),
+                    )
+                  }
                   className="bg-slate-50 p-4 rounded-xl font-bold mb-6 text-center outline-indigo-500"
                 />
                 <button
                   onClick={() => startQuiz(cardLimit)}
-                  className="bg-indigo-600 text-white py-4 rounded-xl font-black shadow-lg uppercase tracking-widest text-xs"
+                  className="bg-indigo-600 text-white py-4 rounded-xl font-black shadow-lg uppercase tracking-widest text-xs transition-all hover:bg-indigo-700"
                 >
                   Start Study
                 </button>
@@ -946,7 +957,7 @@ function App() {
                   value={newDeckName}
                   onChange={(e) => setNewDeckName(e.target.value)}
                   className="bg-slate-50 p-4 rounded-xl font-bold mb-4 outline-indigo-500"
-                  placeholder="e.g. Science"
+                  placeholder="e.g. UML Basics"
                 />
                 <button
                   onClick={() => handleCreateDeck(null)}
@@ -977,7 +988,7 @@ function App() {
             )}
             {isModalOpen === "magic" && (
               <>
-                <h3 className="font-black text-xl mb-4 italic">
+                <h3 className="font-black text-xl mb-4 italic leading-none">
                   Magic Import ✨
                 </h3>
                 <input
