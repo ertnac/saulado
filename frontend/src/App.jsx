@@ -15,6 +15,7 @@ function App() {
   // --- CORE STATE ---
   const [library, setLibrary] = useState([]);
   const [activeDeck, setActiveDeck] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [expandedDecks, setExpandedDecks] = useState(new Set());
   const [isModalOpen, setIsModalOpen] = useState(null);
   const [isQuizOpen, setIsQuizOpen] = useState(false);
@@ -43,6 +44,11 @@ function App() {
   const [subQueue, setSubQueue] = useState([]); // Array of indices [0, 1, 2...]
   const [answeredSubIndices, setAnsweredSubIndices] = useState(new Set()); // Blanks already filled
 
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const touchStartY = useRef(0);
+  const scrollContainerRef = useRef(null); // Ref for the scrollable area
+
   // --- CONNECTIVITY MONITOR ---
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
@@ -56,7 +62,40 @@ function App() {
     };
   }, []);
 
+  const handleTouchStart = (e) => {
+    // Only start tracking if we are at the top of the scroll
+    if (scrollContainerRef.current.scrollTop === 0) {
+      touchStartY.current = e.touches[0].pageY;
+      setIsDragging(true);
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging) return;
+    const currentY = e.touches[0].pageY;
+    const diff = currentY - touchStartY.current;
+
+    if (diff > 0 && scrollContainerRef.current.scrollTop === 0) {
+      // Add "resistance" so it doesn't just slide down linearly
+      const resistance = Math.min(diff / 2.5, 80);
+      setPullDistance(resistance);
+
+      // Prevent the default browser bounce on iOS if we are pulling
+      if (diff > 10 && e.cancelable) e.preventDefault();
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (pullDistance > 50) {
+      // Trigger the reload if pulled far enough
+      fetchLibrary();
+    }
+    setPullDistance(0);
+    setIsDragging(false);
+  };
+
   const fetchLibrary = async () => {
+    setIsLoading(true); // Turn spinner ON
     try {
       const res = await fetch(`${API_URL}/api/library`);
       if (!res.ok) throw new Error();
@@ -81,6 +120,8 @@ function App() {
         setLibrary(data);
         if (data.length > 0 && !activeDeck) setActiveDeck(data[0]);
       }
+    } finally {
+      setIsLoading(false); // Turn spinner OFF
     }
   };
 
@@ -656,11 +697,19 @@ function App() {
             </button>
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
-                <div
-                  className={`w-2 h-2 rounded-full ${isOffline ? "bg-amber-400 animate-pulse" : "bg-emerald-500"}`}
-                ></div>
+                {isLoading ? (
+                  <div className="w-2 h-2 rounded-full bg-indigo-500 animate-ping"></div>
+                ) : (
+                  <div
+                    className={`w-2 h-2 rounded-full ${isOffline ? "bg-amber-400 animate-pulse" : "bg-emerald-500"}`}
+                  ></div>
+                )}
                 <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">
-                  {isOffline ? "Offline Mode" : "Online"}
+                  {isLoading
+                    ? "Updating..."
+                    : isOffline
+                      ? "Offline Mode"
+                      : "Online"}
                 </span>
               </div>
               <div className="text-sm font-bold text-slate-800 uppercase tracking-tight truncate">
@@ -685,7 +734,47 @@ function App() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-10 custom-scroll">
+        <div
+          ref={scrollContainerRef}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={{
+            transform:
+              pullDistance > 0 ? `translateY(${pullDistance}px)` : "none",
+            transition: isDragging ? "none" : "transform 0.3s ease-out",
+          }}
+          className="flex-1 overflow-y-auto p-4 md:p-10 custom-scroll relative"
+        >
+          {/* PULL INDICATOR SPINNER */}
+          {pullDistance > 10 && (
+            <div
+              className="absolute left-0 right-0 flex justify-center items-center pointer-events-none"
+              style={{
+                top: `-${pullDistance}px`,
+                height: `${pullDistance}px`,
+                opacity: pullDistance / 50,
+              }}
+            >
+              <div
+                className={`transition-transform ${pullDistance > 50 ? "rotate-180 text-indigo-600" : "text-slate-400"}`}
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="3"
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </div>
+            </div>
+          )}
           {activeDeck ? (
             <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-24">
               <div className="bg-white p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border shadow-sm">
