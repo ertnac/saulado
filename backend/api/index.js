@@ -129,25 +129,36 @@ app.put('/api/cards/:id/track', (req, res) => {
 // Changed from /verify to /api/verify to keep everything consistent
 app.post('/api/verify', async (req, res) => {
     const { userAnswer, correctAnswer } = req.body;
+
+    // Safety check: if they are identical, don't even call AI
+    if (userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase()) {
+        return res.json({ isCorrect: true });
+    }
+
     try {
         const chatCompletion = await groq.chat.completions.create({
             messages: [
                 {
                     role: "system",
-                    content: "You are a quiz checker. Return JSON: {\"isCorrect\": boolean}. Minor typos or same concept = true. JSON ONLY."
+                    content: `You are a strict quiz checker. Return JSON: {"isCorrect": boolean}. 
+                    RULES:
+                    1. If the user has 3 or more character typos/errors, return false.
+                    2. If the user has 1 or 2 minor character typos, return true.
+                    3. If the meaning is identical but phrased slightly differently, return true.
+                    4. Output JSON ONLY.`
                 },
-                // Using shorter labels (C/U) saves processing time (tokens)
-                { role: "user", content: `C: "${correctAnswer}", U: "${userAnswer}"` }
+                { role: "user", content: `Correct Answer: "${correctAnswer}", User's Answer: "${userAnswer}"` }
             ],
-            model: "llama-3.1-8b-instant", // Keep using the instant model
-            temperature: 0.1, // Set to 0.1 for faster, more decisive results
-            max_tokens: 15,    // Very small token limit = much faster response
+            model: "llama-3.1-8b-instant",
+            temperature: 0.1,
+            max_tokens: 20,
             response_format: { type: "json_object" }
         });
 
         const result = JSON.parse(chatCompletion.choices[0].message.content);
         res.json(result);
     } catch (error) {
+        // Fallback to basic matching if AI fails
         const fallback = userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
         res.json({ isCorrect: fallback });
     }

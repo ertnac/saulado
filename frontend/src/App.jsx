@@ -26,6 +26,7 @@ function App() {
   const [isImporting, setIsImporting] = useState(false);
   const [newDeckName, setNewDeckName] = useState("");
   const editorRef = useRef(null);
+  const quizInputRef = useRef(null);
 
   // Quiz Engine State
   const [quizQueue, setQuizQueue] = useState([]);
@@ -38,6 +39,9 @@ function App() {
   const [mistakesQueue, setMistakesQueue] = useState([]);
   const [cardLimit, setCardLimit] = useState(0);
   const [studyFilter, setStudyFilter] = useState("all");
+  const [subIdx, setSubIdx] = useState(0); // Which blank are we on?
+  const [subQueue, setSubQueue] = useState([]); // Array of indices [0, 1, 2...]
+  const [answeredSubIndices, setAnsweredSubIndices] = useState(new Set()); // Blanks already filled
 
   // --- CONNECTIVITY MONITOR ---
   useEffect(() => {
@@ -148,15 +152,18 @@ function App() {
     if (!sel.rangeCount || sel.isCollapsed) return;
     const range = sel.getRangeAt(0);
     let parent = sel.anchorNode.parentNode;
+
     if (parent.classList.contains("answer-highlight")) {
+      // If already highlighted, remove it
       parent.replaceWith(document.createTextNode(parent.innerText));
     } else {
+      // Otherwise, wrap selection in the highlight span
       const span = document.createElement("span");
       span.className = "answer-highlight";
       try {
         range.surroundContents(span);
       } catch (e) {
-        console.error("Invalid Selection");
+        console.error("Selection crossing tags - try a cleaner selection.");
       }
     }
   };
@@ -164,36 +171,45 @@ function App() {
   const formatAsBulletedList = () => {
     const rawText = editorRef.current.innerText;
     if (!rawText.trim()) return;
-    const lines = rawText.split("\n");
-    let formattedHtml = "";
-    lines.forEach((line) => {
-      let cleanLine = line.trim();
-      if (!cleanLine) return;
-      if (!cleanLine.includes(":") && !cleanLine.includes(" - ")) {
-        formattedHtml += `<div>${cleanLine}</div>`;
-        return;
-      }
-      cleanLine = cleanLine.replace(/^[•\*-]\s*/, "");
-      let sepIdx = -1;
-      let sepLen = 0;
+
+    const lines = rawText
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l !== "");
+
+    let html = "";
+    // If the first line ends in a colon, treat it as a Header
+    let isCategoryMode = lines[0].endsWith(":");
+    if (isCategoryMode) {
+      html += `<div class="font-bold mb-2 text-slate-800 text-lg">${lines[0]}</div>`;
+    }
+
+    lines.forEach((line, index) => {
+      if (isCategoryMode && index === 0) return;
+
+      let cleanLine = line.replace(/^[•\*-]\s*/, ""); // Remove existing bullets
       const colonIdx = cleanLine.indexOf(":");
       const hyphenIdx = cleanLine.indexOf(" - ");
-      if (colonIdx !== -1 && (hyphenIdx === -1 || colonIdx < hyphenIdx)) {
-        sepIdx = colonIdx;
-        sepLen = 1;
-      } else if (hyphenIdx !== -1) {
-        sepIdx = hyphenIdx;
-        sepLen = 3;
-      }
+
+      // Determine the separator
+      let sepIdx =
+        colonIdx !== -1 && (hyphenIdx === -1 || colonIdx < hyphenIdx)
+          ? colonIdx
+          : hyphenIdx;
+      let sepLen = sepIdx === colonIdx ? 1 : 3;
+
       if (sepIdx !== -1) {
         const term = cleanLine.substring(0, sepIdx).trim();
-        const definition = cleanLine.substring(sepIdx + sepLen).trim();
-        formattedHtml += `<div>• <span class="answer-highlight">${term}</span>${sepLen === 1 ? ":" : " -"} ${definition}</div>`;
+        const def = cleanLine.substring(sepIdx + sepLen).trim();
+        // Auto-wraps the term in the highlight span
+        html += `<div>• <span class="answer-highlight">${term}</span>${sepLen === 1 ? ":" : " -"} ${def}</div>`;
       } else {
-        formattedHtml += `<div>• <span class="answer-highlight">${cleanLine}</span></div>`;
+        // If no separator, highlight the whole line
+        html += `<div>• <span class="answer-highlight">${cleanLine}</span></div>`;
       }
     });
-    editorRef.current.innerHTML = formattedHtml;
+
+    editorRef.current.innerHTML = html;
   };
 
   const saveCard = async () => {
@@ -358,54 +374,132 @@ function App() {
     const shuffled = [...pool]
       .sort(() => 0.5 - Math.random())
       .slice(0, limit || pool.length);
+
     setQuizQueue(shuffled);
-    setCurrentIdx(0);
     setCorrectCount(0);
     setStreak(0);
     setSessionHistory([]);
     setMistakesQueue([]);
     setQuizMode("type");
-    setQuizPhase("asking");
+
+    // INITIALIZE the first card's blanks
+    setupNewCard(shuffled, 0);
+
     setIsQuizOpen(true);
     setIsModalOpen(null);
   };
 
-  const submitAnswer = async (userVal) => {
-    const card = quizQueue[currentIdx];
-    const correct = getAnswerFromHtml(card.html);
+  // Helper to find all highlighted words in a card
+  const getHighlightsFromHtml = (html) => {
     const temp = document.createElement("div");
-    temp.innerHTML = card.html;
+    temp.innerHTML = html;
+    return Array.from(temp.querySelectorAll(".answer-highlight")).map((el) =>
+      el.innerText.trim(),
+    );
+  };
 
-    if (isOffline) {
-      // OFFLINE CHECKER: Exact Match (Case Insensitive)
-      const isMatch =
-        userVal.trim().toLowerCase() === correct.trim().toLowerCase();
-      handleResult(isMatch, userVal, correct, temp.innerText, card.id);
-      return;
+  // Initialize the card: sets up the sequence of blanks
+  const setupNewCard = (queue, index) => {
+    const card = queue[index];
+    if (!card) return;
+    const highlights = getHighlightsFromHtml(card.html);
+
+    // Create a sequence [0, 1, 2...] for each highlight found
+    const sequence = highlights.map((_, i) => i);
+
+    setSubQueue(sequence);
+    setSubIdx(0);
+    setAnsweredSubIndices(new Set());
+    setCurrentIdx(index);
+    setQuizPhase("asking");
+  };
+
+  const renderPromptWithProgress = (html, answeredSet) => {
+    const temp = document.createElement("div");
+    temp.innerHTML = html;
+    const highlights = temp.querySelectorAll(".answer-highlight");
+
+    highlights.forEach((el, i) => {
+      if (answeredSet.has(i)) {
+        // User already got this right - show the text in green
+        el.className =
+          "text-emerald-600 font-black px-1 transition-all duration-300";
+      } else {
+        // Not yet answered - show as an underline
+        el.innerHTML = "_______";
+        el.className = "text-indigo-500 font-black border-b-2 px-2 mx-1";
+      }
+    });
+
+    return temp.innerHTML;
+  };
+  // Validates the answer and moves to the next blank or next card
+  const submitAnswer = async (userVal) => {
+    if (!userVal.trim()) return;
+
+    const card = quizQueue[currentIdx];
+    const highlights = getHighlightsFromHtml(card.html);
+    const targetIdx = subQueue[subIdx];
+    const correct = highlights[targetIdx];
+
+    let isCorrect = false;
+
+    // --- STEP 1: INSTANT CHECK ---
+    const isPerfectMatch =
+      userVal.trim().toLowerCase() === correct.trim().toLowerCase();
+
+    if (quizMode === "choice") {
+      // Buttons are always 100% correct or wrong. Skip AI entirely.
+      isCorrect = isPerfectMatch;
+    } else {
+      // TYPE MODE:
+      if (isPerfectMatch) {
+        isCorrect = true;
+      } else if (!isOffline) {
+        // It's not a perfect match, but maybe it's just a small typo?
+        // Ask the AI ONLY in this specific case.
+        setQuizPhase("checking");
+        try {
+          const res = await fetch(`${API_URL}/api/verify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userAnswer: userVal,
+              correctAnswer: correct,
+            }),
+          });
+          const data = await res.json();
+          isCorrect = data.isCorrect;
+        } catch (e) {
+          isCorrect = false; // Fallback if API fails
+        }
+      } else {
+        isCorrect = false; // Offline and not a perfect match
+      }
     }
 
-    setQuizPhase("checking");
-    try {
-      const res = await fetch(`${API_URL}/api/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userAnswer: userVal, correctAnswer: correct }),
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      handleResult(data.isCorrect, userVal, correct, temp.innerText, card.id);
-    } catch (e) {
-      handleResult(
-        userVal.trim().toLowerCase() === correct.trim().toLowerCase(),
-        userVal,
-        correct,
-        temp.innerText,
-        card.id,
-      );
+    // --- STEP 2: APPLY RESULTS ---
+    if (isCorrect) {
+      // Update the visual "filled in" blanks
+      setAnsweredSubIndices((prev) => new Set(prev).add(targetIdx));
+
+      if (subIdx + 1 < highlights.length) {
+        // Stay on card, move to next blank
+        setSubIdx((prev) => prev + 1);
+        setQuizPhase("asking");
+        if (quizInputRef.current) quizInputRef.current.value = "";
+      } else {
+        // Card finished
+        handleResult(true, userVal, highlights.join(", "), card.html, card.id);
+      }
+    } else {
+      // Wrong answer or too many typos
+      handleResult(false, userVal, correct, card.html, card.id);
     }
   };
 
-  const handleResult = (isCorrect, userVal, correct, promptText, cardId) => {
+  const handleResult = (isCorrect, userVal, correct, cardHtml, cardId) => {
+    // Sync with database if online
     if (!isOffline) {
       fetch(`${API_URL}/api/cards/${cardId}/track`, {
         method: "PUT",
@@ -413,6 +507,7 @@ function App() {
         body: JSON.stringify({ isCorrect }),
       });
     }
+
     if (isCorrect) {
       setCorrectCount((c) => c + 1);
       setStreak((s) => s + 1);
@@ -421,26 +516,52 @@ function App() {
       setStreak(0);
       setMistakesQueue((prev) => [...prev, quizQueue[currentIdx]]);
     }
+
+    // Create a clean text version for history
+    const temp = document.createElement("div");
+    temp.innerHTML = cardHtml;
+    const fullText = temp.innerText;
+
     setSessionHistory((prev) => [
       ...prev,
       {
-        prompt: promptText.replace(correct, "_______"),
-        correct,
+        prompt: fullText.replace(correct, "_______"),
+        correct: correct,
         user: userVal,
         isCorrect,
       },
     ]);
+
     setQuizPhase("feedback");
   };
 
   const generateDecoys = (correct) => {
-    const allAnswers = [
-      ...new Set(quizQueue.map((c) => getAnswerFromHtml(c.html))),
-    ].filter((a) => a && a !== correct);
-    return [
-      correct,
-      ...allAnswers.sort(() => 0.5 - Math.random()).slice(0, 3),
-    ].sort(() => 0.5 - Math.random());
+    if (!correct) return [];
+
+    // 1. Get every single highlight from every card in the current quiz queue
+    const allHighlights = [];
+    quizQueue.forEach((card) => {
+      const cardHighlights = getHighlightsFromHtml(card.html);
+      allHighlights.push(...cardHighlights);
+    });
+
+    // 2. Filter out duplicates and the current correct answer
+    const uniqueDecoys = [...new Set(allHighlights)].filter(
+      (item) => item.toLowerCase() !== correct.toLowerCase(),
+    );
+
+    // 3. Shuffle and pick 3 decoys
+    const shuffledDecoys = uniqueDecoys
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 3);
+
+    // 4. If we don't have enough decoys (rare), add generic ones to reach 4 total choices
+    while (shuffledDecoys.length < 3) {
+      shuffledDecoys.push("---");
+    }
+
+    // 5. Combine with correct answer and shuffle final 4
+    return [correct, ...shuffledDecoys].sort(() => 0.5 - Math.random());
   };
 
   const renderSidebarDecks = (decks, level = 0) => {
@@ -768,9 +889,9 @@ function App() {
                 <div className="text-lg md:text-2xl font-bold text-slate-800 mb-8 md:mb-10 leading-relaxed">
                   <div
                     dangerouslySetInnerHTML={{
-                      __html: quizQueue[currentIdx]?.html.replace(
-                        /<span class="answer-highlight">.*?<\/span>/g,
-                        '<span class="text-indigo-500 font-black border-b-2 px-2">_______</span>',
+                      __html: renderPromptWithProgress(
+                        quizQueue[currentIdx]?.html,
+                        answeredSubIndices,
                       ),
                     }}
                   />
@@ -779,22 +900,26 @@ function App() {
                   <div className="space-y-6">
                     {quizMode === "type" ? (
                       <input
+                        ref={quizInputRef} // ADD THE REF HERE
                         autoFocus
                         className="w-full p-4 md:p-5 rounded-xl md:rounded-2xl border-2 border-slate-100 text-center text-lg md:text-xl font-bold outline-indigo-500 shadow-sm"
-                        placeholder="I-type ang sagot..."
+                        placeholder={`Type blank #${subIdx + 1}...`}
                         onKeyUp={(e) =>
                           e.key === "Enter" && submitAnswer(e.target.value)
                         }
                       />
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* We use highlights[subIdx] to get the specific word for the CURRENT blank */}
                         {generateDecoys(
-                          getAnswerFromHtml(quizQueue[currentIdx].html),
+                          getHighlightsFromHtml(quizQueue[currentIdx].html)[
+                            subIdx
+                          ],
                         ).map((ans, i) => (
                           <button
                             key={i}
                             onClick={() => submitAnswer(ans)}
-                            className="p-3 md:p-4 bg-white border-2 border-slate-100 rounded-xl md:rounded-2xl font-bold hover:border-indigo-500 hover:bg-indigo-50 transition-all text-slate-600 text-sm md:text-base"
+                            className="p-3 md:p-4 bg-white border-2 border-slate-100 rounded-xl md:rounded-2xl font-bold hover:border-indigo-500 hover:bg-indigo-50 transition-all text-slate-600 text-sm md:text-base shadow-sm"
                           >
                             {ans}
                           </button>
@@ -829,8 +954,8 @@ function App() {
                       onClick={() => {
                         setQuizMode("type");
                         if (currentIdx + 1 < quizQueue.length) {
-                          setCurrentIdx((i) => i + 1);
-                          setQuizPhase("asking");
+                          // Setup the next card and its blanks properly
+                          setupNewCard(quizQueue, currentIdx + 1);
                         } else {
                           setQuizPhase("results");
                           confetti({ particleCount: 150, spread: 70 });
