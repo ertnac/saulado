@@ -1059,92 +1059,121 @@ function App() {
               </div>
             </div>
           ) : (
-            <div className="w-full max-w-2xl py-6 md:py-10">
-              <h2 className="text-3xl md:text-4xl font-black text-center mb-8 md:mb-10 text-slate-800 uppercase tracking-tighter">
-                Session Complete! 🎉
-              </h2>
-              <div className="bg-white p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] shadow-xl mb-8 md:mb-10 text-center relative">
-                <div className="w-32 h-32 md:w-48 md:h-48 mx-auto mb-6">
-                  <Doughnut
-                    data={{
-                      labels: ["Tama", "Mali"],
-                      datasets: [
-                        {
-                          data: [correctCount, quizQueue.length - correctCount],
-                          backgroundColor: ["#6366f1", "#f1f5f9"],
-                          borderWidth: 0,
-                        },
-                      ],
-                    }}
-                    options={{
-                      cutout: "80%",
-                      plugins: { legend: { display: false } },
-                    }}
-                  />
+            <div className="w-full max-w-2xl flex flex-col h-full max-h-[90vh]">
+              {/* 1. Header & Stats (Stays at top) */}
+              <div className="shrink-0 pt-10 pb-4 text-center">
+                <h2 className="text-2xl md:text-3xl font-black text-slate-800 uppercase tracking-tighter mb-4">
+                  Session Complete! 🎉
+                </h2>
+
+                <div className="bg-white p-4 md:p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center justify-around max-w-md mx-auto relative mb-4">
+                  <div className="w-24 h-24 md:w-32 md:h-32 relative">
+                    <Doughnut
+                      data={{
+                        labels: ["Tama", "Mali"],
+                        datasets: [
+                          {
+                            data: [
+                              correctCount,
+                              quizQueue.length - correctCount,
+                            ],
+                            backgroundColor: ["#6366f1", "#f1f5f9"],
+                            borderWidth: 0,
+                          },
+                        ],
+                      }}
+                      options={{
+                        cutout: "75%",
+                        plugins: { legend: { display: false } },
+                      }}
+                    />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-xl md:text-2xl font-black text-indigo-600">
+                        {Math.round((correctCount / quizQueue.length) * 100)}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-left">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      Score
+                    </p>
+                    <p className="text-2xl font-black text-slate-700">
+                      {correctCount} / {quizQueue.length}
+                    </p>
+                    <p className="text-[10px] font-bold text-indigo-500 uppercase">
+                      Correct Answers
+                    </p>
+                  </div>
                 </div>
-                <div className="absolute inset-0 flex flex-col items-center justify-center pt-6 md:pt-8">
-                  <span className="text-2xl md:text-4xl font-black text-indigo-600">
-                    {Math.round((correctCount / quizQueue.length) * 100)}%
-                  </span>
-                  <span className="text-[8px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    {correctCount} / {quizQueue.length} Correct
-                  </span>
+
+                {/* 2. Primary Actions (Immediately visible) */}
+                <div className="flex flex-col gap-2 px-4 mb-4">
+                  {mistakesQueue.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const nextPool = [...mistakesQueue].sort(
+                          () => 0.5 - Math.random(),
+                        );
+                        setQuizQueue(nextPool);
+                        setMistakesQueue([]);
+                        setCorrectCount(0);
+                        setSessionHistory([]);
+                        setupNewCard(nextPool, 0); // Use the fix from previous step
+                      }}
+                      className="w-full bg-amber-500 text-white py-4 rounded-2xl font-black shadow-lg uppercase text-xs tracking-widest transition-transform active:scale-95"
+                    >
+                      🎯 Re-study {mistakesQueue.length} Mistakes
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setIsQuizOpen(false);
+                      fetchLibrary();
+                    }}
+                    className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black shadow-lg uppercase text-xs tracking-widest"
+                  >
+                    Back to Library
+                  </button>
                 </div>
               </div>
-              {mistakesQueue.length > 0 && (
-                <button
-                  onClick={() => {
-                    setQuizQueue(
-                      [...mistakesQueue].sort(() => 0.5 - Math.random()),
-                    );
-                    setMistakesQueue([]);
-                    setCurrentIdx(0);
-                    setCorrectCount(0);
-                    setStreak(0);
-                    setSessionHistory([]);
-                    setQuizPhase("asking");
-                  }}
-                  className="w-full bg-amber-500 text-white py-4 md:py-5 rounded-2xl md:rounded-3xl font-black shadow-xl mb-8 md:mb-10 uppercase text-xs md:text-sm tracking-widest"
-                >
-                  🎯 Re-study Mistakes
-                </button>
-              )}
-              <div className="space-y-3 mb-10">
+
+              {/* 3. Scrollable History List */}
+              <div className="flex-1 overflow-y-auto px-2 pb-10 custom-scroll space-y-3">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic ml-2 mb-2">
+                  Review History
+                </h3>
                 {sessionHistory.map((item, i) => (
                   <div
                     key={i}
-                    className="bg-white p-4 md:p-5 rounded-2xl md:rounded-3xl border flex flex-col md:flex-row md:justify-between md:items-center shadow-sm gap-2"
+                    className="bg-white p-4 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:justify-between md:items-center shadow-sm gap-3"
                   >
-                    <div className="flex-1 md:pr-4">
-                      <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">
-                        Question
-                      </p>
-                      <p className="text-sm font-bold text-slate-700 leading-tight">
-                        {item.prompt}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span
+                          className={`w-2 h-2 rounded-full ${item.isCorrect ? "bg-emerald-500" : "bg-rose-500"}`}
+                        ></span>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase">
+                          Question
+                        </p>
+                      </div>
+                      <p className="text-xs md:text-sm font-bold text-slate-700 leading-snug">
+                        {/* Replace HTML for clean history viewing */}
+                        <span
+                          dangerouslySetInnerHTML={{ __html: item.prompt }}
+                        />
                       </p>
                     </div>
-                    <div className="text-left md:text-right border-t md:border-t-0 pt-2 md:pt-0">
-                      <p
-                        className={`text-[9px] font-black uppercase mb-1 ${item.isCorrect ? "text-emerald-500" : "text-rose-400"}`}
-                      >
-                        {item.isCorrect ? "Correct" : "Incorrect"}
+                    <div className="md:text-right border-t md:border-t-0 pt-2 md:pt-0">
+                      <p className="text-[9px] font-black uppercase text-indigo-400">
+                        Correct Answer
                       </p>
-                      <p className="text-sm font-black text-indigo-600">
+                      <p className="text-xs md:text-sm font-black text-indigo-600">
                         {item.correct}
                       </p>
                     </div>
                   </div>
                 ))}
               </div>
-              <button
-                onClick={() => {
-                  setIsQuizOpen(false);
-                  fetchLibrary();
-                }}
-                className="w-full bg-slate-900 text-white py-4 md:py-5 rounded-2xl md:rounded-3xl font-black shadow-xl uppercase text-xs md:text-sm tracking-widest"
-              >
-                Back to Library
-              </button>
             </div>
           )}
         </div>
