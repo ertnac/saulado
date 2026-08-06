@@ -7,11 +7,15 @@
  */
 
 export type {
+  AnswerCheck,
   AnswerRange,
   CardAnswer,
+  CheckOptions,
   ClozeIssue,
   ClozeIssueCode,
   DraftAnswer,
+  Grade,
+  MatchType,
   ReanchorResult,
   Segment,
 } from './types.js'
@@ -41,3 +45,15 @@ export {
 export { reconstructParagraph, renderCloze, renderClozeText } from './render.js'
 
 export { needsReanchoring, reanchorAnswers } from './reanchor.js'
+
+export { levenshtein } from './levenshtein.js'
+
+export {
+  checkAnswer,
+  checkAnswers,
+  describeMatch,
+  gradeCard,
+  isCardCorrect,
+  normalize,
+  typoThreshold,
+} from './validate.js'

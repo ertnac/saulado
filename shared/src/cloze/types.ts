@@ -93,6 +93,38 @@ export class ClozeError extends Error {
   }
 }
 
+/**
+ * How a submitted answer matched, in ladder order (plan §2.5).
+ *
+ * The distinction between `exact` and `typo` is not cosmetic: a typo still
+ * counts as correct, but the UI must show the canonical spelling, or the user
+ * rehearses their own misspelling and it sticks.
+ */
+export type MatchType = 'exact' | 'alternative' | 'typo' | 'wrong'
+
+/** Result of checking one blank. */
+export interface AnswerCheck {
+  correct: boolean
+  matchType: MatchType
+  /** The canonical text to display — `answerText`, or the alt that matched. */
+  canonical: string
+}
+
+/** Options for {@link checkAnswer}. */
+export interface CheckOptions {
+  /**
+   * Allow near-misses within an edit-distance threshold.
+   *
+   * Defaults to ON (plan §2.5). Off by default punishes mobile typing, but
+   * forcing it on is wrong for spelling-critical subjects — medical terms,
+   * foreign vocabulary — so this is surfaced as a user setting.
+   */
+  typoTolerance?: boolean
+}
+
+/** SM-2 grade for a whole card. */
+export type Grade = 'again' | 'hard' | 'good' | 'easy'
+
 /** Outcome of re-anchoring answers onto an edited paragraph. */
 export interface ReanchorResult<T extends AnswerRange> {
   /** Answers relocated successfully, offsets rewritten to the new paragraph. */
