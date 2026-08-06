@@ -1,0 +1,28 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# The database is NOT defined here on purpose. Render's free Postgres is
+# deleted after 90 days; Neon's free tier is permanent. So Postgres lives on
+# Neon and DATABASE_URL is pasted in as a secret (sync: false).
+
+services:
+  - type: web
+    name: saulado-api
+    runtime: docker
+    plan: free
+    # Repo root, not backend/. The build needs shared/ and the root lockfile.
+    dockerContext: .
+    dockerfilePath: ./backend/Dockerfile
+
+    # Gates the deploy on a real `SELECT 1` against Postgres — this returns
+    # 503 when the DB is unreachable, so a green deploy proves the DB link.
+    healthCheckPath: /api/ready
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Set in the dashboard: the Neon pooled connection string.
+      - key: DATABASE_URL
+        sync: false
+      # Set in the dashboard once the frontend has a URL. Comma-separated.
+      - key: CORS_ORIGIN
+        sync: false
