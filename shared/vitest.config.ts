@@ -8,7 +8,7 @@ export default defineConfig({
       // Plan §Phase 1 done-when: coverage on the cloze engine above 95%.
       // The threshold is enforced rather than eyeballed, so a future change
       // that adds an untested branch fails CI instead of quietly drifting.
-      include: ['src/cloze/**/*.ts', 'src/scheduler/**/*.ts'],
+      include: ['src/cloze/**/*.ts', 'src/scheduler/**/*.ts', 'src/auth/**/*.ts'],
       exclude: ['src/**/*.test.ts', 'src/**/index.ts'],
       thresholds: {
         lines: 95,

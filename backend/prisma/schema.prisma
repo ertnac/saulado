@@ -1,15 +1,15 @@
-// Phase 0 keeps this file deliberately near-empty. The real schema arrives in
-// Phase 2 (auth) and Phase 3 (sets/cards) per IMPLEMENTATION_PLAN.md §2.3.
-// `HealthCheck` exists so there is a real table to migrate and prove the
-// browser → API → Postgres → browser round-trip.
+// Phase 2 adds auth. Sets/cards/schedules arrive in Phase 3+ per
+// IMPLEMENTATION_PLAN.md §2.3.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [citext]
 }
 
 model HealthCheck {
@@ -17,4 +17,85 @@ model HealthCheck {
   checkedAt DateTime @default(now()) @map("checked_at")
 
   @@map("health_checks")
+}
+
+/// Email is CITEXT so uniqueness is case-insensitive in the database itself.
+/// Normalising in application code alone is not enough: two concurrent
+/// registrations can both pass a SELECT-then-INSERT check and produce
+/// `A@x.com` and `a@x.com` as separate accounts. The constraint is the control.
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique @db.Citext
+  passwordHash    String    @map("password_hash")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+
+  settings       UserSettings?
+  refreshTokens  RefreshToken[]
+  passwordResets PasswordReset[]
+
+  @@map("users")
+}
+
+/// One row per user, created in the same transaction as the user. Split from
+/// `users` so the hot auth path never carries settings columns it does not read.
+model UserSettings {
+  userId               String  @id @map("user_id") @db.Uuid
+  darkMode             Boolean @default(false) @map("dark_mode")
+  dailyGoal            Int     @default(20) @map("daily_goal")
+  newCardsPerDay       Int     @default(10) @map("new_cards_per_day")
+  notificationsEnabled Boolean @default(true) @map("notifications_enabled")
+  typoTolerance        Boolean @default(true) @map("typo_tolerance")
+  /// "fixed" | "proportional" — see shared BlankWidthMode.
+  blankWidthMode       String  @default("fixed") @map("blank_width_mode")
+  /// IANA zone. Streak day boundaries are computed in the user's own timezone
+  /// (plan §2.3), so this is load-bearing, not cosmetic.
+  timezone             String  @default("UTC")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+/// Refresh tokens are stored as a SHA-256 hash, never in plaintext. A dump of
+/// this table must not let the reader mint sessions.
+///
+/// `familyId` implements rotation with reuse detection: each refresh issues a
+/// new token in the same family and revokes the old one. Presenting an already
+/// revoked token means it leaked, so the whole family is killed at once.
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  familyId  String    @map("family_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  userAgent String?   @map("user_agent")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt], map: "idx_refresh_user")
+  @@index([familyId], map: "idx_refresh_family")
+  @@map("refresh_tokens")
+}
+
+/// Reset tokens are hashed for the same reason as refresh tokens: read access
+/// to this table would otherwise be read access to every account.
+///
+/// Single-use is enforced by `usedAt`, not by deletion, so a second attempt can
+/// be distinguished from an expired one.
+model PasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt], map: "idx_reset_user")
+  @@map("password_resets")
 }
