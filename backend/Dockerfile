@@ -45,6 +45,12 @@ COPY --from=build /app/pruned/package.json ./package.json
 COPY --from=build /app/backend/dist ./dist
 COPY --from=build /app/backend/prisma ./prisma
 
+# Generate the client HERE, not in the build stage. `pnpm deploy` builds
+# /app/pruned as a fresh install from the store, so it ships an ungenerated
+# @prisma/client stub and any client generated earlier is discarded.
+# schema.prisma is at the default ./prisma/schema.prisma by this point.
+RUN ./node_modules/.bin/prisma generate
+
 # Non-root. Do this after COPY so the files aren't owned by the unprivileged user.
 RUN addgroup -S app && adduser -S app -G app
 USER app
