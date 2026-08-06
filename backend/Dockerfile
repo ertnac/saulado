@@ -30,8 +30,9 @@ RUN pnpm --filter @saulado/shared build \
  && pnpm --filter @saulado/backend exec prisma generate \
  && pnpm --filter @saulado/backend build
 
-# Strip dev dependencies from the shipped image.
-RUN pnpm --filter @saulado/backend --prod deploy /app/pruned
+# Strip dev dependencies from the shipped image. --legacy is required from
+# pnpm 10 on for workspaces that don't use inject-workspace-packages.
+RUN pnpm --filter @saulado/backend --prod deploy --legacy /app/pruned
 
 # ---------- runtime ----------
 FROM base AS runtime
