@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - React 18+ with TypeScript
 - State Management: Zustand or Redux Toolkit
 - Styling: Tailwind CSS + shadcn/ui
-- Text Editor: Slate.js or ProseMirror (for highlight selection)
+- Text Editor: none — `<textarea>` + native Selection API (see `docs/adr/0001-editor.md`; Slate/ProseMirror were evaluated and rejected)
 - Routing: React Router v6
 - Build Tool: Vite
 

@@ -364,9 +364,9 @@ Build in `shared/src/cloze/`. No I/O. No framework. Just functions.
 ### 1.4 Editor spike (0.5 day)
 
 - [x] Throwaway prototype: `<textarea>` + selection overlay, on desktop Chrome/Safari **and a real phone**
-      — prototype built and desktop-verified; **the real-phone run is still outstanding**
+      — verified on Android; all 8 checks passed, spike deleted after acceptance
 - [x] Write the decision (custom vs ProseMirror) into `docs/adr/0001-editor.md`
-      — written; ProseMirror rejected outright, §5 pending the phone test
+      — Accepted: Option A (native Selection API), ProseMirror/Slate rejected
 
 ### 1.5 Test suite (0.5 day)
 
@@ -385,19 +385,29 @@ Non-negotiable cases:
 
 **Done when:** `npm test` is green, coverage on `shared/src/cloze/` is >95%, and you can paste the CPU/RAM example into a Node REPL and get two independently gradeable blanks.
 
-**Status — 2026-08-06: 2 of 3 criteria met. Phase 1 is NOT yet complete.**
+**Status — 2026-08-06: ✅ COMPLETE. All three criteria met.**
 
-| Criterion                       | State   | Evidence                                                                                                              |
-| ------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
-| `npm test` green                | ✅ met  | 179 tests pass (`pnpm -w run verify`): 172 shared, 3 frontend, 4 backend                                              |
-| Coverage on `shared/src/cloze/` | ✅ met  | **100%** statements / functions / lines, 97.95% branches — gate enforced at 95% in `shared/vitest.config.ts`          |
-| CPU/RAM → two gradeable blanks  | ✅ met  | `shared/src/cloze/done-when.test.ts` — 11 assertions covering render, independent grading, and the resulting schedule |
-| **1.4 real-phone verification** | ❌ open | `docs/adr/0001-editor.md` §5 is empty. Requires a physical device; cannot be simulated.                               |
+| Criterion                       | State  | Evidence                                                                                                              |
+| ------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------- |
+| `npm test` green                | ✅ met | 179 tests pass (`pnpm -w run verify`): 172 shared, 3 frontend, 4 backend                                              |
+| Coverage on `shared/src/cloze/` | ✅ met | **100%** statements / functions / lines, 97.95% branches — gate enforced at 95% in `shared/vitest.config.ts`          |
+| CPU/RAM → two gradeable blanks  | ✅ met | `shared/src/cloze/done-when.test.ts` — 11 assertions covering render, independent grading, and the resulting schedule |
+
+Phase 1.4's real-device gate closed on Android: all 8 checks in
+`docs/adr/0001-editor.md` §5 passed, including handle-dragging (test 3), which
+the risk table flagged as the interaction most likely to fail on touch. ADR 0001
+is **Accepted** — Option A, native Selection API, no editor dependency. The
+spike (`frontend/src/spike/`, the `#spike` route, `docs/SPIKE_1_4.md`) has been
+deleted; it is recoverable from commit `3d0e729`.
 
 The coverage gate is enforced, not eyeballed: `pnpm --filter @saulado/shared test:coverage`
 fails the build below 95%. The remaining uncovered branches are
 `if (!previous || !current) continue` guards that exist only to satisfy
 `noUncheckedIndexedAccess` and are unreachable at runtime.
+
+**Carried into Phase 3:** the mobile test was single-device (Android). A pass on
+iOS Safari is worth doing before the real editor ships — WebKit's selection
+handles behave differently from Blink's.
 
 > This is the phase to be slow and thorough in. A bug here surfaces as corrupted user data six weeks later, and there is no clean migration back.
 

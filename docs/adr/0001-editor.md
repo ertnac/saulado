@@ -1,6 +1,6 @@
 # ADR 0001 — Highlight editor: custom `<textarea>` vs a rich-text framework
 
-- **Status:** Proposed — pending mobile verification (see §5)
+- **Status:** Accepted
 - **Date:** 2026-08-06
 - **Phase:** 1.4
 - **Deciders:** Saulado Dev
@@ -64,25 +64,30 @@ the plan's risk table as the mobile fallback.
 
 ## 3. Decision
 
-**Option A, with Option C held as a live fallback rather than a hypothetical
-one.** Option B is rejected outright.
+**Option A.** Option B is rejected outright. Option C is no longer needed as a
+fallback, though it remains the obvious pivot if touch ergonomics regress.
 
-Option B's rejection does not depend on the mobile test. It is rejected because
+Option B's rejection never depended on the mobile test. It is rejected because
 it introduces a second position system for a feature whose entire value is
 having exactly one, and it spends over half the JS budget to do so. Inline
 highlighting is worth real money, but not that much money and not that risk.
 
-The choice between A and C is a touch-ergonomics question that cannot be
-answered by reasoning, only by a thumb on a real phone. §5 records that test.
-The pivot from A to C is cheap and stays cheap: both feed the same
-`createAnswer(paragraph, start, end)` call, so it replaces the selection
-mechanism and touches nothing below it.
+The choice between A and C was a touch-ergonomics question that could not be
+answered by reasoning, only by a thumb on a real phone. §5 records that test:
+all eight checks passed on Android, including handle-dragging — the interaction
+the plan's risk table flagged as most likely to fail on touch. Option A stands.
+
+Had it gone the other way, the pivot to C would have been cheap, and that
+remains true: both feed the same `createAnswer(paragraph, start, end)` call, so
+switching replaces the selection mechanism and touches nothing below it.
 
 ## 4. What the spike verified (automated)
 
-The prototype lives at `frontend/src/spike/TextHighlighter.tsx`, reachable at
-`/#spike`. It deliberately uses the real `@saulado/shared` engine rather than
-reimplementing offsets, so the spike tests the actual integration boundary.
+The prototype lived at `frontend/src/spike/TextHighlighter.tsx`, reachable at
+`/#spike`, and was deleted once this ADR was accepted (see §5). It deliberately
+used the real `@saulado/shared` engine rather than reimplementing offsets, so
+the spike tested the actual integration boundary. It is recoverable from git
+history at commit `3d0e729` if the decision is ever revisited.
 
 Verified mechanically against `shared/dist`:
 
@@ -101,49 +106,49 @@ doing real work at this boundary and is not ceremonial. Without it, any
 paragraph containing an emoji before a blank silently produces a
 shifted answer.
 
-## 5. Mobile verification — PENDING
+## 5. Mobile verification
 
-**This section is the actual decision gate and it is not yet filled in.** It
-requires a physical phone; it cannot be simulated, and desktop Chrome's device
-emulation does not reproduce native selection-handle behaviour.
+Tested by loading `/#spike` on a phone over the LAN
+(`pnpm --filter @saulado/frontend dev:lan` — plain `dev` binds to localhost and
+is unreachable from the device).
 
-Run `pnpm --filter @saulado/frontend dev:lan` (plain `dev` binds to localhost only
-and is unreachable from the phone), then open `http://<your-lan-ip>:5173/#spike`
-on the device and record:
+| #   | Test                                                      | Result  |
+| --- | --------------------------------------------------------- | ------- |
+| 1   | Select a single word by tap-and-drag                      | ✅ pass |
+| 2   | Select multiple words across a line break                 | ✅ pass |
+| 3   | Drag selection handles to adjust without losing selection | ✅ pass |
+| 4   | Yellow confirm bar appears on finger-lift                 | ✅ pass |
+| 5   | Buttons comfortable one-handed                            | ✅ pass |
+| 6   | Blank the emoji and CJK sample; bracketed offsets correct | ✅ pass |
+| 7   | Edit text before a blank; blank follows its word          | ✅ pass |
+| 8   | Delete a blanked word; reported orphaned, not vanished    | ✅ pass |
 
-| #   | Test                                                      | Result |
-| --- | --------------------------------------------------------- | ------ |
-| 1   | Select a single word by tap-and-drag                      |        |
-| 2   | Select multiple words across a line break                 |        |
-| 3   | Drag selection handles to adjust without losing selection |        |
-| 4   | Yellow confirm bar appears on finger-lift                 |        |
-| 5   | Buttons comfortable one-handed                            |        |
-| 6   | Blank the emoji and CJK sample; bracketed offsets correct |        |
-| 7   | Edit text before a blank; blank follows its word          |        |
-| 8   | Delete a blanked word; reported orphaned, not vanished    |        |
+**Device / browser tested:** Android (browser unspecified; presumed Chrome or an
+equivalent WebView)
 
-**Device / browser tested:**
+**Notes:** All eight passed. Test 3 is the one that mattered — handle-dragging
+was flagged in the plan's risk table as the interaction most likely to fail on
+touch, and it is the sole reason Option C was held in reserve. It worked, so
+Option A is confirmed and Option C is not needed.
 
-**Notes:**
+Tests 6–8 are the on-device counterpart to §4's mechanical checks: they confirm
+that code-point offset handling survives a real mobile IME and a real selection
+API, not just Node. Passing there is what makes `codeUnitToCodePoint` proven
+rather than merely unit-tested.
 
-### How to read the result
-
-- **Tests 1–5 pass** → confirm Option A. Change Status to Accepted, note that
-  inline highlighting is a known, accepted limitation, and delete
-  `frontend/src/spike/` plus the `#spike` branch in `main.tsx`.
-- **Test 3 fails, or 1–2 are fiddly enough to be annoying** → switch to Option C
-  before Phase 3 starts. Handle-dragging is the interaction most likely to fail
-  on touch, and it is the one Option C removes entirely.
-- **Tests 6–8 fail** → stop. That is not an editor problem, it is a bug in
-  `shared/src/cloze/`, and §4 says it should be impossible. Fix the engine first.
+**Follow-up:** this was a single-device test. A second pass on iOS Safari before
+Phase 3 ships would be cheap insurance — WebKit's selection handles behave
+differently from Blink's, and Phase 3 is where the real editor gets built. Not a
+blocker for Phase 1.
 
 ## 6. Consequences
 
 - Phase 3 builds the highlight editor directly against the Selection API with no
   editor dependency, keeping the JS budget clear for the study path.
 - Highlights are shown in a live preview beside the input rather than inline.
-  If in-place highlighting later proves necessary, the upgrade path is a
-  `contenteditable` overlay positioned from offsets — not adopting a framework.
-- Whichever of A or C wins, `createAnswer` / `validateAnswers` / `renderCloze`
-  are untouched. That is the payoff for having built the engine in Phase 1
-  rather than alongside the UI in Phase 3.
+  That limitation is known and accepted. If in-place highlighting later proves
+  necessary, the upgrade path is a `contenteditable` overlay positioned from
+  offsets — not adopting a framework.
+- `createAnswer` / `validateAnswers` / `renderCloze` are untouched. That is the
+  payoff for having built the engine in Phase 1 rather than alongside the UI in
+  Phase 3.
