@@ -2,13 +2,17 @@ import { describe, expect, it } from 'vitest'
 import {
   answerAtOffset,
   answerLength,
+  assignOrdinals,
   createAnswer,
+  isCardAnswer,
   normalizeParagraph,
   rangesOverlap,
+  refreshAnswerText,
   snapToWordBoundaries,
   validateAnswers,
 } from './answers.js'
 import { sliceCodePoints } from './codepoints.js'
+import type { AnswerRange, CardAnswer } from './types.js'
 
 // The CPU/RAM example from the objectives doc — two blanks that grade independently.
 const CPU_EXAMPLE = 'The CPU is the brain of the computer, and RAM provides temporary storage.'
@@ -139,6 +143,90 @@ describe('validateAnswers', () => {
   })
 })
 
+describe('validateAnswers: ranges createAnswer would never build', () => {
+  // createAnswer throws on all of these, so they cannot arrive through the
+  // editor. They can still arrive from a DB row written by an older version,
+  // a hand-edited import, or an API client. validateAnswers is the layer that
+  // has to catch them, which means it needs its own tests rather than
+  // inheriting createAnswer's.
+  const raw = (startOffset: number, endOffset: number, answerText: string) => ({
+    startOffset,
+    endOffset,
+    answerText,
+    altAnswers: [],
+  })
+
+  it('rejects non-integer offsets', () => {
+    const issues = validateAnswers(CPU_EXAMPLE, [raw(4.5, 7, 'CPU')])
+
+    expect(issues).toHaveLength(1)
+    expect(issues[0]?.code).toBe('OUT_OF_BOUNDS')
+    expect(issues[0]?.message).toContain('integers')
+  })
+
+  it('rejects NaN offsets', () => {
+    expect(validateAnswers(CPU_EXAMPLE, [raw(Number.NaN, 7, 'CPU')])[0]?.code).toBe('OUT_OF_BOUNDS')
+  })
+
+  it('rejects non-integer offsets passed to createAnswer directly', () => {
+    // validateAnswers tests this through its own code path. This hits the same
+    // guard at createAnswer's boundary, covering lines 67-68.
+    expect(() => createAnswer(CPU_EXAMPLE, 4.5, 7)).toThrow('integers')
+    expect(() => createAnswer(CPU_EXAMPLE, 4, Number.NaN)).toThrow('integers')
+  })
+
+  it('rejects a negative start offset', () => {
+    const issues = validateAnswers(CPU_EXAMPLE, [raw(-1, 3, 'The')])
+
+    expect(issues).toHaveLength(1)
+    expect(issues[0]?.code).toBe('OUT_OF_BOUNDS')
+  })
+
+  it('rejects an end offset past the paragraph', () => {
+    const issues = validateAnswers(CPU_EXAMPLE, [raw(4, 999, 'CPU')])
+
+    expect(issues).toHaveLength(1)
+    expect(issues[0]?.code).toBe('OUT_OF_BOUNDS')
+    expect(issues[0]?.message).toContain('outside')
+  })
+
+  it('rejects an empty range', () => {
+    const issues = validateAnswers(CPU_EXAMPLE, [raw(5, 5, '')])
+
+    expect(issues).toHaveLength(1)
+    expect(issues[0]?.code).toBe('EMPTY_RANGE')
+  })
+
+  it('rejects an inverted range', () => {
+    expect(validateAnswers(CPU_EXAMPLE, [raw(7, 4, 'CPU')])[0]?.code).toBe('EMPTY_RANGE')
+  })
+
+  it('rejects a range covering only whitespace', () => {
+    const text = 'a   b'
+    const issues = validateAnswers(text, [raw(1, 4, '   ')])
+
+    expect(issues).toHaveLength(1)
+    expect(issues[0]?.code).toBe('WHITESPACE_ONLY')
+  })
+
+  it('reports the offending index so the UI can point at the right blank', () => {
+    const issues = validateAnswers(CPU_EXAMPLE, [
+      createAnswer(CPU_EXAMPLE, 4, 7),
+      raw(999, 1000, 'nope'),
+    ])
+
+    expect(issues).toHaveLength(1)
+    expect(issues[0]?.index).toBe(1)
+  })
+
+  it('reports every problem at once rather than stopping at the first', () => {
+    const issues = validateAnswers(CPU_EXAMPLE, [raw(-1, 3, 'The'), raw(5, 5, '')])
+
+    expect(issues).toHaveLength(2)
+    expect(issues.map((i) => i.code)).toEqual(['OUT_OF_BOUNDS', 'EMPTY_RANGE'])
+  })
+})
+
 describe('snapToWordBoundaries', () => {
   it('expands a mid-word selection to the whole word', () => {
     const text = 'The HyperText Protocol'
@@ -200,5 +288,68 @@ describe('edge cases: answer text containing underscores', () => {
     const answer = createAnswer(text, 4, 9) // _____
     expect(answer.answerText).toBe('_____')
     expect(validateAnswers(text, [answer])).toEqual([])
+  })
+})
+
+describe('isCardAnswer', () => {
+  it('separates a persisted answer from a draft', () => {
+    const draft = createAnswer(CPU_EXAMPLE, 4, 7)
+    const persisted: CardAnswer = { ...draft, id: 'a1', ordinal: 0 }
+
+    expect(isCardAnswer(draft)).toBe(false)
+    expect(isCardAnswer(persisted)).toBe(true)
+  })
+
+  it('rejects a partial shape carrying only one of the two fields', () => {
+    const draft = createAnswer(CPU_EXAMPLE, 4, 7)
+
+    expect(isCardAnswer({ ...draft, id: 'a1' } as AnswerRange)).toBe(false)
+    expect(isCardAnswer({ ...draft, ordinal: 0 } as AnswerRange)).toBe(false)
+  })
+})
+
+describe('refreshAnswerText', () => {
+  it('re-derives answerText from the range when the denormalized copy drifted', () => {
+    const drifted = { startOffset: 4, endOffset: 7, answerText: 'STALE', altAnswers: [] }
+
+    expect(refreshAnswerText(CPU_EXAMPLE, [drifted])[0]?.answerText).toBe('CPU')
+  })
+
+  it('preserves every other field, including altAnswers', () => {
+    const answer = createAnswer(CPU_EXAMPLE, 4, 7, ['processor'])
+    const refreshed = refreshAnswerText(CPU_EXAMPLE, [{ ...answer, answerText: 'x' }])
+
+    expect(refreshed[0]?.altAnswers).toEqual(['processor'])
+    expect(refreshed[0]?.startOffset).toBe(4)
+  })
+})
+
+describe('assignOrdinals', () => {
+  it('sorts by position and numbers from zero', () => {
+    const unsorted = [createAnswer(CPU_EXAMPLE, 42, 45), createAnswer(CPU_EXAMPLE, 4, 7)]
+    const ordered = assignOrdinals(unsorted)
+
+    expect(ordered.map((a) => a.answerText)).toEqual(['CPU', 'RAM'])
+    expect(ordered.map((a) => a.ordinal)).toEqual([0, 1])
+  })
+
+  it('does not mutate the input array', () => {
+    const input = [createAnswer(CPU_EXAMPLE, 42, 45), createAnswer(CPU_EXAMPLE, 4, 7)]
+    assignOrdinals(input)
+
+    expect(input[0]?.answerText).toBe('RAM')
+  })
+
+  it('renumbers ordinals that disagree with position', () => {
+    const stale = [
+      { ...createAnswer(CPU_EXAMPLE, 4, 7), ordinal: 5 },
+      { ...createAnswer(CPU_EXAMPLE, 42, 45), ordinal: 9 },
+    ]
+
+    expect(assignOrdinals(stale).map((a) => a.ordinal)).toEqual([0, 1])
+  })
+
+  it('returns an empty array unchanged', () => {
+    expect(assignOrdinals([])).toEqual([])
   })
 })

@@ -109,6 +109,30 @@ describe('calculateNextReview — ease factor bounds', () => {
   })
 })
 
+describe('calculateNextReview — second-repetition ladder by grade', () => {
+  // The ladder's second rung is graded, not fixed: the 6-day step is what a
+  // clean pass earns. Partial recall should not buy the same delay, and a
+  // confident pass should buy more.
+  const secondRep = state({ interval: 1, repetitions: 1, easeFactor: 2.5 })
+
+  it('gives hard a shorter second step than good', () => {
+    expect(calculateNextReview('hard', secondRep, noFuzz).interval).toBe(3)
+  })
+
+  it('gives easy a longer second step than good', () => {
+    expect(calculateNextReview('easy', secondRep, noFuzz).interval).toBe(8)
+  })
+
+  it('orders the second-rung intervals hard < good < easy', () => {
+    const hard = calculateNextReview('hard', secondRep, noFuzz).interval
+    const good = calculateNextReview('good', secondRep, noFuzz).interval
+    const easy = calculateNextReview('easy', secondRep, noFuzz).interval
+
+    expect(hard).toBeLessThan(good)
+    expect(good).toBeLessThan(easy)
+  })
+})
+
 describe('calculateNextReview — grades', () => {
   it('advances hard more slowly than good', () => {
     const previous = state({ interval: 30, repetitions: 5, easeFactor: 2.5 })

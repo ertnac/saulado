@@ -107,7 +107,9 @@ shifted answer.
 requires a physical phone; it cannot be simulated, and desktop Chrome's device
 emulation does not reproduce native selection-handle behaviour.
 
-Run `pnpm dev`, open `http://<your-lan-ip>:5173/#spike` on a phone, and record:
+Run `pnpm --filter @saulado/frontend dev:lan` (plain `dev` binds to localhost only
+and is unreachable from the phone), then open `http://<your-lan-ip>:5173/#spike`
+on the device and record:
 
 | #   | Test                                                      | Result |
 | --- | --------------------------------------------------------- | ------ |

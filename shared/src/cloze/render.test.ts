@@ -142,3 +142,35 @@ describe('renderClozeText', () => {
     expect(renderClozeText(text, [createAnswer(text, 4, 9)])).toBe(text)
   })
 })
+
+describe('renderCloze: defensive branches', () => {
+  it('skips an overlapping answer that would rewind the cursor', () => {
+    // Overlapping answers are rejected by validateAnswers, but if one reaches
+    // renderCloze anyway (legacy row, corrupt import), the defensive cursor
+    // check at line 38 drops the later occurrence rather than duplicating text.
+    const text = 'abcdefgh'
+    const overlapping = [
+      createAnswer(text, 0, 4), // abcd
+      createAnswer(text, 2, 6), // cdef (overlaps the first)
+    ]
+
+    const segments = renderCloze(text, overlapping)
+    const rebuilt = segments.map((s) => (s.kind === 'text' ? s.text : '_____')).join('')
+
+    // First blank renders; second is dropped; remainder of the text follows.
+    expect(rebuilt).toBe('_____efgh')
+  })
+
+  it('returns an empty segment when trying to reconstruct with a missing ordinal', () => {
+    // If reconstructParagraph is given segments referencing ordinal N but the
+    // answers array has fewer than N+1 entries, the fallback at line 79 returns
+    // an empty string for that blank rather than crashing.
+    const text = 'Short test.'
+    const answer = createAnswer(text, 0, 5)
+    const segments = renderCloze(text, [answer])
+
+    // Simulate a stale or mismatched call where the blank exists but the
+    // corresponding answer was removed from the array.
+    expect(reconstructParagraph(segments, [])).toBe(' test.')
+  })
+})

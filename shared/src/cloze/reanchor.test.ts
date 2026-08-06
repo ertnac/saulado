@@ -112,6 +112,30 @@ describe('reanchorAnswers', () => {
   })
 })
 
+describe('reanchorAnswers: answers that cannot possibly fit', () => {
+  it('orphans an answer longer than the whole new paragraph', () => {
+    // Truncating the paragraph below the answer's own length short-circuits
+    // before the search runs — there is nowhere for the text to be.
+    const answers = [createAnswer(BASE, 4, 7)]
+    const result = reanchorAnswers(BASE, 'ab', answers)
+
+    expect(result.matched).toEqual([])
+    expect(result.orphaned).toHaveLength(1)
+    expect(result.orphaned[0]?.answerText).toBe('CPU')
+  })
+
+  it('orphans an answer whose text was emptied out', () => {
+    // Not reachable through createAnswer, but a stale row loaded from the DB
+    // can carry an empty answerText. It must be reported, never matched at
+    // offset 0 where an empty needle trivially "occurs".
+    const empty = { startOffset: 4, endOffset: 7, answerText: '', altAnswers: [] }
+    const result = reanchorAnswers(BASE, `Actually, ${BASE}`, [empty])
+
+    expect(result.matched).toEqual([])
+    expect(result.orphaned).toEqual([empty])
+  })
+})
+
 describe('needsReanchoring', () => {
   it('is false when nothing changed', () => {
     expect(needsReanchoring(BASE, BASE, [createAnswer(BASE, 4, 7)])).toBe(false)

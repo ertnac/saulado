@@ -343,45 +343,61 @@ Build in `shared/src/cloze/`. No I/O. No framework. Just functions.
 
 ### 1.1 Core (2 days)
 
-- [ ] `toCodePoints(s)` / `sliceCodePoints(s, start, end)` — the offset primitives
-- [ ] `normalizeParagraph(s)` — NFC, normalize line endings, strip trailing whitespace
-- [ ] `createAnswer(paragraph, start, end)` → validates and returns a `CardAnswer`
-- [ ] `validateAnswers(paragraph, answers)` → enforces all four invariants from §2.1
-- [ ] `renderCloze(paragraph, answers)` → `Segment[]`
-- [ ] `reanchorAnswers(oldParagraph, newParagraph, answers)` → `{ matched, orphaned }`
+- [x] `toCodePoints(s)` / `sliceCodePoints(s, start, end)` — the offset primitives
+- [x] `normalizeParagraph(s)` — NFC, normalize line endings, strip trailing whitespace
+- [x] `createAnswer(paragraph, start, end)` → validates and returns a `CardAnswer`
+- [x] `validateAnswers(paragraph, answers)` → enforces all four invariants from §2.1
+- [x] `renderCloze(paragraph, answers)` → `Segment[]`
+- [x] `reanchorAnswers(oldParagraph, newParagraph, answers)` → `{ matched, orphaned }`
 
 ### 1.2 Validation (1.5 days)
 
-- [ ] `normalize(s)` per §2.5
-- [ ] `levenshtein(a, b)` — bounded early-exit variant, not the naive full matrix
-- [ ] `checkAnswer(input, answer, opts)` → `{ correct: boolean; matchType: MatchType }`
-- [ ] `gradeCard(blankResults)` → `Grade`
+- [x] `normalize(s)` per §2.5
+- [x] `levenshtein(a, b)` — bounded early-exit variant, not the naive full matrix
+- [x] `checkAnswer(input, answer, opts)` → `{ correct: boolean; matchType: MatchType }`
+- [x] `gradeCard(blankResults)` → `Grade`
 
 ### 1.3 Scheduler (0.5 day)
 
-- [ ] `calculateNextReview(...)` per `CLAUDE.md` + fuzz, cap, and lapse counter (§2.6)
+- [x] `calculateNextReview(...)` per `CLAUDE.md` + fuzz, cap, and lapse counter (§2.6)
 
 ### 1.4 Editor spike (0.5 day)
 
-- [ ] Throwaway prototype: `<textarea>` + selection overlay, on desktop Chrome/Safari **and a real phone**
-- [ ] Write the decision (custom vs ProseMirror) into `docs/adr/0001-editor.md`
+- [x] Throwaway prototype: `<textarea>` + selection overlay, on desktop Chrome/Safari **and a real phone**
+      — prototype built and desktop-verified; **the real-phone run is still outstanding**
+- [x] Write the decision (custom vs ProseMirror) into `docs/adr/0001-editor.md`
+      — written; ProseMirror rejected outright, §5 pending the phone test
 
 ### 1.5 Test suite (0.5 day)
 
 Non-negotiable cases:
 
-- [ ] Answer at index 0; answer at the very end of the paragraph
-- [ ] Two adjacent answers with no gap between them
-- [ ] Multi-word answer spanning punctuation (`"HyperText Markup Language"`)
-- [ ] Accented characters, emoji, CJK — offsets must be code-point correct
-- [ ] Empty / whitespace-only selection → rejected
-- [ ] Overlapping ranges → rejected
-- [ ] Answer text containing the blank placeholder characters themselves
-- [ ] Windows `\r\n` line endings in pasted content
-- [ ] `renderCloze` round-trip: rendering then reconstructing yields the original paragraph
-- [ ] Every worked example from the objectives doc, verbatim, as a test case
+- [x] Answer at index 0; answer at the very end of the paragraph
+- [x] Two adjacent answers with no gap between them
+- [x] Multi-word answer spanning punctuation (`"HyperText Markup Language"`)
+- [x] Accented characters, emoji, CJK — offsets must be code-point correct
+- [x] Empty / whitespace-only selection → rejected
+- [x] Overlapping ranges → rejected
+- [x] Answer text containing the blank placeholder characters themselves
+- [x] Windows `\r\n` line endings in pasted content
+- [x] `renderCloze` round-trip: rendering then reconstructing yields the original paragraph
+- [x] Every worked example from the objectives doc, verbatim, as a test case
 
 **Done when:** `npm test` is green, coverage on `shared/src/cloze/` is >95%, and you can paste the CPU/RAM example into a Node REPL and get two independently gradeable blanks.
+
+**Status — 2026-08-06: 2 of 3 criteria met. Phase 1 is NOT yet complete.**
+
+| Criterion                       | State   | Evidence                                                                                                              |
+| ------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
+| `npm test` green                | ✅ met  | 179 tests pass (`pnpm -w run verify`): 172 shared, 3 frontend, 4 backend                                              |
+| Coverage on `shared/src/cloze/` | ✅ met  | **100%** statements / functions / lines, 97.95% branches — gate enforced at 95% in `shared/vitest.config.ts`          |
+| CPU/RAM → two gradeable blanks  | ✅ met  | `shared/src/cloze/done-when.test.ts` — 11 assertions covering render, independent grading, and the resulting schedule |
+| **1.4 real-phone verification** | ❌ open | `docs/adr/0001-editor.md` §5 is empty. Requires a physical device; cannot be simulated.                               |
+
+The coverage gate is enforced, not eyeballed: `pnpm --filter @saulado/shared test:coverage`
+fails the build below 95%. The remaining uncovered branches are
+`if (!previous || !current) continue` guards that exist only to satisfy
+`noUncheckedIndexedAccess` and are unreachable at runtime.
 
 > This is the phase to be slow and thorough in. A bug here surfaces as corrupted user data six weeks later, and there is no clean migration back.
 

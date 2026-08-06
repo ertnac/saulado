@@ -4,6 +4,7 @@ import {
   checkAnswers,
   describeMatch,
   gradeCard,
+  isCardCorrect,
   normalize,
   typoThreshold,
 } from './validate.js'
@@ -158,6 +159,20 @@ describe('gradeCard', () => {
 
   it('grades an empty card as again', () => {
     expect(gradeCard([])).toBe('again')
+  })
+})
+
+describe('isCardCorrect', () => {
+  it('is true only when every blank is correct', () => {
+    expect(isCardCorrect([{ correct: true }, { correct: true }])).toBe(true)
+    expect(isCardCorrect([{ correct: true }, { correct: false }])).toBe(false)
+    expect(isCardCorrect([{ correct: false }])).toBe(false)
+  })
+
+  it('is false for a card with no blanks', () => {
+    // `every` on an empty array is vacuously true, which would report a broken
+    // card as a clean pass. The length guard is what stops that.
+    expect(isCardCorrect([])).toBe(false)
   })
 })
 
