@@ -36,6 +36,17 @@ describe('GET /api/health', () => {
   })
 })
 
+describe('GET /api/ready', () => {
+  it('gates on the database rather than always returning 200', async () => {
+    const res = await request(app).get('/api/ready')
+    const { database } = res.body as { database: string }
+
+    // The whole point of /ready vs /health: a DB-less container must NOT be
+    // reported as deployable.
+    expect(res.status).toBe(database === 'connected' ? 200 : 503)
+  })
+})
+
 describe('unknown routes', () => {
   it('returns a structured 404', async () => {
     const res = await request(app).get('/api/does-not-exist')

@@ -47,3 +47,17 @@ healthRouter.get('/health', (_req, res) => {
     res.status(200).json(body)
   })
 })
+
+/**
+ * Readiness probe for the platform's healthcheck — distinct from /health.
+ *
+ * /health always returns 200 so monitors can read `status` from the body.
+ * That's wrong for a deploy gate: a container that can't reach Postgres would
+ * be marked healthy and take traffic. This one returns 503 when the DB is
+ * unreachable, so a bad deploy fails instead of silently serving errors.
+ */
+healthRouter.get('/ready', (_req, res) => {
+  void buildHealth().then((body) => {
+    res.status(body.database === 'connected' ? 200 : 503).json(body)
+  })
+})
