@@ -1,0 +1,20 @@
+// Phase 0 keeps this file deliberately near-empty. The real schema arrives in
+// Phase 2 (auth) and Phase 3 (sets/cards) per IMPLEMENTATION_PLAN.md §2.3.
+// `HealthCheck` exists so there is a real table to migrate and prove the
+// browser → API → Postgres → browser round-trip.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model HealthCheck {
+  id        String   @id @default(uuid()) @db.Uuid
+  checkedAt DateTime @default(now()) @map("checked_at")
+
+  @@map("health_checks")
+}

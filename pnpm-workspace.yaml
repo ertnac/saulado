@@ -1,0 +1,12 @@
+packages:
+  - 'shared'
+  - 'backend'
+  - 'frontend'
+
+# pnpm 11 moved this out of package.json. These packages need postinstall
+# scripts: Prisma downloads its query engine, esbuild its platform binary.
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  esbuild: true
+  prisma: true
