@@ -32,7 +32,9 @@ RUN pnpm --filter @saulado/shared build \
 
 # Strip dev dependencies from the shipped image. --legacy is required from
 # pnpm 10 on for workspaces that don't use inject-workspace-packages.
-RUN pnpm --filter @saulado/backend --prod deploy --legacy /app/pruned
+# node-linker=hoisted copies packages instead of hardlinking them out of the
+# store, which the build layer refuses to do (EROFS).
+RUN pnpm --filter @saulado/backend --prod deploy --legacy --node-linker=hoisted /app/pruned
 
 # ---------- runtime ----------
 FROM base AS runtime
@@ -50,4 +52,6 @@ USER app
 EXPOSE 3000
 
 # Migrations run at boot so a deploy can never serve against an older schema.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+# Call the local binary, NOT `npx prisma` — npx would miss the pinned CLI and
+# fetch the latest major from the registry instead.
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/server.js"]
