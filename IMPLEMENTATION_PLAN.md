@@ -302,18 +302,34 @@ Phase 8  Ship
 
 **3 days · Goal: one HTTP request travels browser → API → Postgres → browser, in CI, deployed.**
 
-- [ ] Monorepo: `frontend/`, `backend/`, `shared/` (pnpm workspaces or npm workspaces)
-- [ ] `shared/` package for types used by both sides — the single most valuable 20 lines of config in the repo
-- [ ] TypeScript **strict mode** everywhere, `noUncheckedIndexedAccess` on
-- [ ] Vite + React + Tailwind + shadcn/ui initialized
-- [ ] Express + Prisma + Postgres (Docker Compose for local)
-- [ ] `GET /api/health` → checks DB → rendered on a React page
-- [ ] ESLint + Prettier + a pre-commit hook
-- [ ] Vitest configured on both sides; one passing test each
-- [ ] GitHub Actions: typecheck + lint + test on every push
-- [ ] Deployed to staging (Vercel + Railway/Render/Fly, or a single Fly app)
+- [x] Monorepo: `frontend/`, `backend/`, `shared/` (pnpm workspaces or npm workspaces)
+- [x] `shared/` package for types used by both sides — the single most valuable 20 lines of config in the repo
+- [x] TypeScript **strict mode** everywhere, `noUncheckedIndexedAccess` on
+- [x] Vite + React + Tailwind + shadcn/ui initialized
+- [x] Express + Prisma + Postgres (Docker Compose for local)
+- [x] `GET /api/health` → checks DB → rendered on a React page
+- [x] ESLint + Prettier + a pre-commit hook
+- [x] Vitest configured on both sides; one passing test each
+- [x] GitHub Actions: typecheck + lint + test on every push
+- [x] Deployed to staging (Vercel frontend + Render API + Neon Postgres)
 
 **Done when:** a push to `main` auto-deploys a page showing live DB status.
+
+**✅ COMPLETE — 2026-08-06.** Verified: an empty commit to `main` (`b5eba0e`) triggered
+automatic deploys on both platforms, and the live page reports
+`database: connected` with a 174.87 ms round-trip — a real `SELECT 1` against
+Neon, not a config check.
+
+Staging topology (Railway was dropped — its free tier no longer exists):
+
+| Piece    | Platform | Note                                                                  |
+| -------- | -------- | --------------------------------------------------------------------- |
+| Frontend | Vercel   | static Vite build, `VITE_API_URL` → Render origin                     |
+| API      | Render   | free plan, builds `backend/Dockerfile`, gated on `/api/ready`         |
+| Postgres | Neon     | free tier is permanent; Render's own free DB is deleted after 90 days |
+
+Free-plan caveat: the API sleeps after 15 min idle, so the next request takes
+30–60 s. Fine for staging, not for a demo — warm it up first.
 
 > Deploying in week one, not week sixteen, is deliberate. Deployment problems discovered at the end are schedule-destroying; discovered on day three they're a ten-minute fix.
 
