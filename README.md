@@ -9,6 +9,10 @@ surrounding sentence intact.
 **Status: Phase 0 complete** (walking skeleton). See [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md)
 for scope analysis, architecture decisions, and the full phased roadmap.
 
+**Live:** the staging deploy is Vercel (frontend) + Render (API) + Neon (Postgres).
+[`docs/PHASE_0.md`](./docs/PHASE_0.md) documents every setup step, all four environment
+variables, and the five bugs hit along the way.
+
 ---
 
 ## Requirements
@@ -86,12 +90,15 @@ files automatically.
 
 ## Endpoints
 
-| Method | Path          | Purpose                                   |
-| ------ | ------------- | ----------------------------------------- |
-| `GET`  | `/api/health` | Real `SELECT 1` against Postgres + uptime |
+| Method | Path          | Purpose                                   | DB down |
+| ------ | ------------- | ----------------------------------------- | ------- |
+| `GET`  | `/api/health` | Real `SELECT 1` against Postgres + uptime | **200** |
+| `GET`  | `/api/ready`  | Readiness probe — gates deploys           | **503** |
 
-Returns 200 even when degraded — the body carries the status, so monitors should alert
-on `status`, not the HTTP code.
+The split is deliberate. `/health` returns 200 even when degraded, so monitors can tell
+"process dead" apart from "DB unreachable" — alert on `status` in the body, not the HTTP
+code. `/ready` returns 503 instead, so a container that can't reach Postgres fails its
+healthcheck and never takes traffic.
 
 ---
 
