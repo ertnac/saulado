@@ -178,25 +178,84 @@ pnpm db:up
 pnpm dev
 ```
 
+**Preflight.** Two things produce failures that look exactly like auth bugs and are
+not. Check both before touching the table:
+
+1. **The Vite banner must read `http://localhost:5173/`.** A stale dev server holding
+   the port used to make Vite drift to 5174, and every refresh then came back 401 —
+   see §6.6. `strictPort: true` now turns that into a hard startup failure, so if Vite
+   starts at all, the port is right.
+2. **DevTools network throttling must be off.** Step 9 asks you to set it to Slow 3G.
+   Leaving it there — or on Offline — makes every request fail with
+   `net::ERR_INTERNET_DISCONNECTED` whenever DevTools is open, which reads precisely
+   like a dead server.
+
 Then, at <http://localhost:5173>:
 
-| #   | Do this                              | Expect                                             |
-| --- | ------------------------------------ | -------------------------------------------------- |
-| 1   | Register with a fresh email          | Land on the dashboard                              |
-| 2   | **Close the tab. Reopen it.**        | Dashboard again — no login screen, no flash of it  |
-| 3   | Hard reload (Ctrl+Shift+R)           | Same                                               |
-| 4   | DevTools → Application → Cookies     | `saulado_rt`, HttpOnly ✓, no access token anywhere |
-| 5   | Console: `localStorage`              | Only `saulado-theme`. No token.                    |
-| 6   | Sign out, then visit `/`             | Redirected to `/login`                             |
-| 7   | Sign in with a **wrong** password ×6 | 6th says "wait about 15 minutes"                   |
-| 8   | Visit `/nope`                        | 404 page naming the path                           |
-| 9   | Toggle the theme, then reload        | Theme sticks, and does **not** flash the old one   |
-| 10  | Forgot password → check the terminal | Reset link printed in the server log               |
-| 11  | Open that link, set a new password   | Redirected to login; the new password works        |
+| #   | Do this                              | Pass signal                                                         |
+| --- | ------------------------------------ | ------------------------------------------------------------------- |
+| 1   | Register with a fresh email          | `Welcome, <name>` heading on the dashboard                          |
+| 2   | **Close the tab. Reopen it.**        | Dashboard again — one `/refresh` returning **200**, no login screen |
+| 3   | Hard reload (Ctrl+Shift+R)           | Same                                                                |
+| 4   | DevTools → Application → Cookies     | `saulado_rt`, HttpOnly ✓, Path `/api/auth` — and nothing beside it  |
+| 5   | Console: `Object.keys(localStorage)` | `[]`, or `['saulado-theme']` once toggled. No token.                |
+| 6   | Sign out, then visit `/`             | Redirected to `/login`                                              |
+| 7   | Sign in with a **wrong** password ×6 | 6th says "about 15 minutes"                                         |
+| 8   | Visit `/nope`                        | `No page here`, naming `/nope`                                      |
+| 9   | Toggle the theme, then reload        | Theme sticks, with **no flash** of the old one                      |
+| 10  | Forgot password → the backend log    | `─── email (not actually sent) ───` box holding a `?token=` link    |
+| 11  | Open that link, set a new password   | Redirected to login; the new password works                         |
 
 Step 2 is the criterion. Step 9 is the one people skip and then live with.
 
-### 5.3 Proving it at the API level
+> **One 401 on `/api/auth/refresh` while signed out is correct behaviour.**
+> JavaScript cannot test for an httpOnly cookie, so the app asks the server; 401 is
+> the answer "no session", handled at `services/api.ts:149`. DevTools logs it before
+> your code ever sees it, and every signed-out page load produces exactly one.
+> **Two** on a single load _is_ a bug — single-flight (`api.ts:170`) has broken, and
+> the second replays a spent token and revokes the family.
+
+### 5.3 The four steps that get misread
+
+Steps 4, 5, 9 and 10 each have a pass state that looks like a failure.
+
+**4 — the cookie.** The name is `saulado_rt`, **unprefixed**. `__Secure-` is
+production-only (`auth/cookies.ts:20`); seeing it locally means the browser is
+silently dropping the cookie and the session will die on the next reload. Two further
+things make a perfectly good cookie look absent: **cookies ignore ports**, so this one
+is shared across `:5173`, `:5174` and `:3000` alike, and `Path=/api/auth` means it is
+not sent on ordinary page loads at all — only to the auth routes. Neither hides it
+from the Application panel, which lists every cookie for the domain regardless of
+path. If it is genuinely missing, check the login response for `Set-Cookie` before
+suspecting anything else.
+
+**5 — localStorage.** An empty array is a **pass**. `saulado-theme` is only written
+when the theme is toggled (`useTheme.ts:67`); reading it never creates it. The step
+tests that no _token_ is stored, not that the theme key exists. Browser extensions
+also write to `localStorage` on `localhost`, so re-run in an incognito window if
+unfamiliar keys appear.
+
+**9 — the theme flash.** Two mechanisms set the theme: the blocking IIFE in
+`index.html`, before first paint, and `useTheme`, after mount. The second alone yields
+a correct theme _eventually_ — paint light, boot React, snap to dark. That snap is
+what this step exists to catch, and on a fast machine with a warm cache it is roughly
+one frame, which is why it gets marked pass and shipped. To actually see it, throttle
+the Network tab to **Slow 3G** (never Offline) and hard reload: throttling delays the
+bundle but not the inline script, so a working setup stays dark for the whole slow
+load. **Turn throttling back off afterwards** — see the preflight above.
+
+**10 — the reset link.** Nothing is logged for an address with no account. The handler
+returns early at `routes/auth.ts:275`, and the page says _"If that email has an
+account, a reset link is on its way"_ either way — deliberately, so the form is not a
+membership oracle. **"Success on screen, nothing in the terminal" is therefore the
+correct output for a typo'd or unregistered address**, not a broken email adapter.
+Confirm the address exists with `pnpm db:studio` first. Two other causes, in order:
+`passwordResetLimiter` is 5/hour per IP+email and rejects request 6 _before_ the
+handler runs, so no mail is attempted (that shows a red banner, not the ✓); and
+`pnpm dev` interleaves Vite and backend output in one terminal, so run
+`cd backend && pnpm dev` on its own if the box might simply have scrolled past.
+
+### 5.4 Proving it at the API level
 
 The frontend proxies `/api` to `:3000`, so curl against `:5173` takes the same path a
 browser does — including the Origin check.
@@ -262,6 +321,37 @@ shaped like a bug fix.
 `env.ts` refuses to boot without it and `createApp()` loads `env`, so every Supertest
 suite would have failed at import. It had not gone red yet only because none of the
 Phase 1 or Phase 2 commits were pushed. Added to `ci.yml` as a throwaway value.
+
+### 6. A stale dev server on 5173 broke session restore
+
+Vite's default when its port is taken is to pick the next free one. A leftover dev
+server — a `pnpm` wrapper killed without taking its child down, which is routine on
+Windows — held 5173, so Vite came up on **5174** with one easily-missed line of
+output.
+
+The port is not cosmetic. It is in the backend's `CORS_ORIGIN`, and
+`/api/auth/refresh` rejects any Origin outside that list (`hasAllowedOrigin`,
+`auth/cookies.ts:80`). Vite's `changeOrigin: true` rewrites **Host**, not **Origin**,
+so the backend saw `http://localhost:5174` and returned 401.
+
+Only `/refresh` carries that guard, which is what made it confusing: register and
+login worked and genuinely set the cookie, so the app looked signed in — until the
+first refresh, which cleared the session and bounced to `/login`. The Phase 2
+done-when criterion failing, with nothing wrong in the auth code.
+
+Fixed with `strictPort: true` in `frontend/vite.config.ts`. Vite now refuses to start
+rather than booting into a configuration where session restore cannot work.
+
+### 7. Two console messages that are not bugs
+
+Worth recording because both cost real debugging time:
+
+- **`401` on `/api/auth/refresh` while signed out.** The mount-time session probe.
+  Expected, unsuppressable, once per signed-out load. See the note in §5.2.
+- **`net::ERR_INTERNET_DISCONNECTED` whenever DevTools is open.** Network throttling
+  left on Offline — most likely from step 9. It only applies while DevTools is open
+  and persists per browser profile, which is exactly the shape of a server that
+  "disconnects when I inspect it".
 
 ---
 
