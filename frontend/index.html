@@ -1,10 +1,30 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Saulado</title>
     <meta name="description" content="Learn in Context. Remember for Life." />
+    <!--
+      Applies the theme before first paint. Blocking and inline on purpose: doing
+      this from React instead means the page paints in the wrong theme and then
+      snaps, which is the flash-of-wrong-theme every dark-mode implementation
+      trips over. Kept in sync with useTheme.ts — same key, same precedence.
+    -->
+    <script>
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('saulado-theme')
+          var dark =
+            stored === 'dark' ||
+            ((stored === null || stored === 'system') &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          if (dark) document.documentElement.classList.add('dark')
+        } catch (e) {
+          /* localStorage unavailable (private mode); fall through to light. */
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
