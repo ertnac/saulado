@@ -169,7 +169,7 @@ pnpm verify        # typecheck → lint → format:check → test   (exactly wha
 pnpm build
 ```
 
-Expect **204 tests** passing: 191 shared, 9 frontend, 4 backend.
+Expect **292 tests** passing: 191 shared, 9 frontend, 92 backend.
 
 ### 5.2 The done-when criterion, in a browser
 
@@ -357,27 +357,45 @@ Worth recording because both cost real debugging time:
 
 ## 7. Before starting Phase 3
 
-### One real gap
+### The gap that was here is closed
 
-**Backend auth tests do not exist** (plan task #22). The backend's only coverage is
-4 health tests. The whole auth flow has been verified by hand and at the API level, but
-nothing stops a future edit from breaking it silently.
+**Backend auth tests now exist** (plan task #22). Backend coverage went from 4 health
+tests to **92** across 7 files. This was worth doing before Phase 3, because Phase 3
+adds `user_id` scoping to every query and its own done-when assumes auth is already
+trustworthy.
 
-Worth writing before Phase 3, because Phase 3 adds `user_id` scoping to every query and
-its own done-when depends on auth already being trustworthy. Specifically:
+| File                           | Covers                                                             |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `auth/tokens.test.ts`          | token shape and entropy, `hashToken` determinism, `safeCompareHex` |
+| `auth/password.test.ts`        | bcrypt cost factor, salting, multibyte bytes, `burnPasswordTiming` |
+| `routes/auth.test.ts`          | register → login → `/me` → logout, and the non-oracle guarantees   |
+| `routes/auth.rotation.test.ts` | rotation, family revocation on reuse, Origin enforcement           |
+| `routes/auth.reset.test.ts`    | forgot → reset, single-use, expiry, session revocation             |
+| `http/rate-limit.test.ts`      | every limiter, with `env.isTest` flipped off per test              |
+| `routes/health.test.ts`        | pre-existing                                                       |
 
-- Supertest integration tests over register → login → refresh → logout
-- Rotation and family-revocation-on-reuse — the highest-value test here
-- The full reset flow, including single-use and expiry
-- Unit tests for `auth/tokens.ts` and `auth/password.ts`
-- The rate limiter is `skip: () => env.isTest`, so covering it needs an app built with
-  it forced on. The comment at `http/rate-limit.ts:11` claims this test exists; it does
-  not, and that comment should be made true rather than deleted.
+Three things about these tests are worth knowing before you edit them:
+
+- **They run against the development database.** `vitest.config.ts` points
+  `DATABASE_URL` at the same `saulado` database `pnpm dev` uses. Nothing truncates a
+  table — cleanup is scoped to rows created by the run via a random `RUN_ID` embedded
+  in each test email (`src/test/helpers.ts`). A `TRUNCATE users` here would delete your
+  own account, so keep cleanup row-scoped.
+- **The limiter suite flips `env.isTest` at runtime.** `skip: () => env.isTest` is
+  evaluated per request, so `Object.defineProperty` in `beforeEach` is enough to force
+  limiters on without a second app factory. The comment at `http/rate-limit.ts:11` is
+  now true rather than aspirational. Note that `registerLimiter` is IP-only with one
+  process-wide budget, so exactly one test in that file may touch `/register`.
+- **`onDelete: Cascade` makes one route branch unreachable.** Deleting a user deletes
+  their refresh tokens, so a refresh with a deleted account returns TOKEN_EXPIRED (no
+  row found) and never reaches the "Account no longer exists" TOKEN_INVALID branch at
+  `routes/auth.ts:199`. The rotation suite pins TOKEN_EXPIRED deliberately, so dropping
+  the cascade later shows up as a failing test rather than a silent behaviour change.
 
 ### Not blocking, but do them at some point
 
-- **Nothing is pushed.** 8 local commits, CI last ran on Phase 0. The first push will
-  be the real test of the `ci.yml` fix.
+- ~~**Nothing is pushed.**~~ Pushed. CI is green on `e3b3a21`, which was the real test
+  of the `ci.yml` fix — `pnpm install --frozen-lockfile` included.
 - **No email provider.** The logging adapter is the default and works end to end; set
   `RESEND_API_KEY` when reset mail needs to reach a real inbox. Phase 3 does not need it.
 - **`COOKIE_SAMESITE` on Render.** Production defaults to `none` + `Secure`, which is
