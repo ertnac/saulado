@@ -419,28 +419,57 @@ handles behave differently from Blink's.
 
 ### 2.1 Backend (3 days)
 
-- [ ] `POST /api/auth/register` — bcrypt ≥12 rounds, email uniqueness, password policy
-- [ ] `POST /api/auth/login` — access JWT (15 min) + refresh token
-- [ ] `POST /api/auth/refresh`, `POST /api/auth/logout` (revokes the refresh token)
-- [ ] `POST /api/auth/forgot-password` / `reset-password` — single-use, 1-hour token, **hash the token in the DB**
-- [ ] Email provider wired (Resend/Postmark)
-- [ ] `requireAuth` middleware
-- [ ] Rate limiting on all auth routes (`express-rate-limit`, 5/15min per IP+email)
-- [ ] Zod validation on every request body; a shared error-response shape
-- [ ] Helmet, CORS allowlist, request-body size limit
+- [x] `POST /api/auth/register` — bcrypt ≥12 rounds, email uniqueness, password policy
+- [x] `POST /api/auth/login` — access JWT (15 min) + refresh token
+- [x] `POST /api/auth/refresh`, `POST /api/auth/logout` (revokes the refresh token)
+- [x] `POST /api/auth/forgot-password` / `reset-password` — single-use, 1-hour token, **hash the token in the DB**
+- [x] Email provider wired (Resend/Postmark) — swappable seam built; the logging adapter
+      is the default and works end to end. Set `RESEND_API_KEY` to reach a real inbox.
+- [x] `requireAuth` middleware
+- [x] Rate limiting on all auth routes (`express-rate-limit`, 5/15min per IP+email)
+- [x] Zod validation on every request body; a shared error-response shape
+- [x] Helmet, CORS allowlist, request-body size limit
 
 **Refresh tokens go in an `httpOnly; Secure; SameSite=Strict` cookie.** Access token in memory only. `localStorage` for either is an XSS-to-account-takeover pipeline.
 
+> **Deviation, deliberate:** production ships `SameSite=None`, not `Strict`. The frontend
+> is on Vercel and the API on Render, and a `Strict` cookie is simply not sent on a
+> cross-site request — refresh would never work in production. `SameSite` was the CSRF
+> defence, so it is replaced with an explicit Origin allowlist check. Full reasoning in
+> [`docs/PHASE_2.md` §4.2](docs/PHASE_2.md). Put the API on a subdomain of the app and
+> `COOKIE_SAMESITE=strict` becomes correct again.
+
 ### 2.2 Frontend (3 days)
 
-- [ ] React Router v6 with a `<ProtectedRoute>` wrapper
-- [ ] Register / Login / Forgot / Reset pages
-- [ ] Auth store (Zustand) + TanStack Query client with a 401 → silent-refresh interceptor
-- [ ] App shell: nav, responsive layout, dark mode via `class` strategy + `prefers-color-scheme`
-- [ ] Toast system, error boundary, 404 page
-- [ ] Empty dashboard with real skeleton loaders
+- [x] React Router v6 with a `<ProtectedRoute>` wrapper
+- [x] Register / Login / Forgot / Reset pages
+- [x] Auth store (Zustand) + TanStack Query client with a 401 → silent-refresh interceptor
+- [x] App shell: nav, responsive layout, dark mode via `class` strategy + `prefers-color-scheme`
+- [x] Toast system, error boundary, 404 page
+- [x] Empty dashboard with real skeleton loaders
 
 **Done when:** you can register, close the tab, reopen it, and still be logged in — and a wrong password is rate-limited.
+
+**Status — 2026-08-07: ✅ COMPLETE.** All 15 checkpoints done, done-when verified in a
+browser.
+
+| Criterion                        | State  | Evidence                                                                                     |
+| -------------------------------- | ------ | -------------------------------------------------------------------------------------------- |
+| Register → reopen tab → still in | ✅ met | One `/refresh` on mount returns 200; no login screen. `AuthStatus` is 3-state, not a boolean |
+| Wrong password rate-limited      | ✅ met | 5 attempts then 429 + `retryAfter: 900`, keyed on IP **and** email                           |
+| Tests green                      | ✅ met | **292** passing: 191 shared, 9 frontend, 92 backend (`pnpm verify`)                          |
+
+Commits: `5e71052` (backend) · `7b7818f` (frontend) · `f4b0cb7` (docs + CI env gap) ·
+`e3b3a21` (`strictPort`, verification gotchas) · `9d47b47` (92 backend auth tests).
+
+Backend auth coverage went from 4 health tests to 92 — rotation and
+family-revocation-on-reuse, the reset flow, the non-oracle guarantees on login and
+forgot-password, and every rate limiter. Written before Phase 3 on purpose: Phase 3
+layers `user_id` scoping on top of auth it assumes is already sound.
+
+**Carried into Phase 3:** the Phase 1.4 mobile selection test was Android-only. An iOS
+Safari pass is worth doing before the real editor ships — WebKit's selection handles
+behave differently from Blink's.
 
 ---
 
