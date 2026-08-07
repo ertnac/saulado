@@ -31,6 +31,10 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/saulado?schema=public
+      # Not a secret — CI signs tokens it then throws away. Present because
+      # env.ts refuses to boot without it, and createApp() loads env, so every
+      # Supertest suite would fail at import without a value here.
+      JWT_SECRET: ci-only-signing-key-not-used-anywhere-else
 
     steps:
       - uses: actions/checkout@v4
