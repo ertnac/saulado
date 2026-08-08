@@ -246,8 +246,21 @@ export function answerLength(answer: AnswerRange): number {
   return answer.endOffset - answer.startOffset
 }
 
-/** True when the two ranges share at least one character. */
-export function rangesOverlap(a: AnswerRange, b: AnswerRange): boolean {
+/**
+ * True when the two ranges share at least one character.
+ *
+ * Half-open intervals, so `[4,7)` and `[7,10)` are adjacent rather than
+ * overlapping — highlighting two neighbouring words has to be allowed.
+ *
+ * Typed on the offsets alone rather than on a full {@link AnswerRange}: the
+ * editor needs this to vet a *candidate* selection, which has no `answerText`
+ * yet — that is derived only once the range is known to be usable. Every
+ * `AnswerRange` still satisfies the narrower shape.
+ */
+export function rangesOverlap(
+  a: Pick<AnswerRange, 'startOffset' | 'endOffset'>,
+  b: Pick<AnswerRange, 'startOffset' | 'endOffset'>,
+): boolean {
   return a.startOffset < b.endOffset && b.startOffset < a.endOffset
 }
 
