@@ -47,3 +47,35 @@ export function validateBody<T extends ZodTypeAny>(schema: T): RequestHandler {
     next()
   }
 }
+
+/**
+ * Same contract as `validateBody`, for query strings.
+ *
+ * Query values arrive as strings (or string arrays for repeated keys), so every
+ * schema passed here must coerce — `listSetsQuerySchema` does via
+ * `z.coerce.number()` and explicit enum handling. `req.query` is replaced with
+ * the parsed result, keeping the unknown-key stripping that bodies get.
+ *
+ * Express 4 only: `req.query` is a mutable getter there. Express 5 makes it
+ * read-only, so this helper would need to attach the parsed query to `res.locals`
+ * instead if the project ever upgrades.
+ */
+export function validateQuery<T extends ZodTypeAny>(schema: T): RequestHandler {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const result = schema.safeParse(req.query)
+
+    if (!result.success) {
+      const fields: Record<string, string> = {}
+      for (const issue of result.error.issues) {
+        const key = issue.path.join('.') || '_'
+        fields[key] ??= issue.message
+      }
+
+      sendError(res, 'VALIDATION_ERROR', 'Please check the query parameters.', { fields })
+      return
+    }
+
+    req.query = result.data as z.infer<T>
+    next()
+  }
+}

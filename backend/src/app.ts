@@ -5,7 +5,9 @@ import helmet from 'helmet'
 import { env } from './config/env.js'
 import { sendError } from './http/errors.js'
 import { authRouter } from './routes/auth.js'
+import { cardsRouter, setCardsRouter, tagsRouter } from './routes/cards.js'
 import { healthRouter } from './routes/health.js'
+import { setsRouter } from './routes/sets.js'
 
 /**
  * App construction is separated from server startup so integration tests can
@@ -33,6 +35,15 @@ export function createApp(): Express {
 
   app.use('/api', healthRouter)
   app.use('/api/auth', authRouter)
+  app.use('/api/sets', setsRouter)
+  /**
+   * Mounted before `/api/sets/:id` would swallow it — Express matches in
+   * registration order, and `setsRouter` has no `/:id/cards` route, so the
+   * nested router has to be its own mount rather than a child of it.
+   */
+  app.use('/api/sets/:setId/cards', setCardsRouter)
+  app.use('/api/cards', cardsRouter)
+  app.use('/api/tags', tagsRouter)
 
   app.use((_req, res) => {
     sendError(res, 'NOT_FOUND', 'Route not found')
