@@ -14,6 +14,7 @@ import { EditCardPage, NewCardPage } from '@/features/cards/CardEditorPage'
 import { SetDetailPage } from '@/features/cards/SetDetailPage'
 import { SetsPage } from '@/features/cards/SetsPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
+import { StudySessionPage } from '@/features/study/StudySessionPage'
 import { createQueryClient } from '@/lib/query-client'
 import { useAuthStore } from '@/stores/auth'
 
@@ -96,6 +97,12 @@ export function App(): ReactElement {
                 >
                   <Route path="/" element={<DashboardPage />} />
                   <Route path="/sets" element={<SetsPage />} />
+                  {/*
+                    One route, not two. Studying a single set is `?set=<id>` on the
+                    same screen as studying everything — a path segment would make
+                    /study and /sets/:id/study two routes rendering one component.
+                  */}
+                  <Route path="/study" element={<StudySessionPage />} />
                   <Route path="/sets/:setId" element={<SetDetailPage />} />
                   {/*
                     Card creation is nested under its set because a card cannot
