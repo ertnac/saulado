@@ -481,45 +481,76 @@ This is the biggest phase in the project. Do not compress it.
 
 ### 3.1 Study Sets (2 days)
 
-- [ ] `GET/POST/PATCH/DELETE /api/sets` (+ cursor pagination, `?archived=`)
-- [ ] Every query scoped by `user_id` — write an integration test that proves user A gets a 404, not a 403, on user B's set
-- [ ] List view with card counts and due counts; create/edit dialog; delete with confirmation
-- [ ] Empty state that teaches the core concept rather than saying "No study sets"
+- [x] `GET/POST/PATCH/DELETE /api/sets` (+ cursor pagination, `?archived=`)
+- [x] Every query scoped by `user_id` — write an integration test that proves user A gets a 404, not a 403, on user B's set
+- [x] List view with card counts; create/edit dialog; delete with confirmation
+- [ ] ~~Due counts in the list~~ — deferred to Phase 4. There is no `card_schedules` table yet, so a due count would be a hardcoded zero pretending to be data.
+- [x] Empty state that teaches the core concept rather than saying "No study sets"
 
 ### 3.2 Cards API (2 days)
 
-- [ ] `POST /api/sets/:id/cards` — body is `{ title, paragraph, answers: [{start, end}], tags }`
-- [ ] **The server recomputes `answerText` from offsets. Never trust client-supplied answer text.**
-- [ ] Server-side `validateAnswers` — reject invalid ranges with a field-level error
-- [ ] `GET /api/cards/:id`, `PATCH`, `DELETE`; `GET /api/sets/:id/cards` (paginated)
-- [ ] Paragraph length cap (5,000 chars) and answers-per-card cap (20), enforced both sides
+- [x] `POST /api/sets/:id/cards` — body is `{ title, paragraph, answers: [{start, end}], tags }`
+- [x] **The server recomputes `answerText` from offsets. Never trust client-supplied answer text.**
+- [x] Server-side `validateAnswers` — reject invalid ranges with a field-level error
+- [x] `GET /api/cards/:id`, `PATCH`, `DELETE`; `GET /api/sets/:id/cards` (paginated)
+- [x] Paragraph length cap (5,000 chars) and answers-per-card cap (20), enforced both sides
 
 ### 3.3 Highlight Editor (5 days) — the hard part
 
-- [ ] **Compose mode:** plain `<textarea>`, autosize, paste-safe, debounced draft persistence to `localStorage`
-- [ ] **Highlight mode:** rendered read-only paragraph; `window.getSelection()` → code-point offsets
-- [ ] Selection → offset mapping that survives the DOM splitting text nodes at highlight boundaries
-- [ ] Visual highlight with a numbered badge per answer
-- [ ] Click/tap a highlight → popover to remove it or add alternative answers
-- [ ] Reject overlapping selections with an inline explanation, not a silent no-op
-- [ ] **Mobile:** long-press selection + a "Highlight selection" action bar pinned above the keyboard. Test on a real iOS Safari and a real Android Chrome — emulators lie about selection behaviour.
-- [ ] **Keyboard:** select with Shift+arrows, `Ctrl/Cmd+H` to highlight, Tab through existing highlights, Delete to remove
-- [ ] Live preview pane showing the generated question
-- [ ] Paragraph-edit reconciliation flow (§2.1) with clear UI for orphaned highlights
+- [x] **Compose mode:** plain `<textarea>`, autosize, paste-safe, debounced draft persistence to `localStorage`
+- [x] **Highlight mode:** rendered read-only paragraph; `window.getSelection()` → code-point offsets
+- [x] Selection → offset mapping that survives the DOM splitting text nodes at highlight boundaries
+- [x] Visual highlight with a numbered badge per answer
+- [x] Click/tap a highlight → popover to remove it or add alternative answers
+- [x] Reject overlapping selections with an inline explanation, not a silent no-op
+- [x] **Mobile:** long-press selection + a "Highlight selection" action bar pinned above the keyboard
+- [ ] Test on a real iOS Safari and a real Android Chrome — **not done.** jsdom cannot exercise selection handles; this needs two physical devices. Carried forward with the Phase 1.4 debt below.
+- [x] **Keyboard:** select with Shift+arrows, `Ctrl/Cmd+H` to highlight, Tab through existing highlights, Delete to remove
+- [x] Live preview pane showing the generated question
+- [x] Paragraph-edit reconciliation flow (§2.1) with clear UI for orphaned highlights
 
 ### 3.4 Card views (2 days)
 
-- [ ] Card list within a set — blanked preview, tags, due state
-- [ ] Card detail with an original ↔ blanked toggle
-- [ ] Edit flow reusing the same editor
-- [ ] Bulk select → delete / move to another set
+- [x] Card list within a set — paragraph preview, tags, blank count
+- [ ] ~~Card detail with an original ↔ blanked toggle~~ — the editor's Write/Highlight tabs plus its Preview pane already show both forms of the same card, so a third read-only view would be a second place to maintain the same rendering. Revisit if shared/public sets need a non-editable view.
+- [ ] ~~Due state in the list~~ — deferred with due counts to Phase 4.
+- [x] Edit flow reusing the same editor
+- [ ] Bulk select → delete / move to another set — **not done.** Deferred: it needs a `PATCH /api/cards/:id/move` or a batch endpoint that does not exist yet, and single-card delete covers the common case.
 
 ### 3.5 Tags (1 day)
 
-- [ ] `text[]` column, tag input with autocomplete from the user's existing tags
-- [ ] `GET /api/tags` — distinct tags with counts
+- [x] `text[]` column, tag input with autocomplete from the user's existing tags
+- [x] `GET /api/tags` — distinct tags with counts
 
 **Done when:** you can paste _"The CPU is the brain of the computer and RAM stores temporary data"_, highlight both terms, save, and see the card render with two blanks — on your phone.
+
+**Status — 2026-08-08: ✅ COMPLETE** (with four items deferred, listed below).
+
+| Criterion                         | State         | Evidence                                                                                                                             |
+| --------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Paste → highlight → save → render | ✅ met        | End-to-end in the editor. `answerText` is derived server-side from offsets; `cards.test.ts` asserts a client-supplied one is ignored |
+| Two blanks from one paragraph     | ✅ met        | Ordinals are positional, not submission order — proven in `useCardDraft.test.ts` and `cards.test.ts`                                 |
+| A → B isolation is 404, not 403   | ✅ met        | 6 cross-user tests across `sets.test.ts` / `cards.test.ts`, including `GET /api/tags`                                                |
+| Tests green                       | ✅ met        | **491** passing: 205 shared, 143 frontend, 143 backend. Typecheck, lint and format clean                                             |
+| On your phone                     | ⚠️ unverified | Touch paths are built (`selectionchange`, pinned action bar) but not exercised on a physical device                                  |
+
+Sub-phases: 3.0a shared contracts · 3.0b schema + migration · 3.0c sets/cards API ·
+3.0d backend integration tests · 3.1a selection→offset mapping · 3.1b highlight editor ·
+3.1c services + query hooks · 3.1d sets & cards UI · 3.1e verify + document.
+
+**Deferred, deliberately:**
+
+| Item                                    | Why                                                                               |
+| --------------------------------------- | --------------------------------------------------------------------------------- |
+| Due counts / due state                  | Needs Phase 4's `card_schedules`. A zero rendered as data is worse than no column |
+| Bulk select → delete / move             | Needs a move or batch endpoint that does not exist yet                            |
+| Standalone card detail + toggle         | The editor's Write/Highlight tabs and Preview pane already show both forms        |
+| Real-device iOS Safari / Android Chrome | jsdom cannot exercise selection handles; needs two physical devices               |
+
+The last one now carries **two** debts: this phase's, and the Phase 1.4 mobile test that was
+Android-only. Both want the same session on real hardware.
+
+See `docs/PHASE_3.md` for the gotchas — the badge-offset corruption bug above all.
 
 ---
 
