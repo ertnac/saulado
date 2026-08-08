@@ -1,6 +1,8 @@
-import type { ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { CommandPalette } from '@/features/search/CommandPalette'
+import { useSearchShortcut } from '@/features/search/useSearchShortcut'
 import { useTheme } from '@/hooks/useTheme'
 import { useAuthStore } from '@/stores/auth'
 import { cn } from '@/lib/utils'
@@ -17,6 +19,45 @@ const NAV = [
   { to: '/sets', label: 'Sets', end: false },
   { to: '/progress', label: 'Progress', end: false },
 ]
+
+/**
+ * The palette trigger, showing the shortcut it stands in for.
+ *
+ * A discoverability affordance, not a duplicate control: Cmd/Ctrl+K is
+ * invisible to anyone who has not been told about it, and a search box that only
+ * exists as a keystroke is a search box most users never find. Rendering the hint
+ * with the right modifier needs the platform, which is only knowable at runtime.
+ */
+function SearchTrigger({ onOpen }: { onOpen: () => void }): ReactElement {
+  const [isMac, setIsMac] = useState(false)
+
+  // In an effect rather than at render: `navigator` does not exist during SSR or
+  // in a test renderer that has not set up jsdom yet, and reading it at module
+  // scope would make this component impossible to import in either.
+  useEffect(() => {
+    setIsMac(/Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent))
+  }, [])
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={onOpen}
+      aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
+      aria-label="Search cards"
+      className="gap-2 text-muted-foreground"
+    >
+      <span aria-hidden="true">⌕</span>
+      <span className="hidden sm:inline">Search</span>
+      <kbd
+        className="hidden rounded border border-border px-1 text-xs md:inline"
+        aria-hidden="true"
+      >
+        {isMac ? '⌘' : 'Ctrl'}K
+      </kbd>
+    </Button>
+  )
+}
 
 function ThemeToggle(): ReactElement {
   const { theme, setTheme, isDark } = useTheme()
@@ -44,6 +85,7 @@ function ThemeToggle(): ReactElement {
 export function AppShell(): ReactElement {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
+  const palette = useSearchShortcut()
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -83,10 +125,30 @@ export function AppShell(): ReactElement {
             ))}
           </nav>
 
+          <SearchTrigger onOpen={palette.onOpen} />
+
           <ThemeToggle />
 
-          {/* Hidden below sm to keep the 320px layout from wrapping. */}
-          <span className="hidden text-sm text-muted-foreground sm:inline">{user?.email}</span>
+          {/*
+            The account link carries the email rather than sitting next to it —
+            one control instead of a label plus a link, which is also what makes
+            it reachable at 320px where the bare email was hidden entirely.
+          */}
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              cn(
+                'max-w-[10rem] truncate rounded-md px-3 py-2 text-sm',
+                isActive ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted',
+              )
+            }
+          >
+            <span className="hidden sm:inline">{user?.email ?? 'Settings'}</span>
+            <span className="sm:hidden" aria-hidden="true">
+              ⚙
+            </span>
+            <span className="sr-only sm:hidden">Settings</span>
+          </NavLink>
 
           <Button
             variant="outline"
@@ -103,6 +165,8 @@ export function AppShell(): ReactElement {
       <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
         <Outlet />
       </main>
+
+      <CommandPalette open={palette.open} onClose={palette.onClose} />
     </div>
   )
 }

@@ -82,3 +82,26 @@ export const refreshLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 60,
 })
+
+/**
+ * The account mutations, which re-check the current password (plan §6.5).
+ *
+ * Without this they are a password oracle for anyone holding a stolen access
+ * token: `POST /api/account/password` accepts a `currentPassword` guess and
+ * answers whether it was right, unthrottled, with no email or login trail. The
+ * login limiter does not cover them — a different route entirely.
+ *
+ * Keyed on the authenticated user, not the IP. The account being attacked is the
+ * thing to protect, and the token identifies it exactly; an IP key would let an
+ * attacker rotate addresses for a fresh budget against the same account. Falls
+ * back to the IP if `requireAuth` has not run, so a misordered mount degrades to
+ * a weaker limit rather than to none.
+ *
+ * 10/hour is generous for a human correcting a typo and useless for guessing.
+ */
+export const accountLimiter = rateLimit({
+  ...shared,
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  keyGenerator: (req: Request): string => req.userId ?? ipKeyGenerator(req.ip ?? 'unknown'),
+})

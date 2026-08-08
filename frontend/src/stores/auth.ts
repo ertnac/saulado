@@ -75,9 +75,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   /**
-   * Local-only settings patch, for optimistic UI (the dark mode toggle).
-   * Persisting settings is a later phase; this keeps the toggle honest in the
-   * meantime rather than pretending to save.
+   * Local settings patch.
+   *
+   * The store copy is a mirror, not the record — `features/account/queries.ts`
+   * owns persistence and calls this to keep the two in step, including on
+   * rollback. Kept as a plain setter rather than made async so the dark-mode
+   * toggle can move before the request lands.
    */
   updateSettings: (patch) => {
     const current = get().settings

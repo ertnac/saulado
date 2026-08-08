@@ -55,6 +55,13 @@ export const resetPasswordSchema = z.object({
   password: newPassword,
 })
 
+/**
+ * Re-exported for `account.schemas.ts`, which needs the same two fields for
+ * changing an email or a password. Exported rather than duplicated so a change
+ * to the email normalisation or the password policy reaches both routes.
+ */
+export { email as emailSchema, newPassword as passwordSchema }
+
 export type RegisterBody = z.infer<typeof registerSchema>
 export type LoginBody = z.infer<typeof loginSchema>
 export type ForgotPasswordBody = z.infer<typeof forgotPasswordSchema>

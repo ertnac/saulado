@@ -125,3 +125,60 @@ export function buildResetEmail(to: string, token: string): EmailMessage {
     ].join('\n'),
   }
 }
+
+/**
+ * Confirmation for a requested email change, sent **to the new address**.
+ *
+ * Sending it there rather than to the current one is the entire point: clicking
+ * the link proves the requester can read the new mailbox, which is what makes a
+ * mistyped address a harmless dead end instead of a lost account.
+ */
+export function buildEmailChangeEmail(to: string, token: string): EmailMessage {
+  const base = env.APP_URL.replace(/\/$/, '')
+  const url = `${base}/confirm-email?token=${encodeURIComponent(token)}`
+  const hours = Math.round(env.EMAIL_CHANGE_TTL_MINUTES / 60)
+
+  return {
+    to,
+    subject: 'Confirm your new Saulado email address',
+    text: [
+      'This address was given as the new email for a Saulado account.',
+      '',
+      'To finish the change, open this link:',
+      url,
+      '',
+      `The link works once and expires in ${String(hours)} hours.`,
+      '',
+      'Until then nothing has changed, and the account still uses its old address.',
+      '',
+      'If you were not expecting this, ignore it — without this link the change',
+      'never takes effect, and whoever asked for it cannot sign in as you.',
+    ].join('\n'),
+  }
+}
+
+/**
+ * Notification that the address changed, sent **to the old address**.
+ *
+ * The one message in this file that carries no link and asks for no action. It
+ * exists so a change made by someone who should not have made it is visible to
+ * the real owner while the old mailbox still reaches them — the last moment at
+ * which they can react. Naming the new address is deliberate: "your email
+ * changed" without saying to what leaves nothing to report.
+ */
+export function buildEmailChangedNotice(to: string, newEmail: string): EmailMessage {
+  return {
+    to,
+    subject: 'Your Saulado email address was changed',
+    text: [
+      'The email address on this Saulado account was just changed to:',
+      `  ${newEmail}`,
+      '',
+      'Sign-in and password resets now use that address. This one no longer',
+      'reaches the account.',
+      '',
+      'If you did not do this, contact support now — while this mailbox is still',
+      'the one on record with us.',
+    ].join('\n'),
+  }
+}

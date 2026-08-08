@@ -30,6 +30,15 @@ const envSchema = z.object({
   /** Password reset link lifetime. */
   RESET_TOKEN_TTL_MINUTES: z.coerce.number().int().positive().default(60),
 
+  /**
+   * Email-change confirmation link lifetime. Longer than a reset because the
+   * urgency is different: a reset link is issued to someone locked out and
+   * waiting, while a change confirmation may sit in a secondary mailbox the user
+   * does not check until the evening. A day is still short enough that a stale
+   * link cannot resurface long after the address was abandoned.
+   */
+  EMAIL_CHANGE_TTL_MINUTES: z.coerce.number().int().positive().default(1440),
+
   /** bcrypt cost. Plan requires >= 12; the schema enforces it rather than trusting the .env. */
   BCRYPT_ROUNDS: z.coerce.number().int().min(12).max(15).default(12),
 

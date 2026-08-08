@@ -4,10 +4,12 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import helmet from 'helmet'
 import { env } from './config/env.js'
 import { ApiError, sendError } from './http/errors.js'
+import { accountPublicRouter, accountRouter, settingsRouter } from './routes/account.js'
 import { authRouter } from './routes/auth.js'
 import { cardsRouter, setCardsRouter, tagsRouter } from './routes/cards.js'
 import { healthRouter } from './routes/health.js'
 import { dashboardRouter, progressRouter } from './routes/progress.js'
+import { searchRouter } from './routes/search.js'
 import { setsRouter } from './routes/sets.js'
 import { studyRouter } from './routes/study.js'
 
@@ -49,6 +51,16 @@ export function createApp(): Express {
   app.use('/api/study', studyRouter)
   app.use('/api/dashboard', dashboardRouter)
   app.use('/api/progress', progressRouter)
+  app.use('/api/search', searchRouter)
+  app.use('/api/settings', settingsRouter)
+  /**
+   * Both mounted at the same path, public first. `accountPublicRouter` carries
+   * only the email-change confirmation, which is reached by a link in an inbox
+   * and so cannot require a session; anything it does not match falls through to
+   * `accountRouter`, where `requireAuth` applies.
+   */
+  app.use('/api/account', accountPublicRouter)
+  app.use('/api/account', accountRouter)
 
   app.use((_req, res) => {
     sendError(res, 'NOT_FOUND', 'Route not found')

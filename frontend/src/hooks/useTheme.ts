@@ -19,6 +19,24 @@ function prefersDark(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches
 }
 
+/**
+ * Whether this device has an explicit stored preference.
+ *
+ * `readStored` cannot answer this — it returns `'system'` both for "the user
+ * chose to follow the OS" and for "nothing is stored yet", which are the same
+ * *rendering* but not the same *fact*. The settings sync needs the difference:
+ * the server's `darkMode` should seed a device that has never been told
+ * anything, and must not override one where the user made a choice.
+ */
+export function hasStoredTheme(): boolean {
+  try {
+    const value = localStorage.getItem(STORAGE_KEY)
+    return value === 'light' || value === 'dark' || value === 'system'
+  } catch {
+    return false
+  }
+}
+
 function apply(theme: Theme): void {
   const dark = theme === 'dark' || (theme === 'system' && prefersDark())
   document.documentElement.classList.toggle('dark', dark)

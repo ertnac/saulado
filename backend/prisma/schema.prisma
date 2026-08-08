@@ -38,6 +38,7 @@ model User {
   settings       UserSettings?
   refreshTokens  RefreshToken[]
   passwordResets PasswordReset[]
+  emailChanges   EmailChange[]
   studySets      StudySet[]
   schedules      CardSchedule[]
   reviews        Review[]
@@ -109,6 +110,32 @@ model PasswordReset {
   @@map("password_resets")
 }
 
+/// A requested-but-not-yet-applied email change (plan §6.5).
+///
+/// The new address lives here rather than on `users` until the link mailed to it
+/// is clicked. That ordering is what makes a typo survivable: the account keeps
+/// working on the old address until someone proves they can read the new one.
+/// Writing it straight to `users` would hand the account to whoever owns the
+/// mistyped mailbox, with no way back in.
+///
+/// `newEmail` is not unique here. Two people may both have a pending change to
+/// the same address — only one can confirm it, and the `users.email` constraint
+/// is what arbitrates, at the moment it actually matters.
+model EmailChange {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  newEmail  String    @map("new_email") @db.Citext
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt], map: "idx_email_change_user")
+  @@map("email_changes")
+}
+
 /// A user's folder of cards.
 ///
 /// `archivedAt` rather than a boolean: archive is reversible and the timestamp
@@ -147,6 +174,21 @@ model StudySet {
 /// of a card's tags at once and filters with `&&`/`@>`, which the GIN index
 /// serves directly. A tags table would add two joins to every card read for a
 /// feature that has no per-tag rows of its own.
+///
+/// `search_vector` is a **generated** column, maintained by Postgres rather than
+/// by application code (plan §6.1). Prisma cannot express `GENERATED ALWAYS AS`,
+/// so it is declared `Unsupported` here and created in the
+/// `20260808104500_search_vector` migration, along with its GIN index:
+///
+/// ```sql
+/// ALTER TABLE "study_cards"
+///   ADD COLUMN "search_vector" tsvector
+///   GENERATED ALWAYS AS (
+///     setweight(to_tsvector('english', coalesce("title", '')), 'A') ||
+///     setweight(to_tsvector('english', coalesce("paragraph", '')), 'B')
+///   ) STORED;
+/// CREATE INDEX "idx_cards_search" ON "study_cards" USING GIN ("search_vector");
+/// ```
 model StudyCard {
   id         String   @id @default(uuid()) @db.Uuid
   studySetId String   @map("study_set_id") @db.Uuid
@@ -155,6 +197,13 @@ model StudyCard {
   tags       String[] @default([])
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
+
+  /// Never written by the application — Postgres computes it. Prisma Client
+  /// does not expose `Unsupported` fields at all, which is exactly the
+  /// behaviour a generated column needs: it is omitted from every INSERT and
+  /// UPDATE the ORM builds, so no `create` call can fail by trying to set it.
+  /// Reads go through `$queryRaw` in `routes/search.ts`.
+  searchVector Unsupported("tsvector")? @map("search_vector")
 
   set          StudySet            @relation(fields: [studySetId], references: [id], onDelete: Cascade)
   answers      CardAnswer[]

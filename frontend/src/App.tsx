@@ -6,6 +6,9 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { NotFoundPage } from '@/components/NotFoundPage'
 import { AnonymousRoute, ProtectedRoute } from '@/components/ProtectedRoute'
 import { Toaster } from '@/components/ui/toaster'
+import { AccountPage } from '@/features/account/AccountPage'
+import { ConfirmEmailChangePage } from '@/features/account/ConfirmEmailChangePage'
+import { SettingsPage } from '@/features/account/SettingsPage'
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
@@ -15,6 +18,7 @@ import { SetDetailPage } from '@/features/cards/SetDetailPage'
 import { SetsPage } from '@/features/cards/SetsPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { ProgressPage } from '@/features/dashboard/ProgressPage'
+import { SearchPage } from '@/features/search/SearchPage'
 import { StudySessionPage } from '@/features/study/StudySessionPage'
 import { createQueryClient } from '@/lib/query-client'
 import { useAuthStore } from '@/stores/auth'
@@ -88,6 +92,15 @@ export function App(): ReactElement {
                   link look broken.
                 */}
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
+                {/*
+                  Also outside both guards, and for a stronger reason than the
+                  reset link: this link is mailed to an address that is not yet
+                  the account's, so the device that opens it is often signed into
+                  nothing. ProtectedRoute would bounce it to /login and the change
+                  could never be completed. Mirrors accountPublicRouter on the
+                  server, where the same route sits outside requireAuth.
+                */}
+                <Route path="/account/email/confirm" element={<ConfirmEmailChangePage />} />
 
                 <Route
                   element={
@@ -118,6 +131,9 @@ export function App(): ReactElement {
                     second URL for the same card that could disagree with itself.
                   */}
                   <Route path="/cards/:cardId" element={<EditCardPage />} />
+                  <Route path="/search" element={<SearchPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/account" element={<AccountPage />} />
                 </Route>
 
                 {/* Alias, so an early bookmark still lands somewhere real. */}

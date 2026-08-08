@@ -48,12 +48,20 @@ async function seedSet(token: string, title = 'Computer Architecture'): Promise<
   return setId
 }
 
-/** Studies one card correctly, so there is a real review behind the stats. */
-async function studyOneCard(token: string): Promise<void> {
+/**
+ * Studies one card correctly, so there is a real review behind the stats.
+ *
+ * `studySetId` is optional but worth passing whenever the test has more than one
+ * set: an unscoped session queues every due card across the library, and the
+ * order among brand-new cards is not something a test should depend on. Without
+ * it, "study the first set" is really "study whichever card the queue happened
+ * to put first", which passes or fails for reasons the test never states.
+ */
+async function studyOneCard(token: string, studySetId?: string): Promise<void> {
   const startRes = await request(app)
     .post('/api/study/sessions')
     .set('Authorization', auth(token))
-    .send({})
+    .send(studySetId === undefined ? {} : { studySetId })
 
   expect(startRes.status).toBe(200)
   const session = (startRes.body as { session: { id: string; queue: { cardId: string }[] } })
@@ -277,9 +285,9 @@ describe('GET /api/progress', () => {
     // The table sits under charts scoped to the same window; a wall of zero
     // rows would read as failure rather than as sets left unopened.
     const user = await registerTestUser(app, 'prog-quiet')
-    await seedSet(user.token, 'Studied')
+    const studied = await seedSet(user.token, 'Studied')
     await seedSet(user.token, 'Untouched')
-    await studyOneCard(user.token)
+    await studyOneCard(user.token, studied)
 
     const body = await getProgress(user.token, '7d')
     expect(body.perSet.map((set) => set.title)).not.toContain('Untouched')

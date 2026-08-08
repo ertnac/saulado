@@ -13,6 +13,9 @@ export type {
   AccessTokenClaims,
 } from './types.js'
 
+/** A value, not a type — `z.enum` and the settings form both need the tuple. */
+export { BLANK_WIDTH_MODES } from './types.js'
+
 export {
   PASSWORD_MIN_LENGTH,
   PASSWORD_MAX_BYTES,

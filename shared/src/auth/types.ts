@@ -34,8 +34,14 @@ export interface UserSettings {
  * `fixed` is the default and the safe one — every blank is the same width, so
  * the blank cannot leak the length of the answer. `proportional` trades that
  * away for a more natural-looking paragraph.
+ *
+ * A tuple rather than a bare union so the settings route can hand it to
+ * `z.enum` and the settings form can map over it. One list, so a third mode
+ * cannot be added to the type and forgotten in the validator.
  */
-export type BlankWidthMode = 'fixed' | 'proportional'
+export const BLANK_WIDTH_MODES = ['fixed', 'proportional'] as const
+
+export type BlankWidthMode = (typeof BLANK_WIDTH_MODES)[number]
 
 export interface RegisterRequest {
   email: string
