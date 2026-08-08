@@ -1,5 +1,5 @@
-// Phase 2 adds auth. Sets/cards/schedules arrive in Phase 3+ per
-// IMPLEMENTATION_PLAN.md §2.3.
+// Phase 2 adds auth. Phase 3 adds sets/cards/answers per IMPLEMENTATION_PLAN.md
+// §2.3; scheduling tables arrive in Phase 4.
 
 generator client {
   provider        = "prisma-client-js"
@@ -9,7 +9,10 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [citext]
+  // btree_gist backs the no-overlapping-answers EXCLUDE constraint added by raw
+  // SQL in the sets/cards migration; it lets one constraint mix `card_id WITH =`
+  // (btree semantics) and a range `WITH &&` (gist semantics).
+  extensions = [citext, btree_gist]
 }
 
 model HealthCheck {
@@ -34,6 +37,7 @@ model User {
   settings       UserSettings?
   refreshTokens  RefreshToken[]
   passwordResets PasswordReset[]
+  studySets      StudySet[]
 
   @@map("users")
 }
@@ -98,4 +102,94 @@ model PasswordReset {
 
   @@index([userId, expiresAt], map: "idx_reset_user")
   @@map("password_resets")
+}
+
+/// A user's folder of cards.
+///
+/// `archivedAt` rather than a boolean: archive is reversible and the timestamp
+/// is worth keeping ("archived 3 months ago" is a useful sort), whereas delete
+/// is not reversible and removes the row outright.
+///
+/// `color` is a plain string here, not an enum. The closed list lives in shared
+/// `SET_COLORS` and is enforced by Zod at the edge; a Postgres enum would make
+/// adding a ninth colour a migration rather than a one-line constant change.
+model StudySet {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  title       String
+  description String?
+  color       String    @default("slate")
+  archivedAt  DateTime? @map("archived_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cards StudyCard[]
+
+  /// Matches the sets-list query: scoped by owner, most recently touched first.
+  @@index([userId, updatedAt(sort: Desc)], map: "idx_sets_user")
+  @@map("study_sets")
+}
+
+/// A paragraph plus the highlights over it.
+///
+/// The paragraph is the immutable source of truth (plan §2.1) and is stored
+/// NFC-normalised on write. No blanked/rendered form is persisted — `renderCloze`
+/// derives it, so editing a highlight stays non-destructive.
+///
+/// `tags` is a `TEXT[]` column rather than a join table: v1 only ever reads all
+/// of a card's tags at once and filters with `&&`/`@>`, which the GIN index
+/// serves directly. A tags table would add two joins to every card read for a
+/// feature that has no per-tag rows of its own.
+model StudyCard {
+  id         String   @id @default(uuid()) @db.Uuid
+  studySetId String   @map("study_set_id") @db.Uuid
+  title      String
+  paragraph  String
+  tags       String[] @default([])
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  set     StudySet     @relation(fields: [studySetId], references: [id], onDelete: Cascade)
+  answers CardAnswer[]
+
+  @@index([studySetId, createdAt(sort: Desc)], map: "idx_cards_set")
+  /// GIN, not btree: btree cannot answer `tags && '{anatomy}'`. Declared here so
+  /// Prisma owns it and `migrate diff` does not report it as drift.
+  @@index([tags(ops: ArrayOps)], map: "idx_cards_tags", type: Gin)
+  @@map("study_cards")
+}
+
+/// One highlight: a code-point range into its card's paragraph.
+///
+/// Offsets are **Unicode code points**, not UTF-16 units — see
+/// `shared/src/cloze/codepoints.ts`. `startOffset` is inclusive, `endOffset`
+/// exclusive.
+///
+/// `answerText` is denormalised on purpose (plan §2.1): it is the validation
+/// payload *and* a corruption tripwire, since `answerText` must always equal
+/// `[...paragraph].slice(start, end).join('')`. A mismatch means a paragraph was
+/// edited without re-anchoring. The server always recomputes it from the offsets
+/// rather than trusting a client-supplied value, or the tripwire would be
+/// comparing client data against client data.
+model CardAnswer {
+  id          String   @id @default(uuid()) @db.Uuid
+  cardId      String   @map("card_id") @db.Uuid
+  startOffset Int      @map("start_offset")
+  endOffset   Int      @map("end_offset")
+  answerText  String   @map("answer_text")
+  altAnswers  String[] @default([]) @map("alt_answers")
+  /// 0-based, ordered by `startOffset`. Stored rather than derived so a blank's
+  /// identity is stable for review history across re-renders.
+  ordinal     Int
+
+  card StudyCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  /// `idx_answers_card` from plan §2.3, made UNIQUE rather than a plain index.
+  /// The columns a uniqueness constraint needs are exactly the ones the plan
+  /// wanted indexed, so this is one btree doing both jobs instead of two doing
+  /// one each. The uniqueness matters: without it two answers can both claim
+  /// blank 0 and the graded result depends on row order.
+  @@unique([cardId, ordinal], map: "idx_answers_card")
+  @@map("card_answers")
 }
