@@ -14,6 +14,7 @@ import { EditCardPage, NewCardPage } from '@/features/cards/CardEditorPage'
 import { SetDetailPage } from '@/features/cards/SetDetailPage'
 import { SetsPage } from '@/features/cards/SetsPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
+import { ProgressPage } from '@/features/dashboard/ProgressPage'
 import { StudySessionPage } from '@/features/study/StudySessionPage'
 import { createQueryClient } from '@/lib/query-client'
 import { useAuthStore } from '@/stores/auth'
@@ -97,6 +98,7 @@ export function App(): ReactElement {
                 >
                   <Route path="/" element={<DashboardPage />} />
                   <Route path="/sets" element={<SetsPage />} />
+                  <Route path="/progress" element={<ProgressPage />} />
                   {/*
                     One route, not two. Studying a single set is `?set=<id>` on the
                     same screen as studying everything — a path segment would make

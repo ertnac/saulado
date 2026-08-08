@@ -7,6 +7,7 @@ import { ApiError, sendError } from './http/errors.js'
 import { authRouter } from './routes/auth.js'
 import { cardsRouter, setCardsRouter, tagsRouter } from './routes/cards.js'
 import { healthRouter } from './routes/health.js'
+import { dashboardRouter, progressRouter } from './routes/progress.js'
 import { setsRouter } from './routes/sets.js'
 import { studyRouter } from './routes/study.js'
 
@@ -46,6 +47,8 @@ export function createApp(): Express {
   app.use('/api/cards', cardsRouter)
   app.use('/api/tags', tagsRouter)
   app.use('/api/study', studyRouter)
+  app.use('/api/dashboard', dashboardRouter)
+  app.use('/api/progress', progressRouter)
 
   app.use((_req, res) => {
     sendError(res, 'NOT_FOUND', 'Route not found')

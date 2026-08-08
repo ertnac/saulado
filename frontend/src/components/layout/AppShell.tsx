@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 const NAV = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/sets', label: 'Sets', end: false },
+  { to: '/progress', label: 'Progress', end: false },
 ]
 
 function ThemeToggle(): ReactElement {

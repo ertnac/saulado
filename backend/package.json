@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:backfill": "tsx src/scripts/backfill-daily-stats.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

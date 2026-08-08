@@ -14,6 +14,7 @@ import {
 } from '@tanstack/react-query'
 import * as api from '@/services/study'
 import { cardKeys, setKeys } from '@/features/cards/queries'
+import { dashboardKeys, progressKeys } from '@/features/dashboard/queries'
 
 /**
  * Caching for study sessions.
@@ -117,6 +118,13 @@ export function useSubmitAnswer(): UseMutationResult<AnswerResponse, Error, Subm
     retry: false,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: studyKeys.due() })
+      /**
+       * The dashboard carries today's reviews, the streak and the goal ring, and
+       * an answer moves all three. Invalidated per answer rather than only at
+       * session end, because the tab the user left the dashboard open in is the
+       * one that should not be showing this morning's zero.
+       */
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.all })
     },
   })
 }
@@ -137,6 +145,12 @@ export function useCompleteSession(): UseMutationResult<SummaryResponse, Error, 
       void queryClient.invalidateQueries({ queryKey: studyKeys.due() })
       void queryClient.invalidateQueries({ queryKey: setKeys.lists() })
       void queryClient.invalidateQueries({ queryKey: cardKeys.lists() })
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.all })
+      /**
+       * Every range, not just the one last viewed. A session that ends today
+       * changes today, and today is the last day of all four windows.
+       */
+      void queryClient.invalidateQueries({ queryKey: progressKeys.all })
     },
   })
 }

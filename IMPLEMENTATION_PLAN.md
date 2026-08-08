@@ -629,22 +629,79 @@ history to render rather than starting from the day they ship.
 
 **7 days**
 
+### 5.0 Shared progress contracts
+
+- [x] `shared/src/progress/` — `DayStat`, `StreakSummary`, `DashboardResponse`, `ProgressResponse`, the `ProgressRange` enum
+- [x] `fillDaySeries` (dense windows) and `accuracyPercent` (`null` for zero reviews, never 0)
+
 ### 5.1 Backend (2 days)
 
-- [ ] `GET /api/dashboard` — one request returning due count, streak, today's progress vs goal, recent sets, 7-day sparkline. **One request, not six.**
-- [ ] `GET /api/progress?range=30d` — daily counts, accuracy trend, per-set breakdown
-- [ ] Streak calculation from `user_daily_stats`, timezone-aware
-- [ ] Backfill script that rebuilds `user_daily_stats` from `reviews`
+- [x] `GET /api/dashboard` — one request returning due count, streak, today's progress vs goal, recent sets, 7-day sparkline. **One request, not six.**
+- [x] `GET /api/progress?range=30d` — daily counts, accuracy trend, per-set breakdown
+- [x] Streak calculation from `user_daily_stats`, timezone-aware
+- [x] Backfill script that rebuilds `user_daily_stats` from `reviews` — dry run by default, `--apply` to write
 
 ### 5.2 Frontend (5 days)
 
-- [ ] Dashboard: due-today hero with a single dominant "Start studying" CTA, streak, daily-goal ring, recent sets, quick-create
-- [ ] Progress page: reviews-per-day chart, accuracy trend, per-set table, contribution heatmap
-- [ ] Streak states that are honest and non-punitive — "2 days" and "Start a streak today" both read fine; avoid loss-framing
-- [ ] Genuine empty states for a brand-new user (no zeroed charts)
-- [ ] Charts: Recharts or `visx`. Respect `prefers-reduced-motion`, meet contrast in both themes, and never encode meaning in colour alone.
+- [x] Dashboard: due-today hero with a single dominant "Start studying" CTA, streak, daily-goal ring, recent sets, quick-create
+- [x] Progress page: reviews-per-day chart, accuracy trend, per-set table, contribution heatmap
+- [x] Streak states that are honest and non-punitive — "2 days" and "Start a streak today" both read fine; avoid loss-framing
+- [x] Genuine empty states for a brand-new user (no zeroed charts)
+- [x] ~~Charts: Recharts or `visx`~~ — hand-rolled instead, see [ADR 0002](./docs/adr/0002-charts.md). The accessible table, the colour-blind-safe ramp and the touch behaviour are ours to write either way; the library would have supplied `value / max * 100`. `prefers-reduced-motion` is met by construction (nothing animates), contrast in both themes, intensity by lightness not hue.
 
 **Done when:** a new user can go signup → create set → create card → study → see the result on the dashboard, with no dead ends.
+
+**Status — 2026-08-08: ⚠️ CODE COMPLETE, UNVERIFIED.**
+
+Every sub-phase above is written and on disk, including the tests. **None of it has
+been typechecked or run** — the shell has been unavailable for the whole of the
+session that finished it, so `tsc`, `vitest` and `lint` have not executed once
+against any Phase 5 file. Treat the checkboxes as "written", not "working".
+
+What stands in for the gate so far is a read-only review: every Prisma field
+cross-checked against `schema.prisma`, every `@saulado/shared` import against its
+definition, the router wiring in `app.ts`, and a hand-trace of the `TrendChart`
+fixture against the render structure its test asserts. That review found two wrong
+doc comments and no code defects, which is weaker evidence than a green suite and
+should not be mistaken for it.
+
+| Criterion                               | Result         | Evidence                                                                                 |
+| --------------------------------------- | -------------- | ---------------------------------------------------------------------------------------- |
+| Signup → set → card → study → dashboard | ⏳ unverified  | Written end to end; Part L of the checklist is the manual pass                           |
+| No dead ends                            | ⏳ unverified  | Every empty and error state carries a CTA; asserted in tests that have not run           |
+| Tests green                             | ⏳ **not run** | Target ≥ 676 before the new Phase 5 suites (240 → 264 shared, 226 backend, 186 frontend) |
+
+**To close this out**, in dependency order — shared must build first, since both
+consumers resolve `@saulado/shared` to `./dist`:
+
+```bash
+pnpm --filter @saulado/shared build
+pnpm --filter @saulado/backend exec tsc --noEmit
+pnpm --filter @saulado/frontend typecheck
+pnpm --filter @saulado/backend test -- --run
+pnpm --filter @saulado/frontend test -- --run
+pnpm lint
+```
+
+Then the manual pass in
+[docs/PHASE_5_TEST_CHECKLIST.md](./docs/PHASE_5_TEST_CHECKLIST.md) — Part B (a
+genuinely fresh account shows no zeroed charts) and Part E.4 (a rest day gaps the
+accuracy line rather than dipping it to zero) are the two most likely to be broken
+and least likely to be noticed. Full write-up in
+[docs/PHASE_5.md](./docs/PHASE_5.md).
+
+**No migration.** Phase 5 adds no tables and no columns; every number is derived
+from what Phase 4 already writes.
+
+**Carried into Phase 6:**
+
+| Item                                   | Note                                                                                                     |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `longest` is window-scoped to 400 days | Understated for a run older than that, never overstated                                                  |
+| `goalMet` cannot be rebuilt            | The review log does not record the day's goal, so the backfill can only promote it, never clear it       |
+| No per-set filter on `/progress`       | The table lists every set studied in the window; there is no way to chart one set alone                  |
+| Heatmap has no year navigation         | `365d` is the last 365 days, not a calendar year                                                         |
+| Per-set query fetches all card ids     | One query, but it grows with the library. The fix when it matters is a grouped join through `study_sets` |
 
 ---
 
