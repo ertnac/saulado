@@ -92,6 +92,12 @@ export async function startSession(
  * saved with no highlights yet ("highlighting can come later"), and `gradeCard`
  * grades an empty card `again` — so an unhighlighted card in the queue is a
  * permanent failure loop the user cannot escape by knowing the material.
+ *
+ * Archived sets are excluded from an all-sets sweep but *not* from a session the
+ * user asked for by id. Archiving exists to get a set out of the way, so leaving
+ * its cards in the daily queue would mean the one thing archiving promises never
+ * happens; asking for that set by id is an explicit override, and mirrors the
+ * library, where an archived set is hidden from the list but still opens.
  */
 async function loadCandidates(
   userId: string,
@@ -99,7 +105,7 @@ async function loadCandidates(
   today: DayKey,
 ): Promise<{ due: CandidateCard[]; fresh: CandidateCard[] }> {
   const scope = {
-    set: { userId, ...(studySetId ? { id: studySetId } : {}) },
+    set: studySetId ? { userId, id: studySetId } : { userId, archivedAt: null },
     answers: { some: {} },
   }
 

@@ -6,6 +6,7 @@ import type { SetsResponse, StudySet } from '@saulado/shared'
 import type { ReactElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '@/services/cards'
+import * as studyApi from '@/services/study'
 import { SetsPage } from './SetsPage'
 
 /**
@@ -19,8 +20,10 @@ import { SetsPage } from './SetsPage'
  */
 
 vi.mock('@/services/cards')
+vi.mock('@/services/study')
 
 const mocked = vi.mocked(api)
+const mockedStudy = vi.mocked(studyApi)
 
 function set(overrides: Partial<StudySet> = {}): StudySet {
   return {
@@ -57,6 +60,7 @@ function renderPage(): ReactElement {
 beforeEach(() => {
   vi.resetAllMocks()
   mocked.listSets.mockResolvedValue(page([]))
+  mockedStudy.getDueCounts.mockResolvedValue({ counts: [], totalDue: 0, scheduledCards: 0 })
 })
 
 describe('the list', () => {
@@ -169,6 +173,64 @@ describe('archiving', () => {
       expect(screen.getByText('Nothing archived')).toBeInTheDocument()
     })
     expect(screen.queryByRole('button', { name: 'Create your first set' })).not.toBeInTheDocument()
+  })
+})
+
+describe('the study affordance', () => {
+  it('badges a set with the number of cards waiting and links to that set', async () => {
+    mocked.listSets.mockResolvedValue(page([set()]))
+    mockedStudy.getDueCounts.mockResolvedValue({
+      counts: [{ studySetId: 'set-1', due: 4, newCards: 2 }],
+      totalDue: 4,
+      scheduledCards: 8,
+    })
+    render(renderPage())
+
+    const link = await screen.findByRole('link', { name: /Study/ })
+    // `?set=` rather than a path segment — one study route, scoped by query.
+    expect(link).toHaveAttribute('href', '/study?set=set-1')
+    expect(link).toHaveTextContent('4')
+  })
+
+  it('counts new cards when nothing is due yet', async () => {
+    // A brand-new set has no schedule rows, so `due` is 0 while there is plenty
+    // to do. Hiding the button here would make a freshly built set unstudiable.
+    mocked.listSets.mockResolvedValue(page([set()]))
+    mockedStudy.getDueCounts.mockResolvedValue({
+      counts: [{ studySetId: 'set-1', due: 0, newCards: 5 }],
+      totalDue: 0,
+      scheduledCards: 8,
+    })
+    render(renderPage())
+
+    expect(await screen.findByRole('link', { name: 'Study 5 new' })).toBeInTheDocument()
+  })
+
+  it('offers no study button when the set has nothing waiting', async () => {
+    // "Study (0)" teaches the user that the button lies.
+    mocked.listSets.mockResolvedValue(page([set()]))
+    render(renderPage())
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Hardware' })).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('link', { name: /Study/ })).not.toBeInTheDocument()
+  })
+
+  it('offers no study button for an archived set', async () => {
+    // The queue skips archived sets, so the link would open on "nothing due".
+    mocked.listSets.mockResolvedValue(page([set({ archivedAt: '2026-08-02T00:00:00.000Z' })]))
+    mockedStudy.getDueCounts.mockResolvedValue({
+      counts: [{ studySetId: 'set-1', due: 4, newCards: 0 }],
+      totalDue: 4,
+      scheduledCards: 8,
+    })
+    render(renderPage())
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Restore' })).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('link', { name: /Study/ })).not.toBeInTheDocument()
   })
 })
 

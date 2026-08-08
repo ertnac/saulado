@@ -178,6 +178,23 @@ export interface DueCount {
 
 export interface DueCountsResponse {
   counts: DueCount[]
-  /** Across every set, after the daily cap is applied. */
+  /**
+   * Cards due across every set, *uncapped* and excluding new cards.
+   *
+   * This answers "how much is waiting", not "how much will this session serve".
+   * Showing the capped figure would make a 300-card backlog read as whatever the
+   * cap happens to be and look like it was shrinking on its own; folding in new
+   * cards would make a freshly imported set read as overdue on day one.
+   */
   totalDue: number
+  /**
+   * Cards this user has a schedule row for — i.e. has studied at least once.
+   *
+   * `counts` only carries sets with something due or new, so it is empty both for
+   * a user who is caught up and for one who has never studied. Those two states
+   * read completely differently ("caught up for today" is an achievement;
+   * "nothing to study yet" is an invitation), and nothing else in the response
+   * tells them apart.
+   */
+  scheduledCards: number
 }

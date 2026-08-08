@@ -22,9 +22,13 @@ export async function getDueCounts(userId: string, now: Date): Promise<DueCounts
   // Cards with no blanks are excluded here for the same reason they are excluded
   // from the queue: an unhighlighted card cannot be answered correctly, so
   // counting it would promise a session that cannot be finished.
-  const studiable = { set: { userId }, answers: { some: {} } }
+  //
+  // Archived sets are excluded too, matching the all-sets queue. These numbers are
+  // a workload — a set the user has put away is not work they owe, and counting it
+  // would make archiving fail to reduce the figure it was used to reduce.
+  const studiable = { set: { userId, archivedAt: null }, answers: { some: {} } }
 
-  const [dueRows, newRows] = await Promise.all([
+  const [dueRows, newRows, scheduledCards] = await Promise.all([
     prisma.studyCard.groupBy({
       by: ['studySetId'],
       where: { ...studiable, schedules: { some: { userId, dueAt: { lte: today } } } },
@@ -35,6 +39,10 @@ export async function getDueCounts(userId: string, now: Date): Promise<DueCounts
       where: { ...studiable, schedules: { none: { userId } } },
       _count: { _all: true },
     }),
+    // Not filtered by `studiable`: this answers "has this user ever studied",
+    // and archiving a set or un-highlighting a card does not undo that. Scoped
+    // to the user's own sets so a shared set could never make it non-zero.
+    prisma.cardSchedule.count({ where: { userId, card: { set: { userId } } } }),
   ])
 
   const counts = new Map<string, { studySetId: string; due: number; newCards: number }>()
@@ -71,5 +79,6 @@ export async function getDueCounts(userId: string, now: Date): Promise<DueCounts
      * avoid showing.
      */
     totalDue: list.reduce((sum, entry) => sum + entry.due, 0),
+    scheduledCards,
   }
 }

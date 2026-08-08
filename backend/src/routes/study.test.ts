@@ -168,3 +168,105 @@ describe('POST /api/study/sessions', () => {
     expect(res.status).toBe(401)
   })
 })
+
+describe('archived sets', () => {
+  /**
+   * Archiving is the user saying "not now". If archived cards keep arriving in
+   * the daily queue and keep inflating the dashboard count, archiving has done
+   * nothing that the user could observe.
+   */
+
+  async function archive(token: string, setId: string): Promise<void> {
+    const res = await request(app)
+      .patch(`/api/sets/${setId}`)
+      .set('Authorization', auth(token))
+      .send({ archived: true })
+
+    expect(res.status).toBe(200)
+  }
+
+  it('keeps an archived set out of an all-sets session', async () => {
+    const { token } = await registerTestUser(app)
+    const kept = await seedSet(token, [{ title: 'Still studying', answers: [CPU] }])
+    const shelved = await seedSet(token, [{ title: 'Put away', answers: [CPU] }])
+    await archive(token, shelved)
+
+    const session = await startSession(token)
+
+    expect(session.queue).toHaveLength(1)
+    expect(session.queue[0]?.title).toBe('Still studying')
+    expect(kept).toBeTruthy()
+  })
+
+  it('still studies an archived set when asked for it by id', async () => {
+    // Mirrors the library, where an archived set is hidden from the list but
+    // still opens. Asking for it by id is an explicit override, not an accident.
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ title: 'Put away', answers: [CPU] }])
+    await archive(token, setId)
+
+    const session = await startSession(token, setId)
+
+    expect(session.queue).toHaveLength(1)
+    expect(session.queue[0]?.title).toBe('Put away')
+  })
+
+  it('leaves an archived set out of the due counts', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ title: 'Put away', answers: [CPU, BRAIN] }])
+    await archive(token, setId)
+
+    const res = await request(app).get('/api/study/due').set('Authorization', auth(token))
+
+    expect(res.status).toBe(200)
+    const body = res.body as { counts: { studySetId: string }[]; totalDue: number }
+    expect(body.counts.map((entry) => entry.studySetId)).not.toContain(setId)
+  })
+})
+
+describe('GET /api/study/due', () => {
+  /** The counts behind the library badges. Review-time behaviour is in `study.answers.test.ts`. */
+
+  it('reports new cards separately from due ones', async () => {
+    // A freshly built set has no schedule rows at all. Counting those as "due"
+    // would make a 500-card import read as 500 overdue reviews on day one.
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ title: 'Card one', answers: [CPU] }])
+
+    const res = await request(app).get('/api/study/due').set('Authorization', auth(token))
+
+    expect(res.status).toBe(200)
+    const body = res.body as {
+      counts: { studySetId: string; due: number; newCards: number }[]
+      totalDue: number
+      scheduledCards: number
+    }
+    const entry = body.counts.find((count) => count.studySetId === setId)
+    expect(entry).toEqual({ studySetId: setId, due: 0, newCards: 1 })
+    expect(body.totalDue).toBe(0)
+    // Nothing studied yet. This is what lets the dashboard tell "never started"
+    // from "caught up" — `counts` is empty for both once the queue is cleared.
+    expect(body.scheduledCards).toBe(0)
+  })
+
+  it('does not count a card with no blanks', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ title: 'Not yet highlighted', answers: [] }])
+
+    const res = await request(app).get('/api/study/due').set('Authorization', auth(token))
+
+    const body = res.body as { counts: { studySetId: string }[] }
+    expect(body.counts.map((entry) => entry.studySetId)).not.toContain(setId)
+  })
+
+  it('sees nothing belonging to another user', async () => {
+    const owner = await registerTestUser(app, 'owner')
+    const other = await registerTestUser(app, 'other')
+    await seedSet(owner.token, [{ title: 'Card one', answers: [CPU] }])
+
+    const res = await request(app).get('/api/study/due').set('Authorization', auth(other.token))
+
+    expect(res.status).toBe(200)
+    expect((res.body as { counts: unknown[] }).counts).toEqual([])
+  })
+})

@@ -6,6 +6,7 @@ import type { CardsResponse, StudyCardSummary, StudySet, TagsResponse } from '@s
 import type { ReactElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '@/services/cards'
+import * as studyApi from '@/services/study'
 import { SetDetailPage } from './SetDetailPage'
 
 /**
@@ -18,8 +19,10 @@ import { SetDetailPage } from './SetDetailPage'
  */
 
 vi.mock('@/services/cards')
+vi.mock('@/services/study')
 
 const mocked = vi.mocked(api)
+const mockedStudy = vi.mocked(studyApi)
 
 function set(overrides: Partial<StudySet> = {}): StudySet {
   return {
@@ -81,6 +84,11 @@ beforeEach(() => {
   mocked.getSet.mockResolvedValue({ set: set() })
   mocked.listCards.mockResolvedValue(cardsPage([summary()]))
   mocked.listTags.mockResolvedValue(TAGS)
+  mockedStudy.getDueCounts.mockResolvedValue({
+    counts: [{ studySetId: 'set-1', due: 3, newCards: 1 }],
+    totalDue: 3,
+    scheduledCards: 8,
+  })
 })
 
 describe('the card list', () => {
@@ -213,6 +221,26 @@ describe('the tag filter', () => {
     })
     expect(screen.getByRole('button', { name: 'Clear filter' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Add your first card' })).not.toBeInTheDocument()
+  })
+})
+
+describe('the study affordance', () => {
+  it('links to a session scoped to this set, counting due and new together', async () => {
+    render(renderPage())
+
+    const link = await screen.findByRole('link', { name: 'Study 4' })
+    expect(link).toHaveAttribute('href', '/study?set=set-1')
+  })
+
+  it('disables rather than hides the button when nothing is due', async () => {
+    // Unlike the library badge: the user came to this page *to* study this set,
+    // and a button that vanishes leaves them with no way in and no explanation.
+    mockedStudy.getDueCounts.mockResolvedValue({ counts: [], totalDue: 0, scheduledCards: 0 })
+    render(renderPage())
+
+    const button = await screen.findByRole('button', { name: 'Study' })
+    expect(button).toBeDisabled()
+    expect(screen.queryByRole('link', { name: /Study/ })).not.toBeInTheDocument()
   })
 })
 

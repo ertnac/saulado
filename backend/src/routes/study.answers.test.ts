@@ -366,6 +366,31 @@ describe('GET /api/study/due', () => {
     expect(session.id).toBeTruthy()
   })
 
+  it('records a schedule once a card has been reviewed', async () => {
+    /**
+     * `scheduledCards` is what separates "caught up" from "never studied" on the
+     * dashboard, and both of those show an empty `counts`. It has to move the
+     * moment a review lands, or the dashboard shows a first-run empty state to a
+     * user who has just finished their reviews.
+     */
+    const { token, session } = await setup()
+    const cardId = session.queue[0]?.cardId ?? ''
+
+    const before = await request(app).get('/api/study/due').set('Authorization', auth(token))
+    expect((before.body as { scheduledCards: number }).scheduledCards).toBe(0)
+
+    const graded = await answer(token, session.id, cardId, [{ ordinal: 0, submitted: 'CPU' }])
+    expect(graded.status).toBe(200)
+
+    const after = await request(app).get('/api/study/due').set('Authorization', auth(token))
+    const body = after.body as { counts: unknown[]; totalDue: number; scheduledCards: number }
+    expect(body.scheduledCards).toBe(1)
+    // Scheduled forward, so it is neither due nor new — the set drops out
+    // entirely, which is exactly the ambiguity `scheduledCards` resolves.
+    expect(body.counts).toEqual([])
+    expect(body.totalDue).toBe(0)
+  })
+
   it('requires authentication', async () => {
     const res = await request(app).get('/api/study/due')
     expect(res.status).toBe(401)

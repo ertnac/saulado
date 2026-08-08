@@ -4,6 +4,7 @@ import type { StudyCardSummary } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useDueCounts } from '@/features/study/queries'
 import { cn } from '@/lib/utils'
 import { SetDialog } from './SetDialog'
 import { flattenPages, useCards, useDeleteCard, useSet, useTags, useUpdateSet } from './queries'
@@ -62,6 +63,36 @@ function CardRow({
   )
 }
 
+/**
+ * This set's own study affordance.
+ *
+ * Shown even at zero, unlike the badge in the library — this page is where the
+ * user came *to* study one set, and a button that vanishes leaves them with no
+ * way in and no explanation. Disabled with the reason instead.
+ */
+function StudyAction({ setId }: { setId: string }): ReactElement {
+  const due = useDueCounts()
+
+  if (due.isPending) return <Skeleton className="h-11 w-24" />
+
+  const entry = due.data?.counts.find((count) => count.studySetId === setId)
+  const waiting = (entry?.due ?? 0) + (entry?.newCards ?? 0)
+
+  if (waiting === 0) {
+    return (
+      <Button disabled title="Nothing in this set is due today.">
+        Study
+      </Button>
+    )
+  }
+
+  return (
+    <Link className={buttonClass()} to={`/study?set=${setId}`}>
+      Study <span className="tabular-nums opacity-80">{waiting}</span>
+    </Link>
+  )
+}
+
 export function SetDetailPage(): ReactElement {
   const { setId } = useParams<{ setId: string }>()
   const [tags, setTags] = useState<string[]>([])
@@ -115,7 +146,7 @@ export function SetDetailPage(): ReactElement {
           )}
         </div>
 
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
           <Button
             variant="outline"
             disabled={current === undefined}
@@ -125,9 +156,13 @@ export function SetDetailPage(): ReactElement {
           >
             Edit set
           </Button>
-          <Link className={buttonClass()} to={`/sets/${setId ?? ''}/cards/new`}>
+          <Link
+            className={buttonClass({ variant: 'outline' })}
+            to={`/sets/${setId ?? ''}/cards/new`}
+          >
             New card
           </Link>
+          {setId !== undefined && <StudyAction setId={setId} />}
         </div>
       </header>
       {allTags.data && allTags.data.tags.length > 0 && (

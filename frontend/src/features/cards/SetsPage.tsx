@@ -1,9 +1,10 @@
 import { useState, type ReactElement } from 'react'
 import { Link } from 'react-router-dom'
 import type { StudySet } from '@saulado/shared'
-import { Button } from '@/components/ui/button'
+import { Button, buttonClass } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useDueCounts } from '@/features/study/queries'
 import { cn } from '@/lib/utils'
 import { setAccentClass } from './colors'
 import { SetDialog } from './SetDialog'
@@ -19,11 +20,15 @@ import { flattenPages, useCreateSet, useDeleteSet, useSets, useUpdateSet } from 
 
 function SetCard({
   set,
+  due,
+  newCards,
   onEdit,
   onArchive,
   onDelete,
 }: {
   set: StudySet
+  due: number
+  newCards: number
   onEdit: () => void
   onArchive: () => void
   onDelete: () => void
@@ -31,6 +36,7 @@ function SetCard({
   // `archivedAt` is a timestamp, not a flag — archive is reversible and the API
   // records *when*, so the button label is derived rather than read off a boolean.
   const isArchived = set.archivedAt !== null
+  const studiable = !isArchived && due + newCards > 0
 
   return (
     <li
@@ -65,6 +71,19 @@ function SetCard({
       </div>
 
       <div className="flex flex-wrap gap-2">
+        {/*
+          Study leads, and only appears when there is something to study — a
+          "Study (0)" button teaches the user that the button lies. Archived sets
+          never get one: the queue skips them, so it would open on "nothing due".
+        */}
+        {studiable && (
+          <Link className={buttonClass({ size: 'sm' })} to={`/study?set=${set.id}`}>
+            Study{' '}
+            <span className="tabular-nums opacity-80">
+              {due > 0 ? due : `${String(newCards)} new`}
+            </span>
+          </Link>
+        )}
         <Button variant="outline" size="sm" onClick={onEdit}>
           Edit
         </Button>
@@ -89,8 +108,12 @@ export function SetsPage(): ReactElement {
   const create = useCreateSet()
   const update = useUpdateSet()
   const remove = useDeleteSet()
+  const due = useDueCounts()
 
   const items = flattenPages(sets.data)
+  // A set absent from `counts` has nothing waiting — the endpoint only returns
+  // rows with something due or new, so a missing set is a zero, not unknown.
+  const counts = new Map(due.data?.counts.map((entry) => [entry.studySetId, entry]))
 
   return (
     <div className="space-y-6">
@@ -183,6 +206,8 @@ export function SetsPage(): ReactElement {
               <SetCard
                 key={set.id}
                 set={set}
+                due={counts.get(set.id)?.due ?? 0}
+                newCards={counts.get(set.id)?.newCards ?? 0}
                 onEdit={() => {
                   setEditing(set)
                 }}

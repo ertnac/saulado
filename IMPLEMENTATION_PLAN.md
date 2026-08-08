@@ -562,37 +562,66 @@ expected result.
 
 ### 4.1 Session backend (3 days)
 
-- [ ] `CardSource` interface + `SpacedRepetitionSource` (§2.4)
-- [ ] `POST /api/study/sessions` — `{ setId? }`, returns session + first batch of cards
-- [ ] Queue: due cards (`due_at <= today`, oldest first), then up to `new_cards_per_day` unseen cards, interleaved ~1 new per 4 reviews
-- [ ] `POST /api/study/sessions/:id/answers` — grades server-side, updates `card_schedules`, appends to `reviews`, updates `user_daily_stats`, **all in one transaction**
-- [ ] `POST /api/study/sessions/:id/complete` → session summary
-- [ ] Idempotency key on answer submission so a double-tap can't double-count
+- [x] `CardSource` interface + `SpacedRepetitionSource` (§2.4)
+- [x] `POST /api/study/sessions` — `{ setId? }`, returns session + first batch of cards
+- [x] Queue: due cards (`due_at <= today`, oldest first), then up to `new_cards_per_day` unseen cards, interleaved ~1 new per 4 reviews
+- [x] `POST /api/study/sessions/:id/answers` — grades server-side, updates `card_schedules`, appends to `reviews`, updates `user_daily_stats`, **all in one transaction**
+- [x] `POST /api/study/sessions/:id/complete` → session summary
+- [x] Idempotency key on answer submission so a double-tap can't double-count
+- [x] `GET /api/study/due` — the counts behind the dashboard and the library badges. Not in the original list; the study affordances have to come from somewhere, and a per-set count is the only way a Study button can honestly say what is waiting
 
 **Grade on the server, not the client.** Client-side grading means the answer ships to the browser before the user submits — trivially inspectable in devtools, and it makes cheating the default rather than an effort.
 
 ### 4.2 Study UI (5 days)
 
-- [ ] Card presentation: paragraph as the visual focus, blanks as inline inputs
-- [ ] Auto-focus blank 0; Tab / Enter advance between blanks; Enter on the last blank submits
-- [ ] **Zero layout shift** between the input state and the revealed state (§2.7)
-- [ ] Per-blank feedback: correct (green), typo-accepted (amber + correct spelling shown), wrong (red + answer revealed)
-- [ ] "Reveal answers" escape hatch → grades as `again`
-- [ ] Progress: `7 / 24`, plus a thin progress bar
-- [ ] Session summary: accuracy, time, cards seen, cards to revisit, "study again" CTA
-- [ ] Interruption recovery — refreshing mid-session must not lose progress
-- [ ] Keyboard shortcuts overlay (`?`)
+- [x] Card presentation: paragraph as the visual focus, blanks as inline inputs
+- [x] Auto-focus blank 0; Tab / Enter advance between blanks; Enter on the last blank submits
+- [x] **Zero layout shift** between the input state and the revealed state (§2.7)
+- [x] Per-blank feedback: correct (green), typo-accepted (amber + correct spelling shown), wrong (red + answer revealed)
+- [x] "Reveal answers" escape hatch → grades as `again`
+- [x] Progress: `7 / 24`, plus a thin progress bar
+- [x] Session summary: accuracy, time, cards seen, cards to revisit, "study again" CTA
+- [x] Interruption recovery — refreshing mid-session must not lose progress
+- [x] Study entry points: dashboard panel, per-set Study badges, `/study?set=<id>`. Implied by the phase rather than listed — a session backend with no way in is not a study mode
+- [ ] ~~Keyboard shortcuts overlay (`?`)~~ — deferred. There are two shortcuts, both named in a line under the card. An overlay listing two things is a second place to keep them correct
 
 ### 4.3 Scheduling polish (2 days)
 
-- [ ] Wire `calculateNextReview` with fuzz/cap/lapses
-- [ ] Daily review cap (setting) so a backlog doesn't present 400 cards
-- [ ] Overdue prioritization: sort by `due_at`, tie-break by `lapses DESC`
-- [ ] Leech detection at `lapses >= 8`
-- [ ] Timezone-correct day boundaries (§2.3)
-- [ ] Integration test: simulate 90 days of reviews, assert intervals grow as expected and nothing is orphaned
+- [x] Wire `calculateNextReview` with fuzz/cap/lapses
+- [x] Daily review cap (setting) so a backlog doesn't present 400 cards
+- [x] Overdue prioritization: sort by `due_at`, tie-break by `lapses DESC`
+- [x] Leech detection at `lapses >= 8`
+- [x] Timezone-correct day boundaries (§2.3)
+- [x] Integration test: simulate 90 days of reviews, assert intervals grow as expected and nothing is orphaned
 
 **Done when:** you study a set, get it wrong, and the card is due tomorrow; get it right repeatedly, and it's due in a month.
+
+**Status — 2026-08-08: ✅ COMPLETE** (one item deferred, listed above).
+
+| Criterion                          | Result | Evidence                                                                                                                            |
+| ---------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Wrong → due tomorrow               | ✅ met | `again` resets `interval_days` to 1 with no fuzz, and increments `lapses`. `grading.test.ts` plus `study.answers.test.ts`           |
+| Right repeatedly → due in a month  | ✅ met | 1 → 6 → ~15 → ~37 days. `simulation.test.ts` runs a synthetic learner for 90 days and asserts the ladder rather than one review     |
+| No answer text reaches the browser | ✅ met | Asserted against `JSON.stringify(session)`, not a text query — a leak into a `value` or `data-` attribute would pass `queryByText`  |
+| Zero layout shift on reveal        | ✅ met | Input and graded span share `calc(${answerLength}ch + 1rem)`; every blank on a card shares one width. `BlankSlot.test.tsx`          |
+| A → B isolation is 404, not 403    | ✅ met | Every study route takes a session id from the URL, which is the shape an IDOR takes. Cross-user tests on read, answer, and complete |
+| Tests green                        | ✅ met | **645** passing: 240 shared, 224 backend, 181 frontend. Typecheck, lint and format clean                                            |
+
+Full write-up in [docs/PHASE_4.md](./docs/PHASE_4.md); the manual pass is
+[docs/PHASE_4_TEST_CHECKLIST.md](./docs/PHASE_4_TEST_CHECKLIST.md).
+
+**Deferred, with reasons:**
+
+| Item                          | Why it waits                                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Keyboard shortcuts overlay    | Two shortcuts, both already named under the card. An overlay is a second place for them to go stale           |
+| Undo on a submitted answer    | Needs a compensating write across three tables. The re-queue softens a mistype, which covers the common case  |
+| `exact` blank width in the UI | `settings.ts` supports it, but shipping it means shipping a mode that leaks answer lengths by design          |
+| Acting on a leech             | Detection is wired and surfaced in the summary. Suspending cards is a scheduling policy Phase 5 can decide on |
+
+**Carried into Phase 5:** `user_daily_stats` is written on every review and read by
+nothing. The streak inputs are accumulating now, so Phase 5's progress views have real
+history to render rather than starting from the day they ship.
 
 ---
 
