@@ -5,7 +5,17 @@ import { useTheme } from '@/hooks/useTheme'
 import { useAuthStore } from '@/stores/auth'
 import { cn } from '@/lib/utils'
 
-const NAV = [{ to: '/', label: 'Dashboard' }]
+/**
+ * `end` is per item, not global.
+ *
+ * "/" needs it or it matches every route in the app. "/sets" must not have it, or
+ * the tab the user is standing in stops being highlighted the moment they open a
+ * set — the nav would claim they are nowhere.
+ */
+const NAV = [
+  { to: '/', label: 'Dashboard', end: true },
+  { to: '/sets', label: 'Sets', end: false },
+]
 
 function ThemeToggle(): ReactElement {
   const { theme, setTheme, isDark } = useTheme()
@@ -59,8 +69,7 @@ export function AppShell(): ReactElement {
               <NavLink
                 key={item.to}
                 to={item.to}
-                // `end` so "/" is not marked active on every nested route.
-                end
+                end={item.end}
                 className={({ isActive }) =>
                   cn(
                     'rounded-md px-3 py-2 text-sm font-medium',

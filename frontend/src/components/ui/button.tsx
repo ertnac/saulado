@@ -22,6 +22,28 @@ const sizes: Record<Size, string> = {
   lg: 'h-12 px-6 text-base',
 }
 
+/**
+ * The button recipe, separate from the element.
+ *
+ * A link that navigates must be an `<a>` — rendering it as a `<button>` loses
+ * middle-click, "open in new tab" and the status-bar URL preview, and screen
+ * readers announce the wrong role. So the styling is a function anything can
+ * apply, rather than something only `<button>` can have.
+ */
+export function buttonClass({
+  variant = 'default',
+  size = 'md',
+  className,
+}: { variant?: Variant; size?: Size; className?: string } = {}): string {
+  return cn(
+    'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors',
+    'disabled:pointer-events-none disabled:opacity-50',
+    variants[variant],
+    sizes[size],
+    className,
+  )
+}
+
 export function Button({
   className,
   variant = 'default',
@@ -29,17 +51,5 @@ export function Button({
   type = 'button',
   ...props
 }: ButtonProps): ReactElement {
-  return (
-    <button
-      type={type}
-      className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors',
-        'disabled:pointer-events-none disabled:opacity-50',
-        variants[variant],
-        sizes[size],
-        className,
-      )}
-      {...props}
-    />
-  )
+  return <button type={type} className={buttonClass({ variant, size, className })} {...props} />
 }

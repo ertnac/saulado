@@ -13,6 +13,11 @@
     --border: 214 32% 91%;
     --success: 142 71% 33%;
     --warning: 32 95% 38%;
+    /* Marked text in the highlight editor. Yellow because that is what
+       "highlighted" means outside software too, and it stays distinct from
+       --warning, which the same screen uses for rejected selections. */
+    --highlight: 48 96% 76%;
+    --highlight-foreground: 26 83% 14%;
     --radius: 0.6rem;
   }
 
@@ -28,6 +33,11 @@
        the saulado-ux skill: dark mode is where contrast usually breaks. */
     --success: 142 69% 58%;
     --warning: 38 92% 60%;
+    /* Deliberately still a light swatch with dark text in dark mode. A dimmed
+       highlight reads as disabled, and inverting to dark-on-dark loses the
+       "marked with a pen" cue the colour is carrying. */
+    --highlight: 45 90% 62%;
+    --highlight-foreground: 26 83% 12%;
   }
 
   * {

@@ -10,6 +10,9 @@ import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
+import { EditCardPage, NewCardPage } from '@/features/cards/CardEditorPage'
+import { SetDetailPage } from '@/features/cards/SetDetailPage'
+import { SetsPage } from '@/features/cards/SetsPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { createQueryClient } from '@/lib/query-client'
 import { useAuthStore } from '@/stores/auth'
@@ -92,6 +95,20 @@ export function App(): ReactElement {
                   }
                 >
                   <Route path="/" element={<DashboardPage />} />
+                  <Route path="/sets" element={<SetsPage />} />
+                  <Route path="/sets/:setId" element={<SetDetailPage />} />
+                  {/*
+                    Card creation is nested under its set because a card cannot
+                    exist without one — the route carries the owning set rather
+                    than making the editor guess it from state.
+                  */}
+                  <Route path="/sets/:setId/cards/new" element={<NewCardPage />} />
+                  {/*
+                    Editing is not, though: a card id is globally unique and the
+                    set is on the fetched card, so nesting it would only create a
+                    second URL for the same card that could disagree with itself.
+                  */}
+                  <Route path="/cards/:cardId" element={<EditCardPage />} />
                 </Route>
 
                 {/* Alias, so an early bookmark still lands somewhere real. */}

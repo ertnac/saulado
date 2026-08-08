@@ -1,16 +1,18 @@
 import type { ReactElement } from 'react'
-import { Button } from '@/components/ui/button'
+import { Link } from 'react-router-dom'
+import { buttonClass } from '@/components/ui/button'
 import { useAuthStore } from '@/stores/auth'
 
 /**
- * The Phase 2 dashboard.
+ * The dashboard.
  *
- * Genuinely empty, on purpose. There are no sets or cards until Phase 3, so this
- * teaches what a cloze card *is* rather than rendering charts full of zeroes —
- * a zeroed chart reads as "this app is broken" to a new user (saulado-ux §5).
+ * Still deliberately spare. It teaches what a cloze card *is* rather than
+ * rendering charts full of zeroes — a zeroed chart reads as "this app is broken"
+ * to a new user (saulado-ux §5).
  *
- * No streak or due-count either. Both would be honest zeroes and both would be
- * discouraging on day one, and neither has data behind it yet.
+ * No streak or due-count yet: review scheduling is Phase 4, so both numbers would
+ * be honest zeroes with nothing behind them, and both would be discouraging on day
+ * one. The CTA now points at the real library.
  */
 
 function ExampleCard(): ReactElement {
@@ -54,7 +56,7 @@ export function DashboardPage(): ReactElement {
           {user ? `Welcome, ${user.email.split('@')[0] ?? 'there'}` : 'Welcome'}
         </h1>
         <p className="mt-1 text-muted-foreground">
-          You&apos;re signed in. Study sets arrive in the next phase.
+          Build a set, highlight what matters, and study it in context.
         </p>
       </header>
 
@@ -67,13 +69,12 @@ export function DashboardPage(): ReactElement {
 
         <div className="rounded-lg border border-dashed border-border p-5">
           <p className="text-sm text-muted-foreground">
-            Creating sets and cards is Phase 3. Until then this is the shell: sign out, reload the
-            page, and you should land right back here.
+            A set holds cards on one subject. Each card is a paragraph of your own notes with the
+            words worth recalling blanked out.
           </p>
-          {/* Disabled rather than absent, so the shape of the app is visible. */}
-          <Button className="mt-4" size="lg" disabled title="Available in Phase 3">
+          <Link className={buttonClass({ size: 'lg', className: 'mt-4' })} to="/sets">
             Create your first set
-          </Button>
+          </Link>
         </div>
       </section>
     </div>
