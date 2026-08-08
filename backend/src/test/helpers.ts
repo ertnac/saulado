@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import type { Response } from 'supertest'
+import request, { type Response } from 'supertest'
 import { REFRESH_COOKIE_NAME } from '../auth/cookies.js'
 import { LoggingEmailProvider, emailProvider } from '../auth/email.js'
 import { prisma } from '../db/client.js'
@@ -25,7 +25,7 @@ let counter = 0
 /** A fresh address nothing else in the database can own. */
 export function testEmail(label = 'user'): string {
   counter += 1
-  return `phase2-${label}-${RUN_ID}-${String(counter)}@test.saulado.local`
+  return `saulado-${label}-${RUN_ID}-${String(counter)}@test.saulado.local`
 }
 
 /** Meets the shared password policy: >= 10 chars, not in the common list. */
@@ -86,6 +86,28 @@ export function outbox(): LoggingEmailProvider['outbox'] {
     )
   }
   return emailProvider.outbox
+}
+
+/**
+ * Registers a throwaway user and returns their access token.
+ *
+ * The sets and cards suites need an owner for almost every assertion, and two of
+ * them need a *second* owner to prove isolation. Taking the token from the
+ * register response rather than logging in afterwards keeps it to one request.
+ */
+export async function registerTestUser(
+  app: Parameters<typeof request>[0],
+  label = 'owner',
+): Promise<{ userId: string; email: string; token: string }> {
+  const email = testEmail(label)
+  const res = await request(app).post('/api/auth/register').send({ email, password: TEST_PASSWORD })
+
+  if (res.status !== 201) {
+    throw new Error(`register failed (${String(res.status)}): ${JSON.stringify(res.body)}`)
+  }
+
+  const body = res.body as { user: { id: string }; accessToken: string }
+  return { userId: body.user.id, email, token: body.accessToken }
 }
 
 /** The `?token=` value out of a reset email body. */

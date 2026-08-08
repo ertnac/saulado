@@ -271,8 +271,19 @@ describe('GET /api/auth/me', () => {
     expect(expiredRes.status).toBe(401)
     expect(expiredRes.body).toMatchObject({ error: { code: 'TOKEN_EXPIRED' } })
 
-    // Same token, one character of the signature flipped.
-    const tampered = `${accessToken.slice(0, -1)}${accessToken.endsWith('a') ? 'b' : 'a'}`
+    // Same token, one character of the *payload* flipped.
+    //
+    // Deliberately not the last character of the signature. An HS256 signature
+    // is 32 bytes, which base64url-encodes to 43 characters, so the final
+    // character carries 4 significant bits and 2 spare — flipping it can decode
+    // to the same 32 bytes, leaving the signature valid and this test failing
+    // about one run in sixteen. Payload characters are fully significant, so any
+    // flip there always breaks the signature.
+    const parts = accessToken.split('.')
+    expect(parts).toHaveLength(3)
+    const [header, payload, signature] = parts as [string, string, string]
+    const flipped = `${payload.slice(0, -1)}${payload.endsWith('a') ? 'b' : 'a'}`
+    const tampered = `${header}.${flipped}.${signature}`
     const tamperedRes = await request(app)
       .get('/api/auth/me')
       .set('Authorization', `Bearer ${tampered}`)
