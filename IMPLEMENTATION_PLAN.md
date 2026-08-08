@@ -551,6 +551,8 @@ The last one now carries **two** debts: this phase's, and the Phase 1.4 mobile t
 Android-only. Both want the same session on real hardware.
 
 See `docs/PHASE_3.md` for the gotchas — the badge-offset corruption bug above all.
+To check it by hand, `docs/PHASE_3_TEST_CHECKLIST.md` gives every step and its
+expected result.
 
 ---
 

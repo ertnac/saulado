@@ -157,12 +157,16 @@ On touch, adjusting a selection by dragging the handles fires no `mouseup` at al
 nothing on a phone — which is precisely the combination that ships.
 
 `selectionchange` fires in both, and the touch path pairs it with a pinned
-"Highlight selection" action bar rather than acting on every change, because on touch
-the selection is still being adjusted while the events arrive.
+**"Blank out selection"** action bar rather than acting on every change, because on
+touch the selection is still being adjusted while the events arrive.
 
 ---
 
 ## 5. Verifying it yourself
+
+> **A step-by-step checklist with the expected result for every action lives in
+> [PHASE_3_TEST_CHECKLIST.md](./PHASE_3_TEST_CHECKLIST.md).** This section is the
+> short version and the reasoning behind it.
 
 ### 5.1 The static gate
 
@@ -186,7 +190,7 @@ As of 2026-08-08: **491 tests** — 205 shared, 143 frontend, 143 backend.
    stores temporary data"_.
 3. Switch to **Highlight**. Select `CPU`, then `RAM`. Two badged highlights, numbered
    1 and 2 by position.
-4. The Preview pane reads `The ____¹ is the brain of the computer and ____² stores
+4. The Preview pane reads `The _____¹ is the brain of the computer and _____² stores
 temporary data` — both blanks the same width.
 5. Save. The row in the set shows the **original** paragraph, not the blanked form.
 6. Reopen it. Same two blanks, same positions.
