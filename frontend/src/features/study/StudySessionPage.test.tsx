@@ -495,3 +495,46 @@ describe('when there is nothing to study', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
 })
+
+describe('a session that arrives with nothing in it', () => {
+  /**
+   * The failure this guards against: the page waits on `session.card`, which is
+   * null both while the queue is loading and when it loaded empty. A session
+   * answered to the end without the completion call landing — reload on the last
+   * card, closed tab, finished in another tab — comes back open with an empty
+   * queue, and the skeleton then waits for a card that never arrives.
+   */
+  it('says the session is finished instead of loading forever', async () => {
+    mocked.startSession.mockResolvedValue({
+      session: session({ queue: [], progress: { answered: 1, total: 1, correct: 1 } }),
+    })
+
+    render(renderPage())
+
+    expect(await screen.findByText('This session is finished')).toBeInTheDocument()
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+  })
+
+  it('drops the resume pointer so a reload does not land back here', async () => {
+    mocked.startSession.mockResolvedValue({ session: session({ queue: [] }) })
+
+    render(renderPage())
+
+    await screen.findByText('This session is finished')
+    await waitFor(() => {
+      expect(localStorage.getItem('saulado-study-session')).toBeNull()
+    })
+  })
+
+  it('starts a fresh session when asked to study again', async () => {
+    mocked.startSession.mockResolvedValueOnce({ session: session({ queue: [] }) })
+    mocked.startSession.mockResolvedValueOnce({ session: session({ id: 'session-2' }) })
+
+    render(renderPage())
+
+    await screen.findByText('This session is finished')
+    await userEvent.click(screen.getByRole('button', { name: 'Study again' }))
+
+    expect(await screen.findByRole('heading', { name: 'The CPU' })).toBeInTheDocument()
+  })
+})

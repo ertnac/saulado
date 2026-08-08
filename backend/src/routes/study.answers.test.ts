@@ -39,7 +39,7 @@ interface SessionBody {
 
 async function setup(
   answers: { startOffset: number; endOffset: number }[] = [CPU],
-): Promise<{ token: string; session: SessionBody }> {
+): Promise<{ token: string; setId: string; session: SessionBody }> {
   const { token } = await registerTestUser(app)
 
   const setRes = await request(app)
@@ -60,7 +60,7 @@ async function setup(
     .send({ studySetId: setId })
 
   expect(res.status).toBe(200)
-  return { token, session: (res.body as { session: SessionBody }).session }
+  return { token, setId, session: (res.body as { session: SessionBody }).session }
 }
 
 let keyCounter = 0
@@ -338,6 +338,54 @@ describe('session lifecycle', () => {
     const res = await answer(token, session.id, cardId, [{ ordinal: 0, submitted: 'CPU' }])
 
     expect(res.status).toBe(400)
+  })
+
+  it('does not hand back an open session whose queue is empty', async () => {
+    /**
+     * The client completes a session when the queue empties, but nothing
+     * guarantees that call lands — answer the last card, then reload or close
+     * the tab, and the row stays open with every card answered. Returning it
+     * verbatim gives the study screen a 200 with no cards, which it cannot tell
+     * apart from a queue still loading, so it waits forever. And the same dead
+     * row keeps winning the lookup, so every later visit hangs too.
+     */
+    const { token, setId, session } = await setup()
+
+    await answer(token, session.id, session.queue[0]?.cardId ?? '', [
+      { ordinal: 0, submitted: 'CPU' },
+    ])
+
+    const res = await request(app)
+      .post('/api/study/sessions')
+      .set('Authorization', auth(token))
+      .send({ studySetId: setId })
+
+    // Nothing is due any more, so the honest answer is the "nothing due" 400 —
+    // never a 200 carrying an empty queue.
+    expect(res.status).toBe(400)
+
+    // And the spent session is closed rather than left to win the lookup again.
+    const resumed = await request(app)
+      .get(`/api/study/sessions/${session.id}`)
+      .set('Authorization', auth(token))
+    expect(
+      (resumed.body as { session: { completedAt: string | null } }).session.completedAt,
+    ).not.toBeNull()
+  })
+
+  it('still resumes an open session that has cards left', async () => {
+    // The guard above must not close a session the user is halfway through.
+    const { token, setId, session } = await setup([CPU, BRAIN])
+
+    const res = await request(app)
+      .post('/api/study/sessions')
+      .set('Authorization', auth(token))
+      .send({ studySetId: setId })
+
+    expect(res.status).toBe(200)
+    const body = (res.body as { session: SessionBody }).session
+    expect(body.id).toBe(session.id)
+    expect(body.queue).toHaveLength(1)
   })
 
   it('404s reading another user’s session', async () => {

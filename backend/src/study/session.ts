@@ -38,7 +38,31 @@ export async function startSession(
     select: { id: true },
   })
 
-  if (existing) return getSession(userId, existing.id)
+  if (existing) {
+    const resumed = await getSession(userId, existing.id)
+
+    /**
+     * An open session with an empty queue is *spent*, not resumable.
+     *
+     * The client completes a session when its queue empties, but nothing
+     * guarantees that call happens: answer the last card and then reload, close
+     * the tab, or lose connectivity, and the row stays `completedAt: null` with
+     * every card answered. Returning it verbatim hands the caller a session with
+     * no cards in it — and because that is a 200 rather than an error, the study
+     * screen cannot tell it apart from a queue still loading. It waits forever,
+     * on this visit and on every later one, since the same dead row keeps
+     * winning this lookup.
+     *
+     * Closing it here makes the state self-healing: the user gets a real session
+     * built from what is actually due, or the honest "nothing due" below.
+     */
+    if (resumed.queue.length > 0) return resumed
+
+    await prisma.studySession.update({
+      where: { id: existing.id },
+      data: { completedAt: now },
+    })
+  }
 
   if (studySetId) {
     const set = await prisma.studySet.findFirst({

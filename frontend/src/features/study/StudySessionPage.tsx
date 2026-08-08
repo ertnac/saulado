@@ -168,6 +168,28 @@ export function StudySessionPage(): ReactElement {
     }
   })
 
+  /**
+   * A session that was adopted but has no cards left in it.
+   *
+   * Indistinguishable from "still loading" by `session.card` alone — both are
+   * null. `sessionId` is the discriminator: it is set only once a session has
+   * actually loaded, so this means the queue arrived and was empty rather than
+   * that it has not arrived yet.
+   *
+   * Reachable whenever a session is answered to the end without the completion
+   * call landing: the last card answered and then a reload, a closed tab, or the
+   * same session finished elsewhere. Without a branch of its own it falls
+   * through to the skeleton and waits for a card that is never coming.
+   */
+  const sessionSpent =
+    sessionId !== null && !session.card && summary === null && !complete.isPending
+
+  useEffect(() => {
+    // Drop the pointer so a reload starts a fresh session rather than resuming
+    // one with nothing left in it.
+    if (sessionSpent) forgetSession()
+  }, [sessionSpent])
+
   if (summary) {
     return (
       <SessionSummaryView
@@ -226,6 +248,38 @@ export function StudySessionPage(): ReactElement {
               Try again
             </Button>
           )}
+        </div>
+      </div>
+    )
+  }
+
+  if (sessionSpent) {
+    return (
+      <div className="rounded-lg border border-dashed border-border p-8 text-center">
+        <p className="font-medium">This session is finished</p>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+          Every card in it has been answered. Start another to keep going.
+        </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-3">
+          <Link className={buttonClass({ variant: 'outline' })} to="/">
+            Back to the dashboard
+          </Link>
+          <Button
+            disabled={start.isPending}
+            onClick={() => {
+              setSessionId(null)
+              start.reset()
+              start.mutate(studySetId ?? undefined, {
+                onSuccess: (data) => {
+                  setSessionId(data.session.id)
+                  rememberSession(data.session.id)
+                  session.load(data.session)
+                },
+              })
+            }}
+          >
+            {start.isPending ? 'Starting…' : 'Study again'}
+          </Button>
         </div>
       </div>
     )
