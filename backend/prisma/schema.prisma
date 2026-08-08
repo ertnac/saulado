@@ -1,5 +1,6 @@
 // Phase 2 adds auth. Phase 3 adds sets/cards/answers per IMPLEMENTATION_PLAN.md
-// §2.3; scheduling tables arrive in Phase 4.
+// §2.3. Phase 4 adds the scheduling tables (§2.2) and the session tables that
+// make a review resumable.
 
 generator client {
   provider        = "prisma-client-js"
@@ -38,6 +39,10 @@ model User {
   refreshTokens  RefreshToken[]
   passwordResets PasswordReset[]
   studySets      StudySet[]
+  schedules      CardSchedule[]
+  reviews        Review[]
+  dailyStats     UserDailyStats[]
+  studySessions  StudySession[]
 
   @@map("users")
 }
@@ -123,8 +128,9 @@ model StudySet {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cards StudyCard[]
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cards    StudyCard[]
+  sessions StudySession[]
 
   /// Matches the sets-list query: scoped by owner, most recently touched first.
   @@index([userId, updatedAt(sort: Desc)], map: "idx_sets_user")
@@ -150,8 +156,11 @@ model StudyCard {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  set     StudySet     @relation(fields: [studySetId], references: [id], onDelete: Cascade)
-  answers CardAnswer[]
+  set          StudySet            @relation(fields: [studySetId], references: [id], onDelete: Cascade)
+  answers      CardAnswer[]
+  schedules    CardSchedule[]
+  reviews      Review[]
+  sessionCards StudySessionCard[]
 
   @@index([studySetId, createdAt(sort: Desc)], map: "idx_cards_set")
   /// GIN, not btree: btree cannot answer `tags && '{anatomy}'`. Declared here so
@@ -192,4 +201,162 @@ model CardAnswer {
   /// blank 0 and the graded result depends on row order.
   @@unique([cardId, ordinal], map: "idx_answers_card")
   @@map("card_answers")
+}
+
+/// A card's scheduling state: one hot row per (user, card).
+///
+/// Split from `reviews` on purpose (plan §2.2). This table answers the only
+/// question the study loop asks — "what is due?" — and `idx_schedules_due`
+/// serves it as an index-only range scan. `CLAUDE.md` puts `next_review` on the
+/// review rows instead, which turns that question into "the newest review per
+/// card, then filter", a correlated subquery over a table that grows without
+/// bound. Two tables because they have opposite access patterns: this one is
+/// read and overwritten constantly, `reviews` is append-only and never read on
+/// the hot path.
+///
+/// `dueAt` is a `DATE`, not a timestamp. A card is due *on a day* in the user's
+/// own timezone; storing an instant would make "due today" depend on the hour
+/// the last review happened to land on.
+///
+/// The row is created on first review, not with the card — absence is what marks
+/// a card as new, so no backfill is needed when a card is created.
+model CardSchedule {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  cardId       String   @map("card_id") @db.Uuid
+  easeFactor   Decimal  @default(2.50) @map("ease_factor") @db.Decimal(3, 2)
+  intervalDays Int      @default(0) @map("interval_days")
+  repetitions  Int      @default(0)
+  /// Incremented on every `again`. At `LEECH_THRESHOLD` (8) the card is a leech
+  /// and is surfaced so the user can rewrite it rather than keep failing it.
+  lapses       Int      @default(0)
+  dueAt        DateTime @map("due_at") @db.Date
+  lastReviewedAt DateTime? @map("last_reviewed_at")
+
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card StudyCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  /// One schedule per user per card. Without this constraint a race between two
+  /// tabs submitting the same card creates two schedules, and which one wins
+  /// "what is due" depends on row order.
+  @@unique([userId, cardId], map: "idx_schedules_user_card")
+  /// The queue query, exactly: `WHERE user_id = $1 AND due_at <= $2 ORDER BY due_at`.
+  @@index([userId, dueAt], map: "idx_schedules_due")
+  @@map("card_schedules")
+}
+
+/// The append-only review log. Never read to build a queue.
+///
+/// Everything in `user_daily_stats` is derivable from this table, which is what
+/// makes that rollup safe to keep: if it ever drifts, it can be rebuilt from
+/// here. Nothing else in the system has that property, so nothing else may be
+/// the only copy of a fact.
+///
+/// `grade` is a `SMALLINT` — 0 again, 1 hard, 2 good, 3 easy, ordered by how
+/// well the card went so `AVG(grade)` means something. The mapping lives in
+/// shared `GRADE_CODES` and nowhere else.
+model Review {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  cardId String @map("card_id") @db.Uuid
+  grade  Int    @db.SmallInt
+  /// `[{ ordinal, submitted, correct, matchType, canonical }]`. JSONB rather
+  /// than a fourth table (plan §2.2): v1 only ever reads a review's blanks all
+  /// at once. Promote it if per-blank querying becomes a real need.
+  blankResults Json     @map("blank_results")
+  durationMs   Int?     @map("duration_ms")
+  reviewedAt   DateTime @default(now()) @map("reviewed_at")
+
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card StudyCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([userId, reviewedAt(sort: Desc)], map: "idx_reviews_user_date")
+  @@index([cardId, reviewedAt(sort: Desc)], map: "idx_reviews_card")
+  @@map("reviews")
+}
+
+/// A per-day rollup, written in the same transaction as each review.
+///
+/// A rollup, **not a source of truth** — see `reviews`. It exists because the
+/// dashboard and the streak both need "reviews on day N" for the last few
+/// months, and computing that by scanning the review log gets slower every day
+/// the user keeps studying.
+///
+/// `day` is a `DATE` in the *user's* timezone (plan §2.3). Rolling up by UTC day
+/// would break the streak for anyone who studies in the evening east of
+/// Greenwich: their 21:00 session lands on tomorrow's row.
+model UserDailyStats {
+  userId       String   @map("user_id") @db.Uuid
+  day          DateTime @db.Date
+  reviewsCount Int      @default(0) @map("reviews_count")
+  correctCount Int      @default(0) @map("correct_count")
+  /// Snapshotted rather than compared against the current `daily_goal`: lowering
+  /// the goal must not retroactively award days the user did not earn.
+  goalMet      Boolean  @default(false) @map("goal_met")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day])
+  @@index([userId, day(sort: Desc)], map: "idx_daily_stats_user_day")
+  @@map("user_daily_stats")
+}
+
+/// One sitting. Server-side so a refresh does not lose progress (plan §4.2).
+///
+/// The queue could have lived in the client — it is, after all, just a list. But
+/// then closing the tab mid-review loses the ordering, the count, and any card
+/// the user was part-way through; and a client that owns the queue is a client
+/// that can reorder it to see the easy cards first. The server holds it, and
+/// `GET /api/study/sessions/:id` returns whatever is left.
+model StudySession {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  /// Null when studying across every set.
+  studySetId  String?   @map("study_set_id") @db.Uuid
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  user  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  set   StudySet?          @relation(fields: [studySetId], references: [id], onDelete: Cascade)
+  cards StudySessionCard[]
+
+  /// Finds the user's resumable session: the newest one with no `completed_at`.
+  @@index([userId, startedAt(sort: Desc)], map: "idx_sessions_user")
+  @@map("study_sessions")
+}
+
+/// A card's slot in one session's queue.
+///
+/// `position` is mutable: a card graded `again` is moved further back rather than
+/// re-inserted, so the denominator of `7 / 24` never changes mid-session.
+/// `answeredAt` is set only on final disposition, which is what keeps the
+/// numerator monotonic — a re-queued card is not counted until it is done with.
+///
+/// `lastResult` is the idempotency payload, not a record. A double-tap on a phone
+/// must not book two reviews for one recall, so a replayed `idempotencyKey`
+/// returns this verbatim and writes nothing. It is session-scoped and disposable;
+/// `reviews` remains the durable account of what happened.
+model StudySessionCard {
+  id        String  @id @default(uuid()) @db.Uuid
+  sessionId String  @map("session_id") @db.Uuid
+  cardId    String  @map("card_id") @db.Uuid
+  position  Int
+  /// No schedule row existed when the queue was built.
+  isNew     Boolean @default(false) @map("is_new")
+  attempts  Int     @default(0)
+  answeredAt DateTime? @map("answered_at")
+  grade      Int?      @db.SmallInt
+  correct    Boolean?
+  idempotencyKey String? @map("idempotency_key")
+  lastResult     Json?   @map("last_result")
+
+  session StudySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  card    StudyCard    @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  /// A card appears once per session. Re-queueing moves the row; it does not
+  /// add one, or the same card could be scheduled twice from one sitting.
+  @@unique([sessionId, cardId], map: "idx_session_cards_unique")
+  /// The queue read: unanswered rows for a session, in order.
+  @@index([sessionId, position], map: "idx_session_cards_order")
+  @@map("study_session_cards")
 }
