@@ -3,11 +3,12 @@ import cors from 'cors'
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 import helmet from 'helmet'
 import { env } from './config/env.js'
-import { sendError } from './http/errors.js'
+import { ApiError, sendError } from './http/errors.js'
 import { authRouter } from './routes/auth.js'
 import { cardsRouter, setCardsRouter, tagsRouter } from './routes/cards.js'
 import { healthRouter } from './routes/health.js'
 import { setsRouter } from './routes/sets.js'
+import { studyRouter } from './routes/study.js'
 
 /**
  * App construction is separated from server startup so integration tests can
@@ -44,6 +45,7 @@ export function createApp(): Express {
   app.use('/api/sets/:setId/cards', setCardsRouter)
   app.use('/api/cards', cardsRouter)
   app.use('/api/tags', tagsRouter)
+  app.use('/api/study', studyRouter)
 
   app.use((_req, res) => {
     sendError(res, 'NOT_FOUND', 'Route not found')
@@ -51,6 +53,19 @@ export function createApp(): Express {
 
   // Four args required — Express identifies error middleware by arity.
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+    /**
+     * `ApiError` is a deliberate, already-classified failure — a 404 for a
+     * session that is not yours, a 400 for one that has already finished. The
+     * sets and cards routes hold `res` and call `sendError` directly, but the
+     * study services are called from several routes and have no response to
+     * write to, so they throw instead. Without this branch every one of those
+     * would arrive here as an unclassified 500.
+     */
+    if (err instanceof ApiError) {
+      sendError(res, err.code, err.message, err.fields ? { fields: err.fields } : undefined)
+      return
+    }
+
     console.error('[unhandled]', err)
     sendError(res, 'INTERNAL_ERROR', 'Something went wrong')
   })
