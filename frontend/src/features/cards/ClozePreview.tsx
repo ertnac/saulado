@@ -29,7 +29,7 @@ export function ClozePreview({ paragraph, answers, className }: ClozePreviewProp
   return (
     <div
       className={cn(
-        'whitespace-pre-wrap rounded-md border border-border bg-muted/40 p-4 text-base leading-relaxed',
+        'whitespace-pre-wrap rounded-lg bg-surface-muted p-4 text-base leading-relaxed',
         className,
       )}
     >

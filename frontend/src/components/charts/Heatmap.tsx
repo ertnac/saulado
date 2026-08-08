@@ -18,7 +18,7 @@ import { longDate, weekdayIndex } from './scale'
  */
 
 const LEVEL_CLASSES = [
-  'bg-muted',
+  'bg-surface-muted',
   'bg-success/30',
   'bg-success/50',
   'bg-success/75',

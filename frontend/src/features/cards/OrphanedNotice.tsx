@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import type { DraftAnswer } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
+import { AlertIcon } from '@/components/ui/icons'
 
 /**
  * Tells the user which highlights an edit destroyed (plan §2.1, §3.3).
@@ -30,8 +31,13 @@ export function OrphanedNotice({ orphaned, onDismiss }: OrphanedNoticeProps): Re
   const count = orphaned.length
 
   return (
-    <div role="status" className="space-y-3 rounded-md border border-warning bg-muted p-4 text-sm">
-      <p className="font-medium">
+    <div
+      role="status"
+      className="space-y-3 rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm"
+    >
+      {/* Icon as well as the tint — the border colour alone says nothing. */}
+      <p className="flex items-start gap-1.5 font-medium text-warning">
+        <AlertIcon className="mt-0.5 h-[1em] w-[1em]" />
         {count === 1
           ? '1 highlight no longer matches your text'
           : `${String(count)} highlights no longer match your text`}
@@ -46,14 +52,14 @@ export function OrphanedNotice({ orphaned, onDismiss }: OrphanedNoticeProps): Re
         {orphaned.map((answer, index) => (
           <li
             key={`${answer.answerText}-${String(index)}`}
-            className="rounded-full border border-border bg-background px-3 py-1"
+            className="rounded-full bg-surface px-3 py-1 shadow-soft"
           >
             {answer.answerText}
           </li>
         ))}
       </ul>
 
-      <Button variant="outline" size="sm" onClick={onDismiss}>
+      <Button variant="soft" size="sm" onClick={onDismiss}>
         Got it
       </Button>
     </div>

@@ -1,6 +1,17 @@
-import { useEffect, useState, type ReactElement } from 'react'
+import { useEffect, useState, type ComponentType, type ReactElement } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import {
+  ChartIcon,
+  HomeIcon,
+  LayersIcon,
+  LogoutIcon,
+  MoonIcon,
+  SearchIcon,
+  SunIcon,
+  type IconProps,
+} from '@/components/ui/icons'
 import { CommandPalette } from '@/features/search/CommandPalette'
 import { useSearchShortcut } from '@/features/search/useSearchShortcut'
 import { useTheme } from '@/hooks/useTheme'
@@ -14,11 +25,67 @@ import { cn } from '@/lib/utils'
  * the tab the user is standing in stops being highlighted the moment they open a
  * set — the nav would claim they are nowhere.
  */
-const NAV = [
-  { to: '/', label: 'Dashboard', end: true },
-  { to: '/sets', label: 'Sets', end: false },
-  { to: '/progress', label: 'Progress', end: false },
+const NAV: { to: string; label: string; end: boolean; icon: ComponentType<IconProps> }[] = [
+  { to: '/', label: 'Dashboard', end: true, icon: HomeIcon },
+  { to: '/sets', label: 'Sets', end: false, icon: LayersIcon },
+  { to: '/progress', label: 'Progress', end: false, icon: ChartIcon },
 ]
+
+/**
+ * One nav element, laid out two ways.
+ *
+ * A bottom bar on phones and a left rail on desktop, from the same markup —
+ * rendering two navs and hiding one with CSS would put every destination in the
+ * accessibility tree twice, and a screen reader does not read `display: none`
+ * out of a stylesheet that failed to load.
+ */
+function MainNav(): ReactElement {
+  return (
+    <nav
+      aria-label="Main"
+      className={cn(
+        'fixed inset-x-0 bottom-0 z-40 flex items-center justify-around gap-1 border-t border-border',
+        'bg-surface/85 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-md',
+        'md:inset-x-auto md:inset-y-0 md:left-0 md:w-20 md:flex-col md:justify-start',
+        'md:gap-2 md:border-r md:border-t-0 md:px-0 md:pt-6',
+      )}
+    >
+      {NAV.map((item) => {
+        const ItemIcon = item.icon
+        return (
+          <NavLink key={item.to} to={item.to} end={item.end} title={item.label} className="group">
+            {({ isActive }) => (
+              <span className="flex w-16 flex-col items-center gap-1 py-1.5 md:w-20 md:py-0">
+                <span
+                  className={cn(
+                    'flex h-11 w-11 items-center justify-center rounded-full text-xl',
+                    'transition-[background-color,color,box-shadow] duration-150',
+                    isActive
+                      ? // A filled disc, not just a tint: the active item has to
+                        // survive being read in greyscale.
+                        'bg-primary text-primary-foreground shadow-soft'
+                      : 'text-muted-foreground group-hover:bg-surface-muted group-hover:text-foreground',
+                  )}
+                >
+                  <ItemIcon />
+                </span>
+                {/* Visible on phones, name-only on desktop where the rail is icons. */}
+                <span
+                  className={cn(
+                    'text-[11px] font-medium md:sr-only',
+                    isActive ? 'text-foreground' : 'text-muted-foreground',
+                  )}
+                >
+                  {item.label}
+                </span>
+              </span>
+            )}
+          </NavLink>
+        )
+      })}
+    </nav>
+  )
+}
 
 /**
  * The palette trigger, showing the shortcut it stands in for.
@@ -27,6 +94,9 @@ const NAV = [
  * invisible to anyone who has not been told about it, and a search box that only
  * exists as a keystroke is a search box most users never find. Rendering the hint
  * with the right modifier needs the platform, which is only knowable at runtime.
+ *
+ * Shaped like the field it opens rather than like a button — but still a
+ * `<button>`, because it opens a dialog and does not accept typing in place.
  */
 function SearchTrigger({ onOpen }: { onOpen: () => void }): ReactElement {
   const [isMac, setIsMac] = useState(false)
@@ -39,23 +109,26 @@ function SearchTrigger({ onOpen }: { onOpen: () => void }): ReactElement {
   }, [])
 
   return (
-    <Button
-      variant="outline"
-      size="sm"
+    <button
+      type="button"
       onClick={onOpen}
       aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
       aria-label="Search cards"
-      className="gap-2 text-muted-foreground"
+      className={cn(
+        'flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-full border border-border',
+        'bg-surface text-muted-foreground transition-colors duration-150 hover:text-foreground',
+        'sm:w-full sm:max-w-sm sm:justify-start sm:px-4',
+      )}
     >
-      <span aria-hidden="true">⌕</span>
-      <span className="hidden sm:inline">Search</span>
+      <SearchIcon />
+      <span className="hidden flex-1 text-left text-sm sm:inline">Search cards</span>
       <kbd
-        className="hidden rounded border border-border px-1 text-xs md:inline"
+        className="hidden rounded-full bg-surface-muted px-2 py-0.5 text-[11px] md:inline"
         aria-hidden="true"
       >
         {isMac ? '⌘' : 'Ctrl'}K
       </kbd>
-    </Button>
+    </button>
   )
 }
 
@@ -63,9 +136,7 @@ function ThemeToggle(): ReactElement {
   const { theme, setTheme, isDark } = useTheme()
 
   return (
-    <Button
-      variant="ghost"
-      size="sm"
+    <IconButton
       onClick={() => {
         // Two-step cycle from whatever is currently showing. A three-way
         // light/dark/system rotation through a single button leaves the user
@@ -74,11 +145,10 @@ function ThemeToggle(): ReactElement {
       }}
       // The label says what the button will do, not what the state is — a
       // screen-reader user cannot see the icon to infer the difference.
-      aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+      label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+      icon={isDark ? <SunIcon /> : <MoonIcon />}
       title={theme === 'system' ? 'Following your system theme' : undefined}
-    >
-      <span aria-hidden="true">{isDark ? '☀' : '☾'}</span>
-    </Button>
+    />
   )
 }
 
@@ -86,9 +156,10 @@ export function AppShell(): ReactElement {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const palette = useSearchShortcut()
+  const initial = (user?.email ?? '?').charAt(0).toUpperCase()
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="min-h-screen md:pl-20">
       {/*
         Skip link (saulado-ux §6). First focusable element in the document, and
         visible only once focused — a keyboard user should not have to tab
@@ -96,36 +167,22 @@ export function AppShell(): ReactElement {
       */}
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:ring-2 focus:ring-primary"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-surface focus:px-4 focus:py-2 focus:shadow-lift"
       >
         Skip to content
       </a>
 
-      <header className="border-b border-border">
-        <div className="mx-auto flex h-16 max-w-5xl items-center gap-4 px-4">
-          <Link to="/" className="font-semibold tracking-tight">
+      <MainNav />
+
+      <header className="sticky top-0 z-30 bg-background/70 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-5xl items-center gap-2 px-4 sm:gap-3">
+          <Link to="/" className="shrink-0 font-semibold tracking-tight">
             Saulado
           </Link>
 
-          <nav aria-label="Main" className="flex flex-1 items-center gap-1">
-            {NAV.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  cn(
-                    'rounded-md px-3 py-2 text-sm font-medium',
-                    isActive ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted',
-                  )
-                }
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
-
-          <SearchTrigger onOpen={palette.onOpen} />
+          <div className="flex flex-1 justify-end sm:justify-center">
+            <SearchTrigger onOpen={palette.onOpen} />
+          </div>
 
           <ThemeToggle />
 
@@ -136,33 +193,41 @@ export function AppShell(): ReactElement {
           */}
           <NavLink
             to="/settings"
+            title="Settings"
             className={({ isActive }) =>
               cn(
-                'max-w-[10rem] truncate rounded-md px-3 py-2 text-sm',
-                isActive ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted',
+                'flex h-11 items-center gap-2 rounded-full pl-1 pr-1 text-sm lg:pr-3',
+                'transition-colors duration-150',
+                isActive ? 'bg-surface-muted text-foreground' : 'hover:bg-surface-muted',
               )
             }
           >
-            <span className="hidden sm:inline">{user?.email ?? 'Settings'}</span>
-            <span className="sm:hidden" aria-hidden="true">
-              ⚙
+            <span
+              aria-hidden="true"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground"
+            >
+              {initial}
             </span>
-            <span className="sr-only sm:hidden">Settings</span>
+            <span className="hidden max-w-[12rem] truncate lg:inline">{user?.email}</span>
+            <span className="sr-only">Settings</span>
           </NavLink>
 
           <Button
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            aria-label="Sign out"
+            className="h-11 w-11 p-0 sm:w-auto sm:px-4"
             onClick={() => {
               void logout()
             }}
           >
-            Sign out
+            <LogoutIcon />
+            <span className="hidden sm:inline">Sign out</span>
           </Button>
         </div>
       </header>
 
-      <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
+      {/* Bottom padding clears the mobile nav bar, which is fixed over the page. */}
+      <main id="main" className="mx-auto w-full max-w-5xl px-4 pb-28 pt-4 md:pb-16 md:pt-6">
         <Outlet />
       </main>
 

@@ -9,7 +9,10 @@ import {
   type UpdateSettingsRequest,
 } from '@saulado/shared'
 import { Link } from 'react-router-dom'
+import { Card } from '@/components/ui/card'
+import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { hasStoredTheme, useTheme } from '@/hooks/useTheme'
 import { toast } from '@/stores/toast'
 import { useSettings, useUpdateSettings } from './queries'
@@ -83,26 +86,29 @@ export function SettingsPage(): ReactElement {
 
   if (isError || !settings) {
     return (
-      <div className="rounded-lg border border-border p-6">
+      <Card tone="dashed" className="p-6">
         <h1 className="text-lg font-semibold">Settings could not be loaded</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Check your connection and reload the page.
         </p>
-      </div>
+      </Card>
     )
   }
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Changes save as you make them.{' '}
-          <Link to="/account" className="font-medium text-foreground underline">
-            Account and data
-          </Link>
-        </p>
-      </header>
+    <div className="space-y-6">
+      <PageHeader
+        title="Settings"
+        description={
+          <>
+            Changes save as you make them.{' '}
+            <Link to="/account" className="font-medium text-foreground underline">
+              Account and data
+            </Link>
+          </>
+        }
+        className="mb-0"
+      />
 
       <Section title="Appearance">
         <Toggle
@@ -158,12 +164,12 @@ export function SettingsPage(): ReactElement {
           label="Blank width"
           hint="Fixed keeps every blank the same size, so the gap cannot hint at the answer's length."
         >
-          <select
+          <Select
             value={settings.blankWidthMode}
             onChange={(event) => {
               save({ blankWidthMode: event.target.value as BlankWidthMode })
             }}
-            className="h-11 w-full rounded-md border border-border bg-background px-3 text-base capitalize"
+            className="w-full capitalize"
             aria-label="Blank width"
           >
             {BLANK_WIDTH_MODES.map((mode) => (
@@ -171,7 +177,7 @@ export function SettingsPage(): ReactElement {
                 {mode}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       </Section>
 
@@ -194,14 +200,14 @@ export function SettingsPage(): ReactElement {
 
 function SettingsSkeleton(): ReactElement {
   return (
-    <div className="space-y-8" aria-busy="true" aria-label="Loading settings">
-      <Skeleton className="h-8 w-40" />
+    <div className="space-y-6" aria-busy="true" aria-label="Loading settings">
+      <Skeleton className="h-9 w-40" />
       {[0, 1, 2].map((i) => (
-        <div key={i} className="space-y-3 rounded-lg border border-border p-5">
-          <Skeleton className="h-5 w-28" />
+        <Card key={i} className="space-y-3 p-5 sm:p-6">
+          <Skeleton className="h-6 w-28" />
           <Skeleton className="h-11 w-full" />
           <Skeleton className="h-11 w-full" />
-        </div>
+        </Card>
       ))}
     </div>
   )

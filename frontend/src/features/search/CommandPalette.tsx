@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { SearchHit, SnippetSegment } from '@saulado/shared'
+import { SearchIcon } from '@/components/ui/icons'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useSearch } from './queries'
 
@@ -118,15 +119,27 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps): ReactEle
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6">
-      <div className="absolute inset-0 bg-foreground/40" aria-hidden="true" onClick={onClose} />
+      {/*
+        A blurred scrim rather than a flat wash: the palette is the only thing
+        that floats over a live page, so the page reads as *behind* it instead of
+        merely dimmed.
+      */}
+      <div
+        className="absolute inset-0 bg-foreground/30 backdrop-blur-sm"
+        aria-hidden="true"
+        onClick={onClose}
+      />
 
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Search cards"
-        className="relative mt-[10vh] w-full max-w-xl overflow-hidden rounded-lg border border-border bg-background shadow-lg"
+        className="relative mt-[10vh] w-full max-w-xl overflow-hidden rounded-xl bg-surface shadow-lift"
       >
-        <div className="border-b border-border p-2">
+        <div className="flex items-center gap-2 border-b border-border px-4">
+          <span className="text-muted-foreground" aria-hidden="true">
+            <SearchIcon />
+          </span>
           <input
             ref={inputRef}
             type="text"
@@ -142,7 +155,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps): ReactEle
               setText(event.target.value)
             }}
             onKeyDown={onKeyDown}
-            className="h-11 w-full bg-transparent px-3 text-base outline-none placeholder:text-muted-foreground"
+            className="h-12 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground"
           />
         </div>
 
@@ -207,7 +220,7 @@ function PaletteBody({
         // Dimmed rather than replaced while a newer query is in flight: the rows
         // on screen are real results for an older prefix, and blanking them
         // makes the list flicker on every keystroke.
-        className={`max-h-80 overflow-y-auto ${stale ? 'opacity-60' : ''}`}
+        className={`max-h-80 space-y-0.5 overflow-y-auto p-1.5 ${stale ? 'opacity-60' : ''}`}
       >
         {hits.map((hit, index) => (
           <li
@@ -224,8 +237,13 @@ function PaletteBody({
             onClick={() => {
               onSelect(hit)
             }}
-            className={`cursor-pointer border-b border-border px-4 py-3 last:border-b-0 ${
-              index === active ? 'bg-muted' : ''
+            /*
+              A filled row rather than a hairline between rows. The highlight is
+              the only thing that has to be visible here, and eight separators
+              competing with it is what made the old list read as a table.
+            */
+            className={`cursor-pointer rounded-md px-3 py-2.5 ${
+              index === active ? 'bg-surface-muted' : ''
             }`}
           >
             <div className="flex items-baseline justify-between gap-3">
@@ -243,7 +261,7 @@ function PaletteBody({
       </ul>
 
       <div
-        className="border-t border-border px-4 py-2 text-xs text-muted-foreground"
+        className="border-t border-border bg-surface-muted px-4 py-2.5 text-xs text-muted-foreground"
         // Result counts are announced without stealing focus from the input.
         aria-live="polite"
       >

@@ -7,11 +7,13 @@ import {
   type SetProgress,
 } from '@saulado/shared'
 import { buttonClass } from '@/components/ui/button'
+import { Card, CardFigure, CardLabel } from '@/components/ui/card'
+import { segmentClass } from '@/components/ui/segmented'
 import { Skeleton } from '@/components/ui/skeleton'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { BarChart } from '@/components/charts/BarChart'
 import { Heatmap } from '@/components/charts/Heatmap'
 import { TrendChart } from '@/components/charts/TrendChart'
-import { cn } from '@/lib/utils'
 import { useProgress } from './queries'
 
 /**
@@ -53,17 +55,15 @@ function RangeSwitcher({
   return (
     <fieldset>
       <legend className="sr-only">Time range</legend>
-      <div className="flex flex-wrap gap-1 rounded-md border border-border p-1">
+      <div className="flex flex-wrap gap-1 rounded-full bg-surface-muted p-1">
         {PROGRESS_RANGES.map((range) => (
           <label
             key={range}
-            className={cn(
-              'cursor-pointer rounded px-3 py-1.5 text-sm font-medium',
-              // The selected state is carried by background *and* weight, not
-              // by colour alone.
-              value === range
-                ? 'bg-muted text-foreground'
-                : 'text-muted-foreground hover:bg-muted/60',
+            className={segmentClass(
+              value === range,
+              // The radio inside is `sr-only`, so the ring has to be borrowed on
+              // to its label or the group has no visible focus at all.
+              'cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2',
             )}
           >
             <input
@@ -94,11 +94,11 @@ function SummaryStat({
   hint?: string
 }): ReactElement {
   return (
-    <div className="rounded-lg border border-border p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1.5 text-2xl font-semibold tabular-nums">{value}</p>
+    <Card className="p-4">
+      <CardLabel>{label}</CardLabel>
+      <CardFigure>{value}</CardFigure>
       {hint !== undefined && <p className="mt-0.5 text-sm text-muted-foreground">{hint}</p>}
-    </div>
+    </Card>
   )
 }
 
@@ -116,16 +116,16 @@ function PerSetTable({ sets }: { sets: SetProgress[] }): ReactElement {
         <caption className="sr-only">Reviews by set over the selected range</caption>
         <thead>
           <tr className="border-b border-border text-left text-muted-foreground">
-            <th scope="col" className="py-2 pr-4 font-medium">
+            <th scope="col" className="px-3 py-2.5 font-medium">
               Set
             </th>
-            <th scope="col" className="py-2 pr-4 text-right font-medium">
+            <th scope="col" className="px-3 py-2.5 text-right font-medium">
               Reviews
             </th>
-            <th scope="col" className="py-2 pr-4 text-right font-medium">
+            <th scope="col" className="px-3 py-2.5 text-right font-medium">
               Accuracy
             </th>
-            <th scope="col" className="py-2 text-right font-medium">
+            <th scope="col" className="px-3 py-2.5 text-right font-medium">
               Cards seen
             </th>
           </tr>
@@ -135,8 +135,11 @@ function PerSetTable({ sets }: { sets: SetProgress[] }): ReactElement {
             const accuracy = accuracyPercent(set.correct, set.reviews)
 
             return (
-              <tr key={set.studySetId} className="border-b border-border last:border-0">
-                <th scope="row" className="max-w-[16rem] truncate py-2.5 pr-4 font-medium">
+              <tr
+                key={set.studySetId}
+                className="border-b border-border/60 transition-colors last:border-0 hover:bg-surface-muted"
+              >
+                <th scope="row" className="max-w-[16rem] truncate px-3 py-3 font-medium">
                   <Link
                     to={`/sets/${set.studySetId}`}
                     className="underline-offset-2 hover:underline"
@@ -144,11 +147,11 @@ function PerSetTable({ sets }: { sets: SetProgress[] }): ReactElement {
                     {set.title}
                   </Link>
                 </th>
-                <td className="py-2.5 pr-4 text-right tabular-nums">{set.reviews}</td>
-                <td className="py-2.5 pr-4 text-right tabular-nums">
+                <td className="px-3 py-3 text-right tabular-nums">{set.reviews}</td>
+                <td className="px-3 py-3 text-right tabular-nums">
                   {accuracy === null ? '—' : `${String(accuracy)}%`}
                 </td>
-                <td className="py-2.5 text-right tabular-nums text-muted-foreground">
+                <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">
                   {set.cardsStudied} of {set.cardCount}
                 </td>
               </tr>
@@ -169,7 +172,7 @@ function PerSetTable({ sets }: { sets: SetProgress[] }): ReactElement {
  */
 function NothingYet(): ReactElement {
   return (
-    <div className="rounded-lg border border-dashed border-border p-8 text-center">
+    <Card tone="dashed" className="p-8 text-center">
       <p className="font-medium">No reviews yet</p>
       <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
         Once you have studied, this page tracks how much you review, how accurate you are, and which
@@ -178,7 +181,7 @@ function NothingYet(): ReactElement {
       <Link className={buttonClass({ size: 'lg', className: 'mt-5' })} to="/study">
         Start studying
       </Link>
-    </div>
+    </Card>
   )
 }
 
@@ -192,14 +195,12 @@ export function ProgressPage(): ReactElement {
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Progress</h1>
-          <p className="mt-1 text-muted-foreground">How your reviews have gone over time.</p>
-        </div>
-
-        <RangeSwitcher value={range} onChange={setRange} />
-      </header>
+      <PageHeader
+        title="Progress"
+        description="How your reviews have gone over time."
+        actions={<RangeSwitcher value={range} onChange={setRange} />}
+        className="mb-0"
+      />
 
       {progress.isPending && (
         <div className="space-y-6">
@@ -210,14 +211,14 @@ export function ProgressPage(): ReactElement {
       )}
 
       {progress.isError && (
-        <div className="rounded-lg border border-dashed border-border p-5">
+        <Card tone="dashed" className="p-5">
           <p className="text-sm text-muted-foreground">
             Could not load your progress. Studying still works.
           </p>
           <Link className={buttonClass({ className: 'mt-4' })} to="/study">
             Go to study
           </Link>
-        </div>
+        </Card>
       )}
 
       {data !== undefined &&
@@ -249,7 +250,7 @@ export function ProgressPage(): ReactElement {
               />
             </section>
 
-            <section className="space-y-8 rounded-lg border border-border p-5">
+            <Card as="section" className="space-y-8 p-5">
               <BarChart
                 days={data.days}
                 caption="Reviews per day"
@@ -261,27 +262,31 @@ export function ProgressPage(): ReactElement {
                 caption="Accuracy"
                 emptyMessage="No reviews in this range yet."
               />
-            </section>
+            </Card>
 
-            <section className="rounded-lg border border-border p-5">
+            <Card as="section" className="p-5">
               <Heatmap
                 days={data.days}
                 caption="Study days"
                 emptyMessage="No study days in this range."
               />
-            </section>
+            </Card>
 
             <section aria-labelledby="per-set-heading" className="space-y-3">
-              <h2 id="per-set-heading" className="text-sm font-medium uppercase tracking-wide">
+              <h2 id="per-set-heading" className="text-base font-semibold tracking-tight">
                 By set
               </h2>
 
               {data.perSet.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
-                  No sets were studied in this range.
-                </p>
+                <Card tone="dashed" className="p-5">
+                  <p className="text-sm text-muted-foreground">
+                    No sets were studied in this range.
+                  </p>
+                </Card>
               ) : (
-                <PerSetTable sets={data.perSet} />
+                <Card className="p-1.5">
+                  <PerSetTable sets={data.perSet} />
+                </Card>
               )}
             </section>
           </>

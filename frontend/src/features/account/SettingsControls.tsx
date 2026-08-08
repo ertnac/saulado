@@ -1,4 +1,6 @@
 import { useEffect, useId, useState, type ReactElement, type ReactNode } from 'react'
+import { Card } from '@/components/ui/card'
+import { Select, fieldChipClass } from '@/components/ui/select'
 
 /**
  * The controls the settings page is built from.
@@ -11,12 +13,14 @@ import { useEffect, useId, useState, type ReactElement, type ReactNode } from 'r
 
 export function Section({ title, children }: { title: string; children: ReactNode }): ReactElement {
   return (
-    <section className="space-y-5 rounded-lg border border-border p-5">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </h2>
+    <Card as="section" className="space-y-5 p-5 sm:p-6">
+      {/*
+        Sentence case, matching `CardLabel`. Small all-caps is harder to read and
+        the uppercase habit here came from the scaffold, not from the design.
+      */}
+      <h2 className="text-base font-semibold tracking-tight">{title}</h2>
       {children}
-    </section>
+    </Card>
   )
 }
 
@@ -85,7 +89,7 @@ export function Toggle({
         onChange={(event) => {
           onChange(event.target.checked)
         }}
-        className="mt-1 h-5 w-5 shrink-0 accent-[hsl(var(--primary))]"
+        className="mt-1 h-5 w-5 shrink-0 accent-primary"
       />
     </div>
   )
@@ -178,11 +182,11 @@ export function NumberSetting({
             commit()
           }
         }}
-        className="h-11 w-full rounded-md border border-border bg-background px-3 text-base aria-[invalid=true]:border-[hsl(var(--warning))]"
+        className={fieldChipClass('w-full aria-[invalid=true]:border-warning')}
       />
       <div aria-live="polite">
         {error && (
-          <p id={errorId} className="text-sm text-[hsl(var(--warning))]">
+          <p id={errorId} className="text-sm text-warning">
             {error}
           </p>
         )}
@@ -252,13 +256,13 @@ export function TimezoneSetting({
       </label>
 
       {zones ? (
-        <select
+        <Select
           id={id}
           value={value}
           onChange={(event) => {
             onCommit(event.target.value)
           }}
-          className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
+          className="w-full"
         >
           {/*
             The stored value is prepended when the runtime does not list it —
@@ -272,7 +276,7 @@ export function TimezoneSetting({
               {zone}
             </option>
           ))}
-        </select>
+        </Select>
       ) : (
         <input
           id={id}
@@ -290,7 +294,7 @@ export function TimezoneSetting({
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          className="h-11 w-full rounded-md border border-border bg-background px-3 text-base"
+          className={fieldChipClass('w-full')}
         />
       )}
 

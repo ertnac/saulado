@@ -2,8 +2,11 @@ import { useState, type ReactElement } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { StudyCardSummary } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { PlusIcon } from '@/components/ui/icons'
 import { useDueCounts } from '@/features/study/queries'
 import { cn } from '@/lib/utils'
 import { SetDialog } from './SetDialog'
@@ -25,7 +28,7 @@ function CardRow({
   onDelete: () => void
 }): ReactElement {
   return (
-    <li className="flex flex-col gap-2 rounded-lg border border-border bg-background p-4">
+    <Card as="li" className="flex flex-col gap-2 p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="min-w-0 font-medium">
           <Link
@@ -50,16 +53,16 @@ function CardRow({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <ul className="flex flex-wrap gap-1.5">
           {card.tags.map((tag) => (
-            <li key={tag} className="rounded-full bg-muted px-2 py-0.5 text-xs">
-              {tag}
+            <li key={tag}>
+              <Badge tone="sand">{tag}</Badge>
             </li>
           ))}
         </ul>
-        <Button variant="ghost" size="sm" className="text-warning" onClick={onDelete}>
+        <Button variant="ghost" size="sm" className="text-danger" onClick={onDelete}>
           Delete
         </Button>
       </div>
-    </li>
+    </Card>
   )
 }
 
@@ -120,15 +123,15 @@ export function SetDetailPage(): ReactElement {
 
   if (set.isError) {
     return (
-      <div role="alert" className="rounded-lg border border-warning p-5">
+      <Card role="alert" tone="danger" className="p-5">
         <p className="text-sm">That set could not be loaded. It may have been deleted.</p>
         <Link
-          className={buttonClass({ variant: 'outline', size: 'sm', className: 'mt-3' })}
+          className={buttonClass({ variant: 'soft', size: 'sm', className: 'mt-3' })}
           to="/sets"
         >
           Back to your sets
         </Link>
-      </div>
+      </Card>
     )
   }
 
@@ -137,9 +140,9 @@ export function SetDetailPage(): ReactElement {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           {current ? (
-            <h1 className="text-2xl font-semibold tracking-tight">{current.title}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{current.title}</h1>
           ) : (
-            <Skeleton className="h-8 w-56" />
+            <Skeleton className="h-9 w-56" />
           )}
           {current?.description && (
             <p className="mt-1 text-sm text-muted-foreground">{current.description}</p>
@@ -148,7 +151,7 @@ export function SetDetailPage(): ReactElement {
 
         <div className="flex shrink-0 flex-wrap gap-2">
           <Button
-            variant="outline"
+            variant="soft"
             disabled={current === undefined}
             onClick={() => {
               setEditing(true)
@@ -156,10 +159,8 @@ export function SetDetailPage(): ReactElement {
           >
             Edit set
           </Button>
-          <Link
-            className={buttonClass({ variant: 'outline' })}
-            to={`/sets/${setId ?? ''}/cards/new`}
-          >
+          <Link className={buttonClass({ variant: 'soft' })} to={`/sets/${setId ?? ''}/cards/new`}>
+            <PlusIcon />
             New card
           </Link>
           {setId !== undefined && <StudyAction setId={setId} />}
@@ -190,10 +191,11 @@ export function SetDetailPage(): ReactElement {
                     toggleTag(tag)
                   }}
                   className={cn(
-                    'rounded-full px-3 py-1.5 text-sm transition-colors',
+                    'inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-sm font-medium',
+                    'transition-[background-color,color,box-shadow] duration-150',
                     active
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted hover:bg-border text-foreground',
+                      ? 'bg-primary text-primary-foreground shadow-soft'
+                      : 'bg-surface-muted text-muted-foreground hover:text-foreground',
                   )}
                 >
                   {tag} <span className="tabular-nums opacity-70">{count}</span>
@@ -229,19 +231,19 @@ export function SetDetailPage(): ReactElement {
       {cards.isPending ? (
         <ul className="space-y-3" aria-busy="true">
           {[0, 1, 2].map((key) => (
-            <li key={key} className="rounded-lg border border-border p-4">
+            <Card as="li" key={key} className="p-5">
               <Skeleton className="h-5 w-40" />
               <Skeleton className="mt-2 h-4 w-full" />
               <Skeleton className="mt-1.5 h-4 w-2/3" />
-            </li>
+            </Card>
           ))}
         </ul>
       ) : cards.isError ? (
-        <div role="alert" className="rounded-lg border border-warning p-5">
+        <Card role="alert" tone="danger" className="p-5">
           <p className="text-sm">Could not load the cards in this set.</p>
           <Button
             className="mt-3"
-            variant="outline"
+            variant="soft"
             size="sm"
             onClick={() => {
               void cards.refetch()
@@ -249,9 +251,9 @@ export function SetDetailPage(): ReactElement {
           >
             Try again
           </Button>
-        </div>
+        </Card>
       ) : items.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border p-8 text-center">
+        <Card tone="dashed" className="p-8 text-center">
           <p className="font-medium">{filtering ? 'No matching cards' : 'No cards yet'}</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
             {filtering
@@ -261,8 +263,8 @@ export function SetDetailPage(): ReactElement {
           {/* Clearing the filter is the fix when filtering; creating one is not. */}
           {filtering ? (
             <Button
-              className="mt-4"
-              variant="outline"
+              className="mt-5"
+              variant="soft"
               onClick={() => {
                 setTags([])
               }}
@@ -271,13 +273,14 @@ export function SetDetailPage(): ReactElement {
             </Button>
           ) : (
             <Link
-              className={buttonClass({ className: 'mt-4' })}
+              className={buttonClass({ className: 'mt-5' })}
               to={`/sets/${setId ?? ''}/cards/new`}
             >
+              <PlusIcon />
               Add your first card
             </Link>
           )}
-        </div>
+        </Card>
       ) : (
         <>
           <ul className="space-y-3">
@@ -294,7 +297,7 @@ export function SetDetailPage(): ReactElement {
 
           {cards.hasNextPage && (
             <Button
-              variant="outline"
+              variant="soft"
               disabled={cards.isFetchingNextPage}
               onClick={() => {
                 void cards.fetchNextPage()

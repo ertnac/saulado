@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { ALT_ANSWERS_MAX_PER_ANSWER } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CloseIcon } from '@/components/ui/icons'
 import type { EditorAnswer } from './useCardDraft'
 
 /**
@@ -76,7 +77,7 @@ export function HighlightPopover({
     <div
       role="dialog"
       aria-label={`Options for blank ${String(answer.ordinal + 1)}`}
-      className="space-y-3 rounded-md border border-border bg-muted/40 p-4"
+      className="space-y-3 rounded-lg bg-surface-muted p-4"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -100,7 +101,7 @@ export function HighlightPopover({
         <ul className="flex flex-wrap gap-2">
           {alts.map((alt) => (
             <li key={alt}>
-              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background py-1 pl-3 pr-1 text-sm">
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-surface py-1 pl-3 pr-1.5 text-sm shadow-soft">
                 {alt}
                 <button
                   type="button"
@@ -111,9 +112,9 @@ export function HighlightPopover({
                     )
                   }}
                   aria-label={`Remove alternative ${alt}`}
-                  className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-muted"
+                  className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:text-foreground"
                 >
-                  <span aria-hidden="true">×</span>
+                  <CloseIcon className="h-3.5 w-3.5" />
                 </button>
               </span>
             </li>
@@ -140,11 +141,16 @@ export function HighlightPopover({
           placeholder={atLimit ? 'Limit reached' : 'e.g. processor'}
           aria-label={`Alternative answer for blank ${String(answer.ordinal + 1)}`}
         />
-        <Button variant="outline" onClick={addAlt} disabled={!pending.trim() || atLimit}>
+        <Button variant="soft" onClick={addAlt} disabled={!pending.trim() || atLimit}>
           Add
         </Button>
       </div>
 
+      {/*
+        `danger`, not `warning`. Warning in this editor means "that selection
+        cannot become a blank" — a rejection the user should try again after.
+        Removing a blank is destructive, and the two must not look alike.
+      */}
       <Button
         variant="ghost"
         size="sm"
@@ -152,7 +158,7 @@ export function HighlightPopover({
           onRemove(answer.ordinal)
           onClose()
         }}
-        className="text-warning"
+        className="text-danger"
       >
         Remove this blank
       </Button>

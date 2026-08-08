@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { AlertIcon, SparkIcon } from '@/components/ui/icons'
 
 interface AuthLayoutProps {
   title: string
@@ -14,20 +15,28 @@ interface AuthLayoutProps {
  * `<main>` and a single `<h1>` per page keep the heading hierarchy correct
  * (saulado-ux §6) — four pages each inventing their own structure is how a
  * document ends up with two h1s or none.
+ *
+ * The form sits on a raised card over the page wash, which is the one place in
+ * the app where a floating panel is the whole layout rather than a component in
+ * it: there is nothing else on screen to anchor to.
  */
 export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProps): ReactElement {
   return (
     <div className="flex min-h-screen flex-col">
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-12">
-        <header className="mb-8">
-          <Link to="/" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+        <header className="mb-6">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            <SparkIcon />
             Saulado
           </Link>
-          <h1 className="mt-4 text-2xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="mt-5 text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
           {subtitle && <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>}
         </header>
 
-        {children}
+        <div className="rounded-lg bg-surface p-6 shadow-soft">{children}</div>
 
         {footer && <div className="mt-6 text-sm text-muted-foreground">{footer}</div>}
       </main>
@@ -46,9 +55,9 @@ export function FormAlert({ message }: { message: string }): ReactElement {
   return (
     <div
       role="alert"
-      className="mb-4 rounded-md border border-[hsl(var(--warning))] bg-muted p-3 text-sm"
+      className="mb-5 flex items-start gap-2 rounded-md bg-warning/10 p-3 text-sm text-warning"
     >
-      <span aria-hidden="true">! </span>
+      <AlertIcon className="mt-0.5 h-[1em] w-[1em] shrink-0" />
       {message}
     </div>
   )

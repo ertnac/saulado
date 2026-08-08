@@ -1,25 +1,46 @@
 import type { ButtonHTMLAttributes, ReactElement } from 'react'
 import { cn } from '@/lib/utils'
 
-type Variant = 'default' | 'outline' | 'ghost'
-type Size = 'sm' | 'md' | 'lg'
+type Variant = 'default' | 'accent' | 'outline' | 'soft' | 'ghost' | 'danger'
+type Size = 'sm' | 'md' | 'lg' | 'icon'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant
   size?: Size
 }
 
+/**
+ * Six variants, and the count is the point: every one of them answers a
+ * question the screens actually ask.
+ *
+ * `default` is the single dominant CTA a screen is allowed (deep green, filled).
+ * `accent` is the clay pill for the one hot control in a group — an active
+ * filter, an add button. `soft` is a tinted fill for secondary actions that
+ * still need to look like buttons; `outline` for ones that need to recede
+ * further; `ghost` for icon-only chrome. `danger` exists so a destructive
+ * action never has to borrow `--warning`, which the highlight editor already
+ * spends on rejected selections.
+ */
 const variants: Record<Variant, string> = {
-  default: 'bg-primary text-primary-foreground hover:opacity-90',
-  outline: 'border border-border bg-transparent hover:bg-muted',
-  ghost: 'bg-transparent hover:bg-muted',
+  default: 'bg-primary text-primary-foreground shadow-soft hover:brightness-110',
+  accent: 'bg-accent text-accent-foreground shadow-soft hover:brightness-105',
+  outline: 'border border-border bg-surface/70 hover:bg-surface',
+  soft: 'bg-surface-muted text-foreground hover:bg-muted',
+  ghost: 'bg-transparent hover:bg-surface-muted',
+  danger: 'bg-danger text-primary-foreground shadow-soft hover:brightness-110',
 }
 
-/** Sizes meet the 44px minimum touch target from the saulado-ux skill at md and up. */
+/**
+ * Sizes meet the 44px minimum touch target from the saulado-ux skill at md and
+ * up. `icon` is square at the same 44px — the circular rail and toolbar buttons
+ * are the easiest place in a rounded design to end up with a pretty 32px
+ * control that fails the target.
+ */
 const sizes: Record<Size, string> = {
-  sm: 'h-9 px-3 text-sm',
-  md: 'h-11 px-4 text-sm',
+  sm: 'h-9 px-4 text-sm',
+  md: 'h-11 px-5 text-sm',
   lg: 'h-12 px-6 text-base',
+  icon: 'h-11 w-11 p-0',
 }
 
 /**
@@ -36,7 +57,10 @@ export function buttonClass({
   className,
 }: { variant?: Variant; size?: Size; className?: string } = {}): string {
   return cn(
-    'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors',
+    // Fully pill-shaped, which is the reference's most recognisable habit and
+    // the reason the rest of the radius scale can stay conservative.
+    'inline-flex items-center justify-center gap-2 rounded-full font-medium',
+    'transition-[background-color,box-shadow,filter,transform] duration-150 active:translate-y-px',
     'disabled:pointer-events-none disabled:opacity-50',
     variants[variant],
     sizes[size],

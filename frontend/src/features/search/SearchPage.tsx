@@ -2,8 +2,14 @@ import { useMemo, useState, type ReactElement } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { DUE_STATES, type DueState, type SearchFilters, type SearchResponse } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Select, fieldChipClass } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { ChevronLeftIcon, ChevronRightIcon, SearchIcon } from '@/components/ui/icons'
+import { cn } from '@/lib/utils'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useTags } from '@/features/cards/queries'
 import { Snippet } from './CommandPalette'
@@ -94,40 +100,54 @@ export function SearchPage(): ReactElement {
 
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
-        <p className="text-sm text-muted-foreground">
-          Across every set, archived ones included. Press{' '}
-          <kbd className="rounded border border-border px-1 text-xs">Ctrl K</kbd> anywhere for a
-          quick jump.
-        </p>
-      </header>
+      <PageHeader
+        title="Search"
+        description={
+          <>
+            Across every set, archived ones included. Press{' '}
+            <kbd className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium">
+              Ctrl K
+            </kbd>{' '}
+            anywhere for a quick jump.
+          </>
+        }
+        className="mb-0"
+      />
 
       <div className="space-y-4">
-        <Input
-          type="search"
-          value={text}
-          onChange={(event) => {
-            setText(event.target.value)
-            const next = new URLSearchParams(params)
-            next.delete('offset')
-            if (event.target.value.trim()) next.set('q', event.target.value)
-            else next.delete('q')
-            setParams(next, { replace: true })
-          }}
-          placeholder="Search titles and paragraphs…"
-          aria-label="Search text"
-          autoFocus
-        />
+        {/*
+          The icon sits in the padding rather than inside the field, so the
+          input keeps its own accessible name and the glyph stays decorative.
+        */}
+        <div className="relative">
+          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
+            <SearchIcon />
+          </span>
+          <Input
+            type="search"
+            value={text}
+            onChange={(event) => {
+              setText(event.target.value)
+              const next = new URLSearchParams(params)
+              next.delete('offset')
+              if (event.target.value.trim()) next.set('q', event.target.value)
+              else next.delete('q')
+              setParams(next, { replace: true })
+            }}
+            placeholder="Search titles and paragraphs…"
+            aria-label="Search text"
+            className="pl-11"
+            autoFocus
+          />
+        </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <select
+          <Select
             value={params.get('due') ?? ''}
             onChange={(event) => {
               setFilter('due', event.target.value || null)
             }}
             aria-label="Filter by review state"
-            className="h-9 rounded-md border border-border bg-background px-2 text-sm"
           >
             <option value="">Any state</option>
             {DUE_STATES.map((state) => (
@@ -135,21 +155,20 @@ export function SearchPage(): ReactElement {
                 {DUE_LABELS[state]}
               </option>
             ))}
-          </select>
+          </Select>
 
-          <select
+          <Select
             value={params.get('sort') ?? 'relevance'}
             onChange={(event) => {
               setFilter('sort', event.target.value)
             }}
             aria-label="Sort results"
-            className="h-9 rounded-md border border-border bg-background px-2 text-sm"
           >
             <option value="relevance">Most relevant</option>
             <option value="recent">Most recent</option>
-          </select>
+          </Select>
 
-          <label className="flex items-center gap-1 text-sm text-muted-foreground">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
             From
             <input
               type="date"
@@ -157,11 +176,11 @@ export function SearchPage(): ReactElement {
               onChange={(event) => {
                 setFilter('createdFrom', event.target.value || null)
               }}
-              className="h-9 rounded-md border border-border bg-background px-2 text-sm"
+              className={fieldChipClass()}
             />
           </label>
 
-          <label className="flex items-center gap-1 text-sm text-muted-foreground">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
             To
             <input
               type="date"
@@ -169,7 +188,7 @@ export function SearchPage(): ReactElement {
               onChange={(event) => {
                 setFilter('createdTo', event.target.value || null)
               }}
-              className="h-9 rounded-md border border-border bg-background px-2 text-sm"
+              className={fieldChipClass()}
             />
           </label>
 
@@ -189,24 +208,28 @@ export function SearchPage(): ReactElement {
 
         {tagData && tagData.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by tag">
-            {tagData.tags.map((tag) => (
-              <button
-                key={tag.tag}
-                type="button"
-                aria-pressed={activeTags.includes(tag.tag)}
-                onClick={() => {
-                  toggleTag(tag.tag)
-                }}
-                className={`rounded-full border px-3 py-1 text-xs ${
-                  activeTags.includes(tag.tag)
-                    ? 'border-primary bg-primary/10 font-medium'
-                    : 'border-border text-muted-foreground hover:bg-muted'
-                }`}
-              >
-                {tag.tag}
-                <span className="ml-1 opacity-60">{tag.count}</span>
-              </button>
-            ))}
+            {tagData.tags.map((tag) => {
+              const active = activeTags.includes(tag.tag)
+              return (
+                <button
+                  key={tag.tag}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    toggleTag(tag.tag)
+                  }}
+                  className={cn(
+                    'inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-sm font-medium',
+                    'transition-[background-color,color,box-shadow] duration-150',
+                    active
+                      ? 'bg-primary text-primary-foreground shadow-soft'
+                      : 'bg-surface-muted text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {tag.tag} <span className="tabular-nums opacity-70">{tag.count}</span>
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
@@ -255,17 +278,17 @@ function SearchResults({
 
   if (!searchable) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
+      <Card tone="dashed" className="p-8 text-center text-sm text-muted-foreground">
         Type something, or pick a filter to browse.
-      </p>
+      </Card>
     )
   }
 
   if (hits.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
+      <Card tone="dashed" className="p-8 text-center text-sm text-muted-foreground">
         Nothing matched. Try fewer filters or a shorter phrase.
-      </p>
+      </Card>
     )
   }
 
@@ -284,10 +307,14 @@ function SearchResults({
 
       <ul className="space-y-2">
         {hits.map((hit) => (
-          <li key={hit.cardId}>
+          <Card as="li" key={hit.cardId} interactive>
+            {/*
+              No `overflow-hidden` on the card: the link fills it edge to edge, so
+              clipping the overflow would clip the link's own focus ring away.
+            */}
             <Link
               to={`/cards/${hit.cardId}`}
-              className="block rounded-lg border border-border p-4 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="block rounded-lg p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="font-medium">{hit.title}</span>
@@ -300,19 +327,16 @@ function SearchResults({
                 <Snippet segments={hit.snippet} />
               </p>
               {hit.tags.length > 0 && (
-                <p className="mt-2 flex flex-wrap gap-1">
+                <p className="mt-2.5 flex flex-wrap gap-1">
                   {hit.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                    >
+                    <Badge key={tag} tone="sand">
                       {tag}
-                    </span>
+                    </Badge>
                   ))}
                 </p>
               )}
             </Link>
-          </li>
+          </Card>
         ))}
       </ul>
 
@@ -323,17 +347,18 @@ function SearchResults({
       {total > PAGE_SIZE && (
         <nav className="mt-6 flex items-center justify-between" aria-label="Result pages">
           <Button
-            variant="outline"
+            variant="soft"
             size="sm"
             disabled={offset === 0}
             onClick={() => {
               onPage(Math.max(0, offset - PAGE_SIZE))
             }}
           >
+            <ChevronLeftIcon />
             Previous
           </Button>
           <Button
-            variant="outline"
+            variant="soft"
             size="sm"
             disabled={last >= total}
             onClick={() => {
@@ -341,6 +366,7 @@ function SearchResults({
             }}
           >
             Next
+            <ChevronRightIcon />
           </Button>
         </nav>
       )}

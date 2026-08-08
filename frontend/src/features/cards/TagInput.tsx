@@ -1,6 +1,7 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
 import { normalizeTag, TAG_MAX_LENGTH, TAGS_MAX_PER_CARD } from '@saulado/shared'
 import { Input } from '@/components/ui/input'
+import { CloseIcon } from '@/components/ui/icons'
 
 /**
  * Tag entry as chips.
@@ -77,7 +78,7 @@ export function TagInput({
         <ul className="flex flex-wrap gap-1.5" aria-label="Selected tags">
           {value.map((tag) => (
             <li key={tag}>
-              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-sm">
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-sand py-1 pl-3 pr-1.5 text-sm text-sand-foreground">
                 {tag}
                 <button
                   type="button"
@@ -90,9 +91,9 @@ export function TagInput({
                   // Named rather than "Remove", so a screen reader user hearing a
                   // list of six buttons can tell which is which.
                   aria-label={`Remove tag ${tag}`}
-                  className="rounded-full px-0.5 text-muted-foreground hover:text-foreground"
+                  className="rounded-full p-0.5 opacity-60 transition-opacity duration-150 hover:opacity-100"
                 >
-                  <span aria-hidden="true">×</span>
+                  <CloseIcon className="h-3.5 w-3.5" />
                 </button>
               </span>
             </li>

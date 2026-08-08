@@ -47,7 +47,7 @@ export class ErrorBoundary extends Component<Props, State> {
           only thing a user can paste into a bug report, and it is already in
           their console anyway.
         */}
-        <p className="mt-4 rounded-md bg-muted p-3 font-mono text-sm">{error.message}</p>
+        <p className="mt-4 rounded-lg bg-surface-muted p-3 font-mono text-sm">{error.message}</p>
 
         <div className="mt-6 flex gap-3">
           {/*
@@ -64,7 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
             Reload the page
           </Button>
           <Button
-            variant="outline"
+            variant="soft"
             size="lg"
             onClick={() => {
               window.location.href = '/'

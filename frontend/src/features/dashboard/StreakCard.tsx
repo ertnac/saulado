@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react'
 import type { StreakSummary } from '@saulado/shared'
+import { Card, CardLabel } from '@/components/ui/card'
 
 /**
  * The streak, framed honestly (plan §5.2).
@@ -57,10 +58,10 @@ export function StreakCard({ streak }: { streak: StreakSummary }): ReactElement 
   }
 
   return (
-    <div className="rounded-lg border border-border p-5">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Streak</p>
-      <p className="mt-2 text-xl font-semibold">{headline()}</p>
+    <Card className="p-5">
+      <CardLabel>Streak</CardLabel>
+      <p className="mt-2 text-xl font-semibold tracking-tight">{headline()}</p>
       <p className="mt-1 text-sm text-muted-foreground">{detail()}</p>
-    </div>
+    </Card>
   )
 }

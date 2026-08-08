@@ -31,7 +31,7 @@ export function Sparkline({ days, label }: SparklineProps): ReactElement {
           <div key={day.day} className="flex h-full min-w-0 flex-1 flex-col justify-end">
             <div
               title={`${longDate(day.day)}: ${String(day.reviews)} reviews`}
-              className={`w-full rounded-sm ${day.reviews > 0 ? 'bg-success' : 'bg-muted'}`}
+              className={`w-full rounded-sm ${day.reviews > 0 ? 'bg-success' : 'bg-surface-muted'}`}
               /*
                 Idle days get a 4% stub rather than nothing. A row of bars with
                 holes in it looks like a rendering failure; a flat floor reads as

@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import type { AnswerResponse, Grade } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
+import { CheckIcon, CloseIcon } from '@/components/ui/icons'
 import { cn } from '@/lib/utils'
 
 /**
@@ -52,19 +53,23 @@ export function FeedbackPanel({
     <div
       role="status"
       className={cn(
-        'rounded-lg border p-5',
-        answer.correct
-          ? 'border-[hsl(var(--success))] bg-[hsl(var(--success)/0.08)]'
-          : 'border-[hsl(var(--warning))] bg-[hsl(var(--warning)/0.08)]',
+        'rounded-lg border p-5 shadow-soft',
+        answer.correct ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10',
       )}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {/*
+          Icon, word and colour all say the same thing. Any one of the three is
+          enough on its own, which is the requirement — roughly one reader in
+          twelve cannot separate the green from the red.
+        */}
         <p
           className={cn(
-            'text-lg font-semibold',
-            answer.correct ? 'text-[hsl(var(--success))]' : 'text-[hsl(var(--warning))]',
+            'flex items-center gap-1.5 text-lg font-semibold',
+            answer.correct ? 'text-success' : 'text-danger',
           )}
         >
+          {answer.correct ? <CheckIcon /> : <CloseIcon />}
           {GRADE_LABEL[answer.grade]}
         </p>
 

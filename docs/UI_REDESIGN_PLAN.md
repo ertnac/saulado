@@ -179,14 +179,26 @@ stays.
 
 ### New primitives
 
-| Component          | File                               | Why it exists                                    |
-| ------------------ | ---------------------------------- | ------------------------------------------------ |
-| `Card`             | `components/ui/card.tsx`           | The rounded surface, repeated on every screen    |
-| `Badge`            | `components/ui/badge.tsx`          | Count pills and tag chips, tone-variant driven   |
-| `SegmentedControl` | `components/ui/segmented.tsx`      | Range/filter switching, radiogroup semantics     |
-| `IconButton`       | `components/ui/icon-button.tsx`    | Circular icon-only control with a required label |
-| `icons.tsx`        | `components/ui/icons.tsx`          | Inline SVG line icons, replacing the text glyphs |
-| `PageHeader`       | `components/layout/PageHeader.tsx` | Title + description + actions, currently retyped |
+| Component          | File                               | Why it exists                                        |
+| ------------------ | ---------------------------------- | ---------------------------------------------------- |
+| `Card`             | `components/ui/card.tsx`           | The rounded surface, repeated on every screen        |
+| `Badge`            | `components/ui/badge.tsx`          | Count pills and tag chips, tone-variant driven       |
+| `SegmentedControl` | `components/ui/segmented.tsx`      | Range/filter switching, radiogroup semantics         |
+| `IconButton`       | `components/ui/icon-button.tsx`    | Circular icon-only control with a required label     |
+| `icons.tsx`        | `components/ui/icons.tsx`          | Inline SVG line icons, replacing the text glyphs     |
+| `PageHeader`       | `components/layout/PageHeader.tsx` | Title + description + actions, currently retyped     |
+| `Select`           | `components/ui/select.tsx`         | Native `<select>` and date fields, styled as `Input` |
+
+`Select` was added during execution rather than planned here. Restyling the
+search filters made it obvious that four screens were each hand-writing the same
+control chrome, and that the height and radius had already drifted between them.
+It stays a native `<select>`: a custom listbox would have to reimplement
+type-ahead, option groups, the mobile wheel picker and every platform's keyboard
+conventions, and would be worse at all four. The file also exports
+`fieldChipClass` for `<input type="date">` and the timezone text fallback, which
+need the same shell without the element. Both are `text-base` — mobile Safari
+zooms the viewport when a control under 16px takes focus, so 16px on every
+focusable field is a layout requirement, not a type preference.
 
 The icons matter more than they look. Today the shell renders `⌕`, `☀`, `☾` and
 `⚙` as literal characters: they inherit the text font, so they render

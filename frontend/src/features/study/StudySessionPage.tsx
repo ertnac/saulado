@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import type { SessionSummary, SubmitAnswerRequest } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AlertIcon, CheckIcon } from '@/components/ui/icons'
 import { ApiError } from '@/services/api'
 import { FeedbackPanel } from './FeedbackPanel'
 import { SessionSummaryView } from './SessionSummaryView'
@@ -243,15 +245,22 @@ export function StudySessionPage(): ReactElement {
     const nothingDue = startError instanceof ApiError && startError.code === 'VALIDATION_ERROR'
 
     return (
-      <div className="rounded-lg border border-dashed border-border p-8 text-center">
+      <Card tone="dashed" className="p-8 text-center">
+        {/*
+          A finished day gets the accent tick, not a warning icon: the two states
+          share this branch but only one of them is a problem.
+        */}
+        {nothingDue && (
+          <CheckIcon className="mx-auto mb-2 h-6 w-6 text-accent-strong" aria-hidden="true" />
+        )}
         <p className="font-medium">{nothingDue ? 'Nothing due right now' : 'Could not start'}</p>
         <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
           {nothingDue
             ? 'Every card in this set has been reviewed for today. New reviews unlock tomorrow.'
             : startError.message}
         </p>
-        <div className="mt-4 flex flex-wrap justify-center gap-3">
-          <Link className={buttonClass({ variant: 'outline' })} to="/">
+        <div className="mt-5 flex flex-wrap justify-center gap-3">
+          <Link className={buttonClass({ variant: 'soft' })} to="/">
             Back to the dashboard
           </Link>
           {!nothingDue && (
@@ -265,19 +274,19 @@ export function StudySessionPage(): ReactElement {
             </Button>
           )}
         </div>
-      </div>
+      </Card>
     )
   }
 
   if (sessionSpent) {
     return (
-      <div className="rounded-lg border border-dashed border-border p-8 text-center">
+      <Card tone="dashed" className="p-8 text-center">
         <p className="font-medium">This session is finished</p>
         <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
           Every card in it has been answered. Start another to keep going.
         </p>
-        <div className="mt-4 flex flex-wrap justify-center gap-3">
-          <Link className={buttonClass({ variant: 'outline' })} to="/">
+        <div className="mt-5 flex flex-wrap justify-center gap-3">
+          <Link className={buttonClass({ variant: 'soft' })} to="/">
             Back to the dashboard
           </Link>
           <Button
@@ -290,7 +299,7 @@ export function StudySessionPage(): ReactElement {
             {starting ? 'Starting…' : 'Study again'}
           </Button>
         </div>
-      </div>
+      </Card>
     )
   }
 
@@ -298,12 +307,12 @@ export function StudySessionPage(): ReactElement {
     return (
       <div className="space-y-4" aria-busy="true">
         <Skeleton className="h-6 w-40" />
-        <div className="rounded-lg border border-border p-6">
+        <Card className="p-6">
           <Skeleton className="h-6 w-52" />
           <Skeleton className="mt-4 h-5 w-full" />
           <Skeleton className="mt-2 h-5 w-full" />
           <Skeleton className="mt-2 h-5 w-3/4" />
-        </div>
+        </Card>
       </div>
     )
   }
@@ -336,7 +345,7 @@ export function StudySessionPage(): ReactElement {
           value, and it degrades to something meaningful if styles fail to load.
         */}
         <progress
-          className="h-1.5 w-full overflow-hidden rounded-full [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-[hsl(var(--foreground))] [&::-moz-progress-bar]:bg-[hsl(var(--foreground))]"
+          className="h-2 w-full overflow-hidden rounded-full border-0 bg-surface-muted [&::-webkit-progress-bar]:bg-surface-muted [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-primary [&::-moz-progress-bar]:bg-primary"
           value={answered}
           max={total}
           aria-label="Session progress"
@@ -397,11 +406,14 @@ export function StudySessionPage(): ReactElement {
         replays the verdict of an attempt that actually landed.
       */}
       {submit.isError && (
-        <div role="alert" className="rounded-lg border border-warning p-4">
-          <p className="text-sm">{submit.error.message}</p>
+        <Card role="alert" tone="danger" className="p-4">
+          <p className="flex items-start gap-1.5 text-sm">
+            <AlertIcon className="mt-0.5 h-[1em] w-[1em] text-danger" />
+            {submit.error.message}
+          </p>
           <Button
             className="mt-3"
-            variant="outline"
+            variant="soft"
             size="sm"
             onClick={() => {
               send(false)
@@ -409,7 +421,7 @@ export function StudySessionPage(): ReactElement {
           >
             Try again
           </Button>
-        </div>
+        </Card>
       )}
     </div>
   )

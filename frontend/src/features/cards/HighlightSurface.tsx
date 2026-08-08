@@ -178,7 +178,7 @@ export function HighlightSurface({
         onMouseUp={attempt}
         onKeyDown={onKeyDown}
         className={cn(
-          'whitespace-pre-wrap rounded-md border border-border bg-background p-4 text-base leading-relaxed',
+          'whitespace-pre-wrap rounded-md border border-border bg-surface p-4 text-base leading-relaxed',
           className,
         )}
       >
@@ -209,7 +209,7 @@ export function HighlightSurface({
         already work on wider screens.
       */}
       {hasSelection && (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background p-3 shadow-lg sm:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface p-3 shadow-lift sm:hidden">
           <Button onClick={attempt} className="w-full">
             Blank out selection
           </Button>

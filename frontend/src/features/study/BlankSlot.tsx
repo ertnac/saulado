@@ -66,9 +66,13 @@ export const BlankSlot = forwardRef<HTMLInputElement, BlankSlotProps>(function B
         className={cn(
           'mx-0.5 inline-flex h-11 items-center overflow-hidden rounded-md border px-2 align-middle',
           'font-mono text-base',
+          // Green and red, not green and amber. Amber reads as "nearly", and the
+          // one thing a graded blank has to be is unambiguous. Colour never
+          // stands alone here: the sr-only text below spells the verdict out,
+          // and the feedback panel repeats it with an icon.
           result.correct
-            ? 'border-[hsl(var(--success))] bg-[hsl(var(--success)/0.1)] text-[hsl(var(--success))]'
-            : 'border-[hsl(var(--warning))] bg-[hsl(var(--warning)/0.1)] text-[hsl(var(--warning))]',
+            ? 'border-success bg-success/10 text-success'
+            : 'border-danger bg-danger/10 text-danger',
         )}
       >
         <span className="sr-only">{`${position}: `}</span>
@@ -113,9 +117,11 @@ export const BlankSlot = forwardRef<HTMLInputElement, BlankSlotProps>(function B
         }
       }}
       className={cn(
-        'mx-0.5 inline-flex h-11 rounded-md border border-border bg-background px-2 align-middle',
-        'font-mono text-base',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--foreground))]',
+        'mx-0.5 inline-flex h-11 rounded-md border border-border bg-surface px-2 align-middle',
+        'font-mono text-base transition-colors duration-150',
+        // The global focus ring offsets against the page; this input sits on a
+        // card, so it offsets against the card instead.
+        'focus-visible:ring-offset-surface',
         'disabled:cursor-not-allowed disabled:opacity-60',
       )}
     />

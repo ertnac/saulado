@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactElement } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { CheckIcon } from '@/components/ui/icons'
 import { FormField } from '@/components/ui/form-field'
 import { useFormErrors } from '@/hooks/useFormErrors'
 import { forgotPassword } from '@/services/auth'
@@ -46,9 +47,10 @@ export function ForgotPasswordPage(): ReactElement {
           </Link>
         }
       >
-        <div className="rounded-lg border border-border p-5 text-sm">
-          <p className="flex items-center gap-2 font-medium text-[hsl(var(--success))]">
-            <span aria-hidden="true">✓</span>
+        {/* No border of its own — `AuthLayout` already puts this on a card. */}
+        <div className="text-sm">
+          <p className="flex items-center gap-2 font-medium text-success">
+            <CheckIcon />
             Request received
           </p>
           <p className="mt-3 text-muted-foreground">

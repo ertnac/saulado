@@ -2,6 +2,7 @@ import { useState, type FormEvent, type ReactElement } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { checkPassword, PASSWORD_MIN_LENGTH } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
+import { AlertIcon } from '@/components/ui/icons'
 import { FormField } from '@/components/ui/form-field'
 import { useFormErrors } from '@/hooks/useFormErrors'
 import { resetPassword } from '@/services/auth'
@@ -64,8 +65,18 @@ export function ResetPasswordPage(): ReactElement {
           </Link>
         }
       >
-        <div className="rounded-lg border border-border p-5 text-sm">
-          <p className="text-muted-foreground">
+        {/* No border of its own — `AuthLayout` already puts this on a card. */}
+        <div className="text-sm">
+          {/*
+            `--warning`, not `--danger`. A truncated link is a nuisance with an
+            obvious next step, not a destructive act; danger stays reserved for
+            things that cannot be undone.
+          */}
+          <p className="flex items-center gap-2 font-medium text-warning">
+            <AlertIcon />
+            Link incomplete
+          </p>
+          <p className="mt-3 text-muted-foreground">
             The reset link is missing its token. Email clients sometimes break long links across
             lines — try copying the whole thing, or request a new one.
           </p>

@@ -1,5 +1,7 @@
 import { useEffect, useRef, type ReactElement } from 'react'
 import type { BlankResult, SessionCard } from '@saulado/shared'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
 import { BlankSlot } from './BlankSlot'
 
 /**
@@ -59,28 +61,22 @@ export function StudyCardView({
   const byOrdinal = new Map(results?.map((result) => [result.ordinal, result]))
 
   return (
-    <div className="rounded-lg border border-border bg-background p-5 sm:p-6">
+    <Card className="p-5 sm:p-6">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="mr-auto min-w-0 text-lg font-semibold tracking-tight">{card.title}</h2>
-        {card.isNew && (
-          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">New</span>
-        )}
+        {card.isNew && <Badge tone="accent">New</Badge>}
         {/*
           Surfaced so the user can act on it — a leech is a card that keeps being
           forgotten, and the fix is usually to rewrite it, not to keep failing it.
         */}
-        {card.isLeech && (
-          <span className="rounded-full bg-[hsl(var(--warning)/0.15)] px-2.5 py-0.5 text-xs font-medium text-[hsl(var(--warning))]">
-            Difficult
-          </span>
-        )}
+        {card.isLeech && <Badge tone="warning">Difficult</Badge>}
       </div>
 
       {card.tags.length > 0 && (
         <ul className="mt-2 flex flex-wrap gap-1.5">
           {card.tags.map((tag) => (
-            <li key={tag} className="rounded-full bg-muted px-2 py-0.5 text-xs">
-              {tag}
+            <li key={tag}>
+              <Badge tone="sand">{tag}</Badge>
             </li>
           ))}
         </ul>
@@ -113,6 +109,6 @@ export function StudyCardView({
           ),
         )}
       </p>
-    </div>
+    </Card>
   )
 }

@@ -16,7 +16,8 @@ import { barHeightPercent, longDate, niceCeiling, shortDate } from './scale'
  * remainder is the rest. That puts volume and accuracy in one shape instead of
  * making the user read a second chart to find out whether a tall day went well.
  * The colour split is a *redundant* encoding — every number in it is in the
- * table underneath (ADR 0002 §4).
+ * table underneath (ADR 0002 §4) — and it is one hue at two lightnesses rather
+ * than two hues, so the split survives every form of colour blindness.
  */
 
 /** Axis ticks, capped. Thirty labels under a 30-day chart is a grey smear. */
@@ -77,7 +78,7 @@ export function BarChart({ days, caption, emptyMessage }: BarChartProps): ReactE
             {days.map((day) => (
               <div key={day.day} className="flex h-full min-w-0 flex-1 flex-col justify-end">
                 <div
-                  className="w-full rounded-t-sm bg-muted"
+                  className="w-full rounded-t-sm bg-success/20"
                   style={{ height: `${String(barHeightPercent(day.reviews, ceiling))}%` }}
                 >
                   {/*

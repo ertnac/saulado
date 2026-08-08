@@ -2,8 +2,13 @@ import { useState, type ReactElement } from 'react'
 import { Link } from 'react-router-dom'
 import type { StudySet } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { segmentClass } from '@/components/ui/segmented'
+import { PlusIcon } from '@/components/ui/icons'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { useDueCounts } from '@/features/study/queries'
 import { cn } from '@/lib/utils'
 import { setAccentClass } from './colors'
@@ -39,9 +44,13 @@ function SetCard({
   const studiable = !isArchived && due + newCards > 0
 
   return (
-    <li
+    <Card
+      as="li"
       className={cn(
-        'flex flex-col gap-3 rounded-lg border border-l-4 border-border bg-background p-4',
+        'flex flex-col gap-3 border-l-4 p-5',
+        // The colour stripe survives the move off bordered cards: it is the only
+        // per-set identifier, and eight background tints would be eight contrast
+        // problems in two themes (see ./colors).
         setAccentClass(set.color),
       )}
     >
@@ -65,9 +74,12 @@ function SetCard({
           )}
         </div>
 
-        <p className="shrink-0 text-sm tabular-nums text-muted-foreground">
-          {set.cardCount} {set.cardCount === 1 ? 'card' : 'cards'}
-        </p>
+        <div className="flex shrink-0 items-center gap-2">
+          {isArchived && <Badge>Archived</Badge>}
+          <p className="text-sm tabular-nums text-muted-foreground">
+            {set.cardCount} {set.cardCount === 1 ? 'card' : 'cards'}
+          </p>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -84,17 +96,17 @@ function SetCard({
             </span>
           </Link>
         )}
-        <Button variant="outline" size="sm" onClick={onEdit}>
+        <Button variant="soft" size="sm" onClick={onEdit}>
           Edit
         </Button>
         <Button variant="ghost" size="sm" onClick={onArchive}>
           {isArchived ? 'Restore' : 'Archive'}
         </Button>
-        <Button variant="ghost" size="sm" className="text-warning" onClick={onDelete}>
+        <Button variant="ghost" size="sm" className="text-danger" onClick={onDelete}>
           Delete
         </Button>
       </div>
-    </li>
+    </Card>
   )
 }
 
@@ -117,42 +129,48 @@ export function SetsPage(): ReactElement {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Your sets</h1>
-          <p className="mt-1 text-sm text-muted-foreground">A set groups cards on one subject.</p>
-        </div>
+      <PageHeader
+        title="Your sets"
+        description="A set groups cards on one subject."
+        actions={
+          <Button
+            onClick={() => {
+              setCreating(true)
+            }}
+          >
+            <PlusIcon />
+            New set
+          </Button>
+        }
+      />
 
-        <Button
-          onClick={() => {
-            setCreating(true)
-          }}
-        >
-          New set
-        </Button>
-      </header>
-
-      <div className="flex items-center gap-2">
-        <Button
-          variant={archived ? 'ghost' : 'outline'}
-          size="sm"
+      {/*
+        Styled as a segmented control but still two `aria-pressed` buttons. The
+        pair is a filter over two different result sets rather than one value
+        with two options, and swapping working toggle semantics for radio
+        semantics purely to reuse a component would be a downgrade.
+      */}
+      <div className="inline-flex gap-1 rounded-full bg-surface-muted p-1">
+        <button
+          type="button"
           aria-pressed={!archived}
+          className={segmentClass(!archived)}
           onClick={() => {
             setArchived(false)
           }}
         >
           Active
-        </Button>
-        <Button
-          variant={archived ? 'outline' : 'ghost'}
-          size="sm"
+        </button>
+        <button
+          type="button"
           aria-pressed={archived}
+          className={segmentClass(archived)}
           onClick={() => {
             setArchived(true)
           }}
         >
           Archived
-        </Button>
+        </button>
       </div>
 
       {sets.isPending ? (
@@ -160,18 +178,18 @@ export function SetsPage(): ReactElement {
         // list arrives (saulado-ux §5).
         <ul className="space-y-3" aria-busy="true">
           {[0, 1, 2].map((key) => (
-            <li key={key} className="rounded-lg border border-border p-4">
+            <Card as="li" key={key} className="p-5">
               <Skeleton className="h-5 w-48" />
               <Skeleton className="mt-2 h-4 w-72" />
-            </li>
+            </Card>
           ))}
         </ul>
       ) : sets.isError ? (
-        <div role="alert" className="rounded-lg border border-warning p-5">
+        <Card role="alert" tone="danger" className="p-5">
           <p className="text-sm">Could not load your sets.</p>
           <Button
             className="mt-3"
-            variant="outline"
+            variant="soft"
             size="sm"
             onClick={() => {
               void sets.refetch()
@@ -179,9 +197,9 @@ export function SetsPage(): ReactElement {
           >
             Try again
           </Button>
-        </div>
+        </Card>
       ) : items.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border p-8 text-center">
+        <Card tone="dashed" className="p-8 text-center">
           <p className="font-medium">{archived ? 'Nothing archived' : 'No sets yet'}</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
             {archived
@@ -190,15 +208,16 @@ export function SetsPage(): ReactElement {
           </p>
           {!archived && (
             <Button
-              className="mt-4"
+              className="mt-5"
               onClick={() => {
                 setCreating(true)
               }}
             >
+              <PlusIcon />
               Create your first set
             </Button>
           )}
-        </div>
+        </Card>
       ) : (
         <>
           <ul className="space-y-3">
@@ -223,7 +242,7 @@ export function SetsPage(): ReactElement {
 
           {sets.hasNextPage && (
             <Button
-              variant="outline"
+              variant="soft"
               disabled={sets.isFetchingNextPage}
               onClick={() => {
                 void sets.fetchNextPage()

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { ANSWERS_MAX_PER_CARD, codePointLength, PARAGRAPH_MAX_CODE_POINTS } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
+import { AlertIcon } from '@/components/ui/icons'
 import { cn } from '@/lib/utils'
 import type { SelectionResult } from '@/lib/selection'
 import { ClozePreview } from './ClozePreview'
@@ -128,7 +129,7 @@ export function HighlightEditor({ draft }: HighlightEditorProps): ReactElement {
         <div
           role="tablist"
           aria-label="Editor mode"
-          className="inline-flex rounded-md border border-border p-0.5"
+          className="inline-flex gap-1 rounded-full bg-surface-muted p-1"
         >
           <ModeTab active={mode === 'compose'} onClick={toComposeMode}>
             Write
@@ -172,7 +173,9 @@ export function HighlightEditor({ draft }: HighlightEditorProps): ReactElement {
             aria-describedby="card-paragraph-hint"
             placeholder="Paste or write the paragraph you want to study, then switch to Highlight."
             className={cn(
-              'w-full resize-none overflow-hidden rounded-md border border-border bg-background p-4',
+              // Stays a 12px rounded well rather than going pill-shaped: a pill
+              // textarea puts its first and last characters inside the curve.
+              'w-full resize-none overflow-hidden rounded-md border border-border bg-surface p-4',
               'text-base leading-relaxed placeholder:text-muted-foreground',
               overLimit && 'border-warning',
             )}
@@ -200,15 +203,22 @@ export function HighlightEditor({ draft }: HighlightEditorProps): ReactElement {
           />
 
           <div aria-live="polite" className="min-h-5">
-            {message && <p className="text-sm text-warning">{message}</p>}
+            {message && (
+              // Icon as well as colour: a rejection the user cannot see the colour
+              // of still has to read as a rejection.
+              <p className="flex items-start gap-1.5 text-sm text-warning">
+                <AlertIcon className="mt-0.5 h-[1em] w-[1em]" />
+                {message}
+              </p>
+            )}
           </div>
 
           <p className="text-xs text-muted-foreground">
             Select words to blank them.{' '}
-            <kbd className="rounded border border-border px-1">Ctrl</kbd>/
-            <kbd className="rounded border border-border px-1">⌘</kbd>+
-            <kbd className="rounded border border-border px-1">H</kbd> also works, and Tab moves
-            between blanks.
+            <kbd className="rounded-full bg-surface-muted px-2 py-0.5 font-medium">Ctrl</kbd>/
+            <kbd className="rounded-full bg-surface-muted px-2 py-0.5 font-medium">⌘</kbd>+
+            <kbd className="rounded-full bg-surface-muted px-2 py-0.5 font-medium">H</kbd> also
+            works, and Tab moves between blanks.
           </p>
         </div>
       )}

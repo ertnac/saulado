@@ -7,8 +7,11 @@ import {
   type DraftAnswer,
 } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { FormField } from '@/components/ui/form-field'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AlertIcon } from '@/components/ui/icons'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { useFormErrors } from '@/hooks/useFormErrors'
 import { HighlightEditor } from './HighlightEditor'
 import { TagInput } from './TagInput'
@@ -111,17 +114,15 @@ function CardEditor({ setId, card }: CardEditorProps): ReactElement {
         void submit()
       }}
     >
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {editing ? 'Edit card' : 'New card'}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Write the paragraph, then highlight the words worth recalling.
-        </p>
-      </header>
+      <PageHeader
+        title={editing ? 'Edit card' : 'New card'}
+        description="Write the paragraph, then highlight the words worth recalling."
+        className="mb-0"
+      />
 
       {errors.general && (
-        <p role="alert" className="text-sm text-warning">
+        <p role="alert" className="flex items-start gap-1.5 text-sm text-warning">
+          <AlertIcon className="mt-0.5 h-[1em] w-[1em]" />
           {errors.general}
         </p>
       )}
@@ -145,7 +146,8 @@ function CardEditor({ setId, card }: CardEditorProps): ReactElement {
         reported against `answers`, and the editor has no field to attach it to.
       */}
       {(errors.fields.answers ?? errors.fields.paragraph) && (
-        <p role="alert" className="text-sm text-warning">
+        <p role="alert" className="flex items-start gap-1.5 text-sm text-warning">
+          <AlertIcon className="mt-0.5 h-[1em] w-[1em]" />
           {errors.fields.answers ?? errors.fields.paragraph}
         </p>
       )}
@@ -160,7 +162,7 @@ function CardEditor({ setId, card }: CardEditorProps): ReactElement {
         <Button type="submit" disabled={pending || !ready}>
           {pending ? 'Saving…' : editing ? 'Save card' : 'Create card'}
         </Button>
-        <Link className={buttonClass({ variant: 'outline' })} to={`/sets/${setId}`}>
+        <Link className={buttonClass({ variant: 'ghost' })} to={`/sets/${setId}`}>
           Cancel
         </Link>
         {draft.answers.length === 0 && (
@@ -214,14 +216,11 @@ export function EditCardPage(): ReactElement {
 
 function NotFound(): ReactElement {
   return (
-    <div role="alert" className="rounded-lg border border-warning p-5">
+    <Card role="alert" tone="danger" className="p-5">
       <p className="text-sm">That card could not be loaded. It may have been deleted.</p>
-      <Link
-        className={buttonClass({ variant: 'outline', size: 'sm', className: 'mt-3' })}
-        to="/sets"
-      >
+      <Link className={buttonClass({ variant: 'soft', size: 'sm', className: 'mt-3' })} to="/sets">
         Back to your sets
       </Link>
-    </div>
+    </Card>
   )
 }

@@ -2,7 +2,11 @@ import { useState, type ReactElement } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { DashboardResponse, RecentSet } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardFigure, CardLabel } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ChevronRightIcon, PlusIcon, SparkIcon } from '@/components/ui/icons'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { GoalRing } from '@/components/charts/GoalRing'
 import { Sparkline } from '@/components/charts/Sparkline'
 import { SetDialog } from '@/features/cards/SetDialog'
@@ -32,16 +36,19 @@ import { StreakCard } from './StreakCard'
 
 function DuePanel({ due }: { due: number }): ReactElement {
   return (
-    <div className="rounded-lg border border-border p-5">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Due today</p>
-      <p className="mt-2 text-4xl font-semibold tabular-nums">{due}</p>
+    // The one accent-toned panel on the page, and the one filled CTA. The tint
+    // is what makes "you have work waiting" legible before a word is read.
+    <Card tone="accent" className="p-5 sm:p-6">
+      <CardLabel>Due today</CardLabel>
+      <CardFigure>{due}</CardFigure>
       <p className="mt-1 text-sm text-muted-foreground">
         {due === 1 ? 'One card is ready for review.' : `${String(due)} cards are ready for review.`}
       </p>
-      <Link className={buttonClass({ size: 'lg', className: 'mt-4' })} to="/study">
+      <Link className={buttonClass({ size: 'lg', className: 'mt-5' })} to="/study">
         Start studying
+        <ChevronRightIcon />
       </Link>
-    </div>
+    </Card>
   )
 }
 
@@ -54,18 +61,19 @@ function DuePanel({ due }: { due: number }): ReactElement {
  */
 function ReadyToLearn({ newCards }: { newCards: number }): ReactElement {
   return (
-    <div className="rounded-lg border border-border p-5">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">New cards</p>
-      <p className="mt-2 text-4xl font-semibold tabular-nums">{newCards}</p>
+    <Card className="p-5 sm:p-6">
+      <CardLabel>New cards</CardLabel>
+      <CardFigure>{newCards}</CardFigure>
       <p className="mt-1 text-sm text-muted-foreground">
         {newCards === 1
           ? 'One card is waiting to be learned.'
           : `${String(newCards)} cards are waiting to be learned.`}
       </p>
-      <Link className={buttonClass({ size: 'lg', className: 'mt-4' })} to="/study">
+      <Link className={buttonClass({ size: 'lg', className: 'mt-5' })} to="/study">
         Start learning
+        <ChevronRightIcon />
       </Link>
-    </div>
+    </Card>
   )
 }
 
@@ -77,21 +85,24 @@ function ReadyToLearn({ newCards }: { newCards: number }): ReactElement {
  */
 function CaughtUp(): ReactElement {
   return (
-    <div className="rounded-lg border border-border p-5">
-      <p className="font-medium">Caught up for today</p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Every review is done. The next batch unlocks tomorrow.
-      </p>
-    </div>
+    <Card className="flex items-start gap-4 p-5 sm:p-6">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-success/15 text-xl text-success">
+        <SparkIcon />
+      </span>
+      <div>
+        <p className="font-medium">Caught up for today</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Every review is done. The next batch unlocks tomorrow.
+        </p>
+      </div>
+    </Card>
   )
 }
 
 function ExampleCard(): ReactElement {
   return (
-    <div className="rounded-lg border border-border p-5">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        What a card looks like
-      </p>
+    <Card className="p-5 sm:p-6">
+      <CardLabel>What a card looks like</CardLabel>
 
       <p className="mt-3 text-base leading-relaxed">
         The{' '}
@@ -109,11 +120,12 @@ function ExampleCard(): ReactElement {
       </p>
 
       <p className="mt-4 text-sm text-muted-foreground">
-        You write the paragraph, highlight <span className="font-medium">CPU</span>, and Saulado
-        turns it into a question that keeps the sentence around it. Recall in context, not from a
-        bare flashcard.
+        You write the paragraph, highlight{' '}
+        <span className="rounded bg-highlight px-1 font-medium text-highlight-foreground">CPU</span>
+        , and Saulado turns it into a question that keeps the sentence around it. Recall in context,
+        not from a bare flashcard.
       </p>
-    </div>
+    </Card>
   )
 }
 
@@ -125,14 +137,14 @@ function ExampleCard(): ReactElement {
  */
 function DashboardUnavailable(): ReactElement {
   return (
-    <div className="rounded-lg border border-dashed border-border p-5">
+    <Card tone="dashed" className="p-5 sm:p-6">
       <p className="text-sm text-muted-foreground">
         Could not load today&apos;s summary. Studying still works.
       </p>
       <Link className={buttonClass({ className: 'mt-4' })} to="/study">
         Go to study
       </Link>
-    </div>
+    </Card>
   )
 }
 
@@ -142,15 +154,16 @@ function GettingStarted({ onCreate }: { onCreate: () => void }): ReactElement {
     <>
       <ExampleCard />
 
-      <div className="rounded-lg border border-dashed border-border p-5">
+      <Card tone="dashed" className="p-5 sm:p-6">
         <p className="text-sm text-muted-foreground">
           A set holds cards on one subject. Each card is a paragraph of your own notes with the
           words worth recalling blanked out.
         </p>
-        <Button size="lg" className="mt-4" onClick={onCreate}>
+        <Button size="lg" className="mt-5" onClick={onCreate}>
+          <PlusIcon />
           Create your first set
         </Button>
-      </div>
+      </Card>
     </>
   )
 }
@@ -171,10 +184,13 @@ function RecentSetRow({ set }: { set: RecentSet }): ReactElement {
     <li>
       <Link
         to={`/sets/${set.id}`}
-        className="flex min-h-[44px] items-center justify-between gap-3 rounded-md border border-border px-4 py-3 hover:bg-muted"
+        className="flex min-h-[44px] items-center justify-between gap-3 rounded-md bg-surface px-4 py-3 shadow-soft transition-shadow duration-150 hover:shadow-lift"
       >
         <span className="min-w-0 truncate font-medium">{set.title}</span>
-        <span className="shrink-0 text-sm tabular-nums text-muted-foreground">{detail()}</span>
+        <span className="flex shrink-0 items-center gap-2 text-sm tabular-nums text-muted-foreground">
+          {detail()}
+          <ChevronRightIcon />
+        </span>
       </Link>
     </li>
   )
@@ -184,14 +200,19 @@ function RecentSets({ sets, onCreate }: { sets: RecentSet[]; onCreate: () => voi
   return (
     <section aria-labelledby="recent-heading" className="space-y-3">
       <div className="flex items-center justify-between gap-4">
-        <h2 id="recent-heading" className="text-sm font-medium uppercase tracking-wide">
-          Your sets
-        </h2>
+        <div className="flex items-center gap-2">
+          <h2 id="recent-heading" className="text-lg font-semibold tracking-tight">
+            Your sets
+          </h2>
+          {/* Outside the heading — see the note in PageHeader. */}
+          <Badge>{sets.length}</Badge>
+        </div>
         {/*
           Secondary styling, not another primary button. The plan asks for a
           single dominant CTA, and two filled buttons on one screen is two.
         */}
-        <Button variant="outline" size="sm" onClick={onCreate}>
+        <Button variant="soft" size="sm" onClick={onCreate}>
+          <PlusIcon />
           New set
         </Button>
       </div>
@@ -202,8 +223,12 @@ function RecentSets({ sets, onCreate }: { sets: RecentSet[]; onCreate: () => voi
         ))}
       </ul>
 
-      <Link to="/sets" className="inline-block text-sm text-muted-foreground underline">
+      <Link
+        to="/sets"
+        className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+      >
         All sets
+        <ChevronRightIcon />
       </Link>
     </section>
   )
@@ -213,33 +238,35 @@ function TodaySection({ data }: { data: DashboardResponse }): ReactElement {
   return (
     <section aria-labelledby="progress-heading" className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <h2 id="progress-heading" className="text-sm font-medium uppercase tracking-wide">
+        <h2 id="progress-heading" className="text-lg font-semibold tracking-tight">
           Your progress
         </h2>
-        <Link to="/progress" className="text-sm text-muted-foreground underline">
+        <Link
+          to="/progress"
+          className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+        >
           See all progress
+          <ChevronRightIcon />
         </Link>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <StreakCard streak={data.streak} />
 
-        <div className="rounded-lg border border-border p-5">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Today</p>
+        <Card className="p-5">
+          <CardLabel>Today</CardLabel>
           <div className="mt-3">
             <GoalRing value={data.today.reviews} goal={data.today.goal} met={data.today.goalMet} />
           </div>
-        </div>
+        </Card>
       </div>
 
-      <div className="rounded-lg border border-border p-5">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Last 7 days
-        </p>
+      <Card className="p-5">
+        <CardLabel>Last 7 days</CardLabel>
         <div className="mt-3">
           <Sparkline days={data.sparkline} label="Reviews in the last 7 days" />
         </div>
-      </div>
+      </Card>
     </section>
   )
 }
@@ -281,17 +308,19 @@ export function DashboardPage(): ReactElement {
 
   return (
     <div className="space-y-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {user ? `Welcome, ${user.email.split('@')[0] ?? 'there'}` : 'Welcome'}
-        </h1>
-        <p className="mt-1 text-muted-foreground">
-          Build a set, highlight what matters, and study it in context.
-        </p>
-      </header>
+      <PageHeader
+        title={user ? `Welcome, ${user.email.split('@')[0] ?? 'there'}` : 'Welcome'}
+        description="Build a set, highlight what matters, and study it in context."
+        className="mb-0"
+      />
 
       <section aria-labelledby="study-heading" className="space-y-4">
-        <h2 id="study-heading" className="text-sm font-medium uppercase tracking-wide">
+        {/*
+          No count badge beside this heading, though the pattern is used
+          elsewhere: the hero directly below already shows the figure, and the
+          same number twice in adjacent lines reads as two different numbers.
+        */}
+        <h2 id="study-heading" className="text-lg font-semibold tracking-tight">
           {heading()}
         </h2>
 

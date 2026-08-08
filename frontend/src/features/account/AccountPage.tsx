@@ -2,7 +2,9 @@ import { useState, type FormEvent, type ReactElement } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ACCOUNT_DELETE_CONFIRMATION, PASSWORD_MIN_LENGTH, checkPassword } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { FormField } from '@/components/ui/form-field'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { useFormErrors } from '@/hooks/useFormErrors'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/stores/toast'
@@ -23,16 +25,19 @@ export function AccountPage(): ReactElement {
   const email = useAuthStore((s) => s.user?.email ?? '')
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Signed in as {email}.{' '}
-          <Link to="/settings" className="font-medium text-foreground underline">
-            Study settings
-          </Link>
-        </p>
-      </header>
+    <div className="space-y-6">
+      <PageHeader
+        title="Account"
+        description={
+          <>
+            Signed in as {email}.{' '}
+            <Link to="/settings" className="font-medium text-foreground underline">
+              Study settings
+            </Link>
+          </>
+        }
+        className="mb-0"
+      />
 
       <ChangeEmailSection currentEmail={email} />
       <ChangePasswordSection />
@@ -79,7 +84,7 @@ function ChangeEmailSection({ currentEmail }: { currentEmail: string }): ReactEl
           stays <span className="font-medium">{currentEmail}</span> until you open it.
         </p>
         <Button
-          variant="outline"
+          variant="soft"
           onClick={() => {
             setSent(null)
           }}
@@ -93,7 +98,7 @@ function ChangeEmailSection({ currentEmail }: { currentEmail: string }): ReactEl
   return (
     <Section title="Email">
       {errors.general && (
-        <p role="alert" className="text-sm text-[hsl(var(--warning))]">
+        <p role="alert" className="text-sm text-warning">
           {errors.general}
         </p>
       )}
@@ -178,7 +183,7 @@ function ChangePasswordSection(): ReactElement {
   return (
     <Section title="Password">
       {errors.general && (
-        <p role="alert" className="text-sm text-[hsl(var(--warning))]">
+        <p role="alert" className="text-sm text-warning">
           {errors.general}
         </p>
       )}
@@ -262,7 +267,7 @@ function ExportSection(): ReactElement {
         Everything you have written — sets, cards, answers, schedules and your review history — as
         one JSON file. Credentials are not included.
       </p>
-      <Button variant="outline" onClick={onExport} disabled={exportData.isPending}>
+      <Button variant="soft" onClick={onExport} disabled={exportData.isPending}>
         {exportData.isPending ? 'Building…' : 'Download my data'}
       </Button>
     </Section>
@@ -305,10 +310,14 @@ function DeleteSection(): ReactElement {
   }
 
   return (
-    <section className="space-y-4 rounded-lg border border-[hsl(var(--warning))] p-5">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-[hsl(var(--warning))]">
-        Delete account
-      </h2>
+    /*
+      `--danger`, and the only place in the app that uses it as a *border*. Every
+      other error in the product is something you retype; this one is the single
+      irreversible action, so it gets the loudest treatment available and nothing
+      else is allowed to borrow it.
+    */
+    <Card as="section" tone="danger" className="space-y-4 p-5 sm:p-6">
+      <h2 className="text-base font-semibold tracking-tight text-danger">Delete account</h2>
 
       <p className="text-sm text-muted-foreground">
         Permanently removes your account and every set, card, answer and review with it. This cannot
@@ -318,6 +327,9 @@ function DeleteSection(): ReactElement {
 
       {!open ? (
         <Button
+          // Outline, not filled danger. This button only *opens* the disclosure;
+          // the filled one below is the button that actually deletes, and two
+          // solid red buttons in the same panel is how the wrong one gets hit.
           variant="outline"
           onClick={() => {
             setOpen(true)
@@ -334,7 +346,7 @@ function DeleteSection(): ReactElement {
           className="space-y-4"
         >
           {errors.general && (
-            <p role="alert" className="text-sm text-[hsl(var(--warning))]">
+            <p role="alert" className="text-sm text-warning">
               {errors.general}
             </p>
           )}
@@ -370,11 +382,7 @@ function DeleteSection(): ReactElement {
           />
 
           <div className="flex gap-2">
-            <Button
-              type="submit"
-              className="bg-warning text-background hover:opacity-90"
-              disabled={!confirmed || deleteAccount.isPending}
-            >
+            <Button type="submit" variant="danger" disabled={!confirmed || deleteAccount.isPending}>
               {deleteAccount.isPending ? 'Deleting…' : 'Delete permanently'}
             </Button>
             <Button
@@ -392,6 +400,6 @@ function DeleteSection(): ReactElement {
           </div>
         </form>
       )}
-    </section>
+    </Card>
   )
 }

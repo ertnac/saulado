@@ -1,5 +1,6 @@
 import { useId, type ReactElement, type ReactNode } from 'react'
 import { Input, type InputProps } from './input'
+import { AlertIcon } from './icons'
 
 interface FormFieldProps extends Omit<InputProps, 'id' | 'aria-invalid' | 'aria-describedby'> {
   label: string
@@ -47,10 +48,16 @@ export function FormField({ label, error, hint, ...props }: FormFieldProps): Rea
         </p>
       )}
 
+      {/*
+        `--warning`, not `--danger`. The plan reserves danger for destructive and
+        irreversible actions; a field you can simply retype is neither, and
+        spending the strongest colour in the palette on a typo leaves nothing
+        louder for "this will delete your account".
+      */}
       <div aria-live="polite">
         {error && (
-          <p id={errorId} className="text-sm text-[hsl(var(--warning))]">
-            <span aria-hidden="true">! </span>
+          <p id={errorId} className="flex items-start gap-1.5 text-sm text-warning">
+            <AlertIcon className="mt-0.5 h-[1em] w-[1em]" />
             {error}
           </p>
         )}

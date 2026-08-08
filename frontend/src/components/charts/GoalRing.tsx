@@ -53,7 +53,7 @@ export function GoalRing({ value, goal, met }: GoalRingProps): ReactElement {
             r={RADIUS}
             fill="none"
             strokeWidth={STROKE}
-            className="stroke-muted"
+            className="stroke-surface-muted"
           />
           {fraction > 0 && (
             <circle

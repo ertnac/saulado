@@ -100,7 +100,7 @@ export function ChartFigure({
  */
 export function ChartEmpty({ children }: { children: ReactNode }): ReactElement {
   return (
-    <div className="flex min-h-[8rem] items-center justify-center rounded-lg border border-dashed border-border px-4 py-6">
+    <div className="flex min-h-[8rem] items-center justify-center rounded-lg border border-dashed border-border bg-surface/50 px-4 py-6">
       <p className="text-center text-sm text-muted-foreground">{children}</p>
     </div>
   )

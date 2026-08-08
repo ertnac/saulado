@@ -10,6 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogActions } from '@/components/ui/dialog'
 import { FormField } from '@/components/ui/form-field'
+import { AlertIcon } from '@/components/ui/icons'
 import { useFormErrors } from '@/hooks/useFormErrors'
 import { cn } from '@/lib/utils'
 import { setColorClass } from './colors'
@@ -83,7 +84,8 @@ export function SetDialog({ open, onClose, set, onSubmit, pending }: SetDialogPr
         }}
       >
         {errors.general && (
-          <p role="alert" className="text-sm text-warning">
+          <p role="alert" className="flex items-start gap-1.5 text-sm text-warning">
+            <AlertIcon className="mt-0.5 h-[1em] w-[1em]" />
             {errors.general}
           </p>
         )}
@@ -119,8 +121,12 @@ export function SetDialog({ open, onClose, set, onSubmit, pending }: SetDialogPr
               <label
                 key={option}
                 className={cn(
-                  'flex h-11 w-11 cursor-pointer items-center justify-center rounded-md border-2',
-                  color === option ? 'border-foreground' : 'border-transparent',
+                  'flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-2',
+                  'transition-colors duration-150',
+                  // `foreground` rather than `primary` for the selected ring: the
+                  // palette contains a green swatch, and a green ring around it
+                  // would be the one selection the user cannot see.
+                  color === option ? 'border-foreground' : 'border-transparent hover:border-border',
                 )}
               >
                 {/*
@@ -138,7 +144,10 @@ export function SetDialog({ open, onClose, set, onSubmit, pending }: SetDialogPr
                   }}
                   className="sr-only"
                 />
-                <span aria-hidden="true" className={cn('h-7 w-7 rounded', setColorClass(option))} />
+                <span
+                  aria-hidden="true"
+                  className={cn('h-7 w-7 rounded-full shadow-soft', setColorClass(option))}
+                />
                 <span className="sr-only">{option}</span>
               </label>
             ))}
@@ -146,7 +155,7 @@ export function SetDialog({ open, onClose, set, onSubmit, pending }: SetDialogPr
         </fieldset>
 
         <DialogActions>
-          <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={pending}>
             Cancel
           </Button>
           <Button type="submit" disabled={pending || trimmed.length === 0}>

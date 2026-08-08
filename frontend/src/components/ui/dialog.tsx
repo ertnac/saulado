@@ -101,7 +101,11 @@ export function Dialog({
         accessible ways out, and a focusable overlay would be one more stop
         between the user and the form.
       */}
-      <div className="absolute inset-0 bg-foreground/40" aria-hidden="true" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-foreground/40 backdrop-blur-sm"
+        aria-hidden="true"
+        onClick={onClose}
+      />
 
       <div
         ref={panelRef}
@@ -112,7 +116,7 @@ export function Dialog({
         tabIndex={-1}
         // Full-width sheet on mobile, centred card from sm up — a centred modal at
         // 320px leaves no room for the form inside it.
-        className="relative w-full max-w-lg rounded-t-lg border border-border bg-background p-5 shadow-lg sm:rounded-lg"
+        className="relative w-full max-w-lg rounded-t-xl bg-surface p-6 shadow-lift sm:rounded-xl"
       >
         <h2 id={`${id}-title`} className="text-lg font-semibold tracking-tight">
           {title}
@@ -163,18 +167,18 @@ export function ConfirmDialog({
   return (
     <Dialog open={open} onClose={onClose} title={title} description={description}>
       <DialogActions>
-        <Button variant="outline" onClick={onClose} disabled={pending}>
+        <Button variant="ghost" onClick={onClose} disabled={pending}>
           Cancel
         </Button>
         {/*
           Cancel is first in DOM order, so it is what focus lands on when the
           dialog opens — the safe default for a destructive prompt.
+
+          `danger` rather than a borrowed `--warning` fill: the highlight editor
+          already spends warning on a rejected selection, and "this cannot be
+          highlighted" must not look like "this will erase your account".
         */}
-        <Button
-          className="bg-warning text-background hover:opacity-90"
-          onClick={onConfirm}
-          disabled={pending}
-        >
+        <Button variant="danger" onClick={onConfirm} disabled={pending}>
           {pending ? 'Working…' : confirmLabel}
         </Button>
       </DialogActions>
