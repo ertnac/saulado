@@ -605,7 +605,7 @@ expected result.
 | No answer text reaches the browser | ✅ met | Asserted against `JSON.stringify(session)`, not a text query — a leak into a `value` or `data-` attribute would pass `queryByText`  |
 | Zero layout shift on reveal        | ✅ met | Input and graded span share `calc(${answerLength}ch + 1rem)`; every blank on a card shares one width. `BlankSlot.test.tsx`          |
 | A → B isolation is 404, not 403    | ✅ met | Every study route takes a session id from the URL, which is the shape an IDOR takes. Cross-user tests on read, answer, and complete |
-| Tests green                        | ✅ met | **645** passing: 240 shared, 224 backend, 181 frontend. Typecheck, lint and format clean                                            |
+| Tests green                        | ✅ met | **652** passing: 240 shared, 226 backend, 186 frontend. Typecheck, lint and format clean                                            |
 
 Full write-up in [docs/PHASE_4.md](./docs/PHASE_4.md); the manual pass is
 [docs/PHASE_4_TEST_CHECKLIST.md](./docs/PHASE_4_TEST_CHECKLIST.md).

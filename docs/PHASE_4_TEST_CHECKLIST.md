@@ -36,8 +36,8 @@ becomes `tail`'s, so a failing command reports success.
 | A.2 | `pnpm --filter @saulado/shared test -- --run`      | **240 passed**, 13 files                                                                                                 |
 | A.3 | `pnpm --filter @saulado/backend exec tsc --noEmit` | **No output at all.** Any output is a failure                                                                            |
 | A.4 | `pnpm --filter @saulado/frontend typecheck`        | No errors                                                                                                                |
-| A.5 | `pnpm --filter @saulado/backend test -- --run`     | **224 passed**, 14 files. Needs Postgres up                                                                              |
-| A.6 | `pnpm --filter @saulado/frontend test -- --run`    | **181 passed**, 11 files                                                                                                 |
+| A.5 | `pnpm --filter @saulado/backend test -- --run`     | **226 passed**, 14 files. Needs Postgres up                                                                              |
+| A.6 | `pnpm --filter @saulado/frontend test -- --run`    | **186 passed**, 11 files                                                                                                 |
 | A.7 | `pnpm lint`                                        | No output, exit 0. (There is **no** backend `lint` script — root only)                                                   |
 | A.8 | `pnpm format:check`                                | `All matched files use Prettier code style!`                                                                             |
 
@@ -196,16 +196,41 @@ UPDATE card_schedules SET due_at = CURRENT_DATE - 1;
 
 ## Part H — Interruption and retries
 
-| #   | Do this                                               | Correct result                                                                                      |
-| --- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| H.1 | Mid-session, reload the page                          | The same session resumes. Answered cards are **gone from the queue**, the failed one is still there |
-| H.2 | Check what resumed                                    | Your **typed answers are not** restored — only the position. Only the id is stored client-side      |
-| H.3 | Mid-session, open `/study` in a second tab            | The **same** session, not a second one                                                              |
-| H.4 | Finish the session, then reload `/study`              | Does not resurrect the finished session                                                             |
-| H.5 | Answer a card, then click Continue twice fast         | Advances **once**                                                                                   |
-| H.6 | Stop the backend, submit an answer, restart it, retry | The retry succeeds and the progress count moves by **one**, not two                                 |
+| #   | Do this                                                        | Correct result                                                                                                                         |
+| --- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| H.1 | Mid-session, reload the page                                   | The same session resumes. Answered cards are **gone from the queue**, the failed one is still there                                    |
+| H.2 | Check what resumed                                             | Your **typed answers are not** restored — only the position. Only the id is stored client-side                                         |
+| H.3 | Mid-session, open `/study` in a second tab                     | The **same** session, not a second one                                                                                                 |
+| H.4 | Finish the session, then reload `/study`                       | Does not resurrect the finished session                                                                                                |
+| H.5 | Answer a card, then click Continue twice fast                  | Advances **once**                                                                                                                      |
+| H.6 | Stop the backend, submit an answer, restart it, retry          | The retry succeeds and the progress count moves by **one**, not two                                                                    |
+| H.7 | Answer the **last** card, then reload before clicking Continue | ⚠️ The regression check. You get "This session is finished" or "Nothing due right now" — **never a blank page or an endless skeleton** |
+| H.8 | Reload `/study` again after H.7                                | Same result, every time. If the first reload recovers and the second hangs, the dead session is still winning the lookup               |
 
-### H.7 — Idempotency, the rigorous way
+**H.7 is the one that shipped broken.** Answering the last card and reloading left
+the session open with every card answered, and `POST /study/sessions` handed that
+back as a 200 with an empty queue. The screen waits on "is there a card", which is
+also what loading looks like, so it showed the skeleton forever — on that visit and
+every later one. Both halves are fixed; this is how you confirm it stays fixed.
+
+### H.0 — The dev-only one, and do it first
+
+Run this in `pnpm dev`, not against a production build. It only reproduces under
+`StrictMode`, which Vite's dev build has and the production build does not.
+
+| #     | Do this                                                                 | Correct result                                                                               |
+| ----- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| H.0.a | `localStorage.removeItem('saulado-study-session')`, then open `/study`  | ⚠️ A **card**, within a second. An endless skeleton here is the §6.6 regression              |
+| H.0.b | Check the Network tab for that load                                     | Exactly **one** `POST /api/study/sessions`. Two means the mount guard is gone                |
+| H.0.c | Clear the pointer again with everything already reviewed, open `/study` | "Nothing due right now" — the 400 must reach the screen, not sit invisible behind a skeleton |
+
+Clearing the pointer is what makes this a real test: with one stored, the page
+resumes through a _query_ rather than the mutation, and queries never had the bug.
+The document response is a 200 or 304 either way — Vite serves the same shell for
+every SPA path, so nothing in the Network tab tells you whether React rendered.
+Judge it by what is on screen.
+
+### H.9 — Idempotency, the rigorous way
 
 1. Devtools → Network, submit an answer, find the `answers` request.
 2. **Copy as fetch**, paste into the console, run it again unchanged.
@@ -322,7 +347,7 @@ The UI cannot show you these. Open `pnpm db:studio` after a session.
 | L.4 | A card you failed                                       | `interval_days` back to **1**, `lapses` **+1**, `ease_factor` **lower**                   |
 | L.5 | `ease_factor` on any row                                | Inside **1.3 – 2.5**. Outside that range means the clamp is not applied                   |
 | L.6 | `reviews`                                               | One row per graded presentation — a card you saw twice has **two** rows                   |
-| L.7 | `reviews` after an idempotent replay (H.7)              | Still **one** row for that presentation                                                   |
+| L.7 | `reviews` after an idempotent replay (H.9)              | Still **one** row for that presentation                                                   |
 | L.8 | `user_daily_stats`                                      | One row for today, and `reviews_done` matches the `reviews` count for today               |
 | L.9 | Fail one card eight times (F.5 between each)            | At `lapses` = 8 it is a **leech** and appears in the summary rather than cycling silently |
 
@@ -346,7 +371,7 @@ Date:                              Browser:
 Ran on phone?  iOS ☐   Android ☐   Neither ☐
 
 Part 0  Setup .................... ☐ pass  ☐ fail: __________________
-Part A  Automated gate ........... ☐ 645 tests  ☐ other: ____________
+Part A  Automated gate ........... ☐ 652 tests  ☐ other: ____________
 Part B  Nothing-to-study state .... ☐ pass  ☐ fail: __________________
 Part C  Cards built .............. ☐ pass  ☐ fail: __________________
         C.5 count is 2, not 3 .... ☐ 2     ☐ 3 — no-blank card is in the queue
@@ -357,7 +382,8 @@ Part E  Summary .................. ☐ pass  ☐ fail: __________________
 Part F  Four dashboard states ..... ☐ all four  ☐ F.2 showed "Caught up" — bug
 Part G  Archiving observable ...... ☐ pass  ☐ fail: __________________
 Part H  Interruption + retries .... ☐ pass  ☐ fail: __________________
-        H.7 idempotent replay .... ☐ identical  ☐ DOUBLE-COUNTED — report
+        H.0 fresh /study renders .. ☐ card shown  ☐ ENDLESS SKELETON — report
+        H.9 idempotent replay .... ☐ identical  ☐ DOUBLE-COUNTED — report
 Part I  Answer key stays server .. ☐ no matches ☐ LEAKED — stop and report 🔒
         I.6 client grade ignored .. ☐ again  ☐ easy — SECURITY, stop 🔒
         I.7 isolation ............ ☐ 404   ☐ 403 — SECURITY, stop 🔒

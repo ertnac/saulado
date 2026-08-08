@@ -51,10 +51,52 @@ export function StudySessionPage(): ReactElement {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [summary, setSummary] = useState<SessionSummary | null>(null)
   const [resumeId] = useState(readResumableSession)
+  const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState<Error | null>(null)
 
   const resumed = useSession(sessionId === null ? resumeId : null)
   const elapsed = useCardTimer(session.card?.cardId)
   const started = useRef(false)
+
+  /**
+   * Start a session and adopt it.
+   *
+   * `mutateAsync` with local state, rather than `mutate` with callbacks and
+   * `start.isPending` / `start.error`, because a `useMutation` result is not
+   * trustworthy for a mutation fired from a mount effect.
+   *
+   * `main.tsx` wraps the app in `StrictMode`, so in development every component
+   * mounts, unmounts and remounts. query-core's `MutationObserver` detaches
+   * itself from the in-flight mutation when its subscription is torn down — it
+   * has an `onUnsubscribe` that calls `removeObserver` and no `onSubscribe` to
+   * undo it — and the mutation only dispatches to attached observers. So the
+   * remounted page holds an observer wired to nothing: `onSuccess` never fires,
+   * `data` never lands, and the status is stuck on `pending` for good. A session
+   * created on the server, and a screen waiting for a card that cannot come.
+   *
+   * The promise `mutateAsync` returns belongs to the mutation rather than the
+   * observer, so it settles regardless. `useStartSession`'s own `onSuccess` is
+   * mutation-level too, so seeding the query cache still happens.
+   */
+  const begin = (): void => {
+    started.current = true
+    setStartError(null)
+    setStarting(true)
+
+    start
+      .mutateAsync(studySetId ?? undefined)
+      .then((data) => {
+        setSessionId(data.session.id)
+        rememberSession(data.session.id)
+        session.load(data.session)
+      })
+      .catch((error: unknown) => {
+        setStartError(error instanceof Error ? error : new Error('Could not start this session.'))
+      })
+      .finally(() => {
+        setStarting(false)
+      })
+  }
 
   useEffect(() => {
     /**
@@ -66,16 +108,9 @@ export function StudySessionPage(): ReactElement {
      * avoid. Skipped entirely when there is a session id to resume.
      */
     if (started.current || resumeId !== null) return
-    started.current = true
 
-    start.mutate(studySetId ?? undefined, {
-      onSuccess: (data) => {
-        setSessionId(data.session.id)
-        rememberSession(data.session.id)
-        session.load(data.session)
-      },
-    })
-  }, [resumeId, start, studySetId, session])
+    begin()
+  })
 
   useEffect(() => {
     // The resumed session arrived. Adopting it is the same operation as adopting
@@ -94,16 +129,9 @@ export function StudySessionPage(): ReactElement {
      */
     if (!resumed.isError || started.current) return
     forgetSession()
-    started.current = true
 
-    start.mutate(studySetId ?? undefined, {
-      onSuccess: (data) => {
-        setSessionId(data.session.id)
-        rememberSession(data.session.id)
-        session.load(data.session)
-      },
-    })
-  }, [resumed.isError, start, studySetId, session])
+    begin()
+  })
 
   const finish = (id: string): void => {
     complete.mutate(id, {
@@ -195,22 +223,11 @@ export function StudySessionPage(): ReactElement {
       <SessionSummaryView
         summary={summary}
         studySetId={studySetId}
-        pending={start.isPending}
+        pending={starting}
         onStudyAgain={() => {
           setSummary(null)
           setSessionId(null)
-          started.current = true
-          start.mutate(studySetId ?? undefined, {
-            onSuccess: (data) => {
-              setSessionId(data.session.id)
-              rememberSession(data.session.id)
-              session.load(data.session)
-            },
-            onError: () => {
-              // Nothing due. `startError` below renders the reason.
-              started.current = true
-            },
-          })
+          begin()
         }}
       />
     )
@@ -222,9 +239,8 @@ export function StudySessionPage(): ReactElement {
     has already studied today. Showing it as an error page with a retry button
     would misdescribe a finished day as a broken one.
   */
-  if (start.isError) {
-    const error = start.error
-    const nothingDue = error instanceof ApiError && error.code === 'VALIDATION_ERROR'
+  if (startError) {
+    const nothingDue = startError instanceof ApiError && startError.code === 'VALIDATION_ERROR'
 
     return (
       <div className="rounded-lg border border-dashed border-border p-8 text-center">
@@ -232,7 +248,7 @@ export function StudySessionPage(): ReactElement {
         <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
           {nothingDue
             ? 'Every card in this set has been reviewed for today. New reviews unlock tomorrow.'
-            : error.message}
+            : startError.message}
         </p>
         <div className="mt-4 flex flex-wrap justify-center gap-3">
           <Link className={buttonClass({ variant: 'outline' })} to="/">
@@ -240,9 +256,9 @@ export function StudySessionPage(): ReactElement {
           </Link>
           {!nothingDue && (
             <Button
+              disabled={starting}
               onClick={() => {
-                start.reset()
-                started.current = false
+                begin()
               }}
             >
               Try again
@@ -265,20 +281,13 @@ export function StudySessionPage(): ReactElement {
             Back to the dashboard
           </Link>
           <Button
-            disabled={start.isPending}
+            disabled={starting}
             onClick={() => {
               setSessionId(null)
-              start.reset()
-              start.mutate(studySetId ?? undefined, {
-                onSuccess: (data) => {
-                  setSessionId(data.session.id)
-                  rememberSession(data.session.id)
-                  session.load(data.session)
-                },
-              })
+              begin()
             }}
           >
-            {start.isPending ? 'Starting…' : 'Study again'}
+            {starting ? 'Starting…' : 'Study again'}
           </Button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { StrictMode } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -493,6 +494,41 @@ describe('when there is nothing to study', () => {
 
     expect(await screen.findByText('Could not start')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+})
+
+describe('under StrictMode, as the app actually runs', () => {
+  /**
+   * `main.tsx` wraps the app in `StrictMode`, which in development mounts,
+   * unmounts and remounts every component before settling. That teardown
+   * unsubscribes `useMutation`, and query-core's `MutationObserver` detaches
+   * itself from the in-flight mutation on unsubscribe without ever re-attaching
+   * — it defines `onUnsubscribe` and no `onSubscribe`. Since a mutation only
+   * dispatches to attached observers, the remounted page is left holding an
+   * observer wired to nothing: `onSuccess` never fires, `data` never lands, and
+   * the status is stuck on `pending` for good.
+   *
+   * Both branches below hang on that, which is why there are two: the success
+   * path waits forever for a card, and the error path never gets to say why it
+   * has nothing. Every other test in this file renders without StrictMode,
+   * which is exactly why this got through.
+   */
+  it('loads the queue even though StrictMode remounts the page', async () => {
+    render(<StrictMode>{renderPage()}</StrictMode>)
+
+    expect(await screen.findByRole('heading', { name: 'The CPU' })).toBeInTheDocument()
+    // And only one session was created, which is what the guard is for.
+    expect(mocked.startSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('still reports a start that failed', async () => {
+    mocked.startSession.mockRejectedValue(
+      new ApiError('Nothing is due right now. Come back later.', 400, 'VALIDATION_ERROR'),
+    )
+
+    render(<StrictMode>{renderPage()}</StrictMode>)
+
+    expect(await screen.findByText('Nothing due right now')).toBeInTheDocument()
   })
 })
 

@@ -194,7 +194,7 @@ pnpm --filter @saulado/frontend test -- --run
 pnpm lint                                # root only; backend has no lint script
 ```
 
-Expected: **224 backend tests, 181 frontend tests, all green, lint clean.**
+Expected: **226 backend tests, 186 frontend tests, all green, lint clean.**
 
 Build shared _before_ typechecking the frontend. The frontend resolves
 `@saulado/shared` to `./dist`, so a new field in `src` that has not been built is
@@ -256,7 +256,75 @@ shared-set feature would make a schedule row reachable through a card the user d
 not own. Scoped to `{ userId, card: { set: { userId } } }` so the count cannot widen
 underneath us.
 
-### 6.5 Two smaller ones
+### 6.5 `/study` hung forever on a session that had nothing left in it
+
+Found after the phase was closed, and the most damaging bug in it: the study
+screen rendered a blank page that no amount of reloading cleared.
+
+Answer the last card in a session and then reload, close the tab, or finish that
+session in another tab, and the session row stays open with every card answered.
+`startSession` returned any open session verbatim — the `slots.length === 0` guard
+only covered the path that builds a _new_ one — so the screen got a 200 carrying
+`queue: []`.
+
+The screen waits on `session.card`, and that is `null` both while the queue is
+loading and when it loaded empty. So it rendered the loading skeleton and waited
+for a card that was never coming. Worse, the dead row kept winning the lookup on
+every later visit, so the hang was permanent rather than a one-off.
+
+Two states that are indistinguishable from one field, again (§4.7 is the same
+shape). Fixed on both sides, because either alone leaves a hole:
+
+- `startSession` closes an open session whose queue is empty and builds a fresh
+  one. The user now gets real cards, or the honest "nothing due" 400.
+- The page treats "adopted but empty" as its own state — `sessionId` set,
+  `session.card` null — rather than falling through to the skeleton, and drops the
+  resume pointer so a reload cannot land back in it.
+
+The lesson worth carrying: a loading state keyed on "the data I want is absent"
+will swallow every state where that data is legitimately absent. `sessionId` was
+already the discriminator; nothing was reading it.
+
+### 6.6 `/study` hung forever again — this time only in the browser
+
+The fix above was real, and it was not what the user was hitting. Their session
+had an unanswered card in it, and replaying their exact card shape against the
+live API returned a perfectly good queue. The server was fine; the page still
+showed nothing but the loading skeleton.
+
+`main.tsx` wraps the app in `StrictMode`, so in development React mounts,
+unmounts and remounts every component before settling. The study page starts its
+session from a mount effect, and that teardown unsubscribes `useMutation` —
+which is where it comes apart. query-core's `MutationObserver` defines an
+`onUnsubscribe` that calls `removeObserver` on the in-flight mutation, and **no
+`onSubscribe` to undo it**. A mutation dispatches only to attached observers, so
+the remounted page holds an observer wired to nothing:
+
+- the `onSuccess` passed to `mutate()` never fires, so the queue is never loaded;
+- `data` never lands, so reading the result instead of the callback fails too;
+- `status` is stuck on `pending`, so even the "nothing due" 400 has no way to
+  reach the screen.
+
+Meanwhile `started.current` is a ref, which survives the remount intact and
+suppresses the retry. A session created on the server, and a screen waiting for
+a card that cannot arrive.
+
+Fixed by not trusting the observer for this one mutation. `begin()` uses
+`mutateAsync` and tracks the attempt in the page's own `starting` / `startError`
+state. The promise belongs to the mutation rather than the observer, so it
+settles either way, and `useStartSession`'s `onSuccess` is mutation-level too, so
+the query cache is still seeded.
+
+Two things worth carrying:
+
+- **This only bites mutations fired from a mount effect.** Every other `.mutate`
+  in the frontend is in a click or submit handler, and StrictMode's teardown
+  happens long before any of those. Checked — the study page was the only one.
+- **The whole test suite rendered without `StrictMode`, which is why 185 green
+  tests said nothing about it.** The two regression tests wrap `renderPage()` in
+  `<StrictMode>`; both were red before the fix, including the error branch.
+
+### 6.7 Two smaller ones
 
 - The backend has **no** `lint` script — `pnpm --filter @saulado/backend lint` fails
   with `ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT`. Lint is root-only.
@@ -291,7 +359,7 @@ underneath us.
 ### Prerequisite check for Phase 5
 
 ```bash
-pnpm --filter @saulado/backend test -- --run   # 224 passing
-pnpm --filter @saulado/frontend test -- --run  # 181 passing
+pnpm --filter @saulado/backend test -- --run   # 226 passing
+pnpm --filter @saulado/frontend test -- --run  # 186 passing
 pnpm lint                                       # clean
 ```
