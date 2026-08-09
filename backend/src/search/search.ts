@@ -3,6 +3,7 @@ import type { DueState, SearchHit, SearchResponse, SearchSort } from '@saulado/s
 import {
   HEADLINE_OPTIONS,
   browseSnippet,
+  cardLabel,
   dateToDayKey,
   dayKeyToDate,
   parseSnippet,
@@ -46,8 +47,8 @@ export interface SearchParams {
  */
 interface SearchRow {
   id: string
-  title: string
   study_set_id: string
+  /** The **set's** title. Cards have none — `toHit` derives a label instead. */
   set_title: string
   set_archived: Date | null
   tags: string[]
@@ -209,7 +210,6 @@ async function runSearch(
     page AS (
       SELECT
         c.id,
-        c.title,
         c.study_set_id,
         s.title AS set_title,
         s.archived_at AS set_archived,
@@ -259,7 +259,6 @@ async function runBrowse(
   return prisma.$queryRaw<SearchRow[]>`
     SELECT
       c.id,
-      c.title,
       c.study_set_id,
       s.title AS set_title,
       s.archived_at AS set_archived,
@@ -281,7 +280,10 @@ function toHit(row: SearchRow, today: string): SearchHit {
 
   return {
     cardId: row.id,
-    title: row.title,
+    // Derived, not stored. The snippet below is wherever the *query* matched,
+    // which can be four hundred words in; the label is always the paragraph's
+    // opening, so the same card looks the same on every query.
+    label: cardLabel(row.paragraph),
     studySetId: row.study_set_id,
     setTitle: row.set_title,
     setArchived: row.set_archived !== null,

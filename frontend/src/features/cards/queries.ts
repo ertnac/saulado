@@ -53,11 +53,19 @@ export const setKeys = {
   all: ['sets'] as const,
   lists: () => [...setKeys.all, 'list'] as const,
   /**
-   * Archived sets are a separate cache entry, not a filter applied to one list.
-   * They are different result sets from different requests, and sharing an entry
-   * would show archived sets flashing into the active list on refetch.
+   * One entry per *request*, not one list filtered several ways.
+   *
+   * Archived sets and a set's children are different result sets from different
+   * requests. Sharing an entry would show archived sets flashing into the active
+   * list on refetch, and a parent's children flashing into the root list.
+   *
+   * Both dimensions ride in one object at the same position, so `lists()` stays
+   * a two-element prefix that matches every variant — which is what lets the
+   * optimistic patches below reach a set wherever it happens to be cached,
+   * including in a list this screen never asked for.
    */
-  list: (archived: boolean) => [...setKeys.lists(), { archived }] as const,
+  list: (options: { archived: boolean; parent: string | null }) =>
+    [...setKeys.lists(), options] as const,
   details: () => [...setKeys.all, 'detail'] as const,
   detail: (id: string) => [...setKeys.details(), id] as const,
 }
@@ -73,15 +81,6 @@ export const cardKeys = {
    */
   list: (setId: string, tags: readonly string[] = []) =>
     [...cardKeys.lists(), setId, [...tags].sort()] as const,
-  /**
-   * Every cached list for one set, whatever tag filter produced it.
-   *
-   * Three elements, not four: key filters match by prefix, so
-   * `['cards','list',setId]` catches `['cards','list',setId,['computing']]` while
-   * `cardKeys.list(setId)` — which ends in an empty tag array — would only ever
-   * match the unfiltered list and quietly leave the filtered ones behind.
-   */
-  listsForSet: (setId: string) => [...cardKeys.lists(), setId] as const,
   details: () => [...cardKeys.all, 'detail'] as const,
   detail: (id: string) => [...cardKeys.details(), id] as const,
 }
@@ -126,17 +125,23 @@ function patchSet(client: QueryClient, id: string, patch: (set: StudySet) => Stu
 }
 
 /**
- * Adjusts a set's denormalised `cardCount`.
+ * Adjusts a set's denormalised card counts.
  *
- * The count lives on the set row so the list does not have to fetch it per set
- * (plan §4.3), which means adding or removing a card leaves it stale in a way the
- * user sees immediately — delete the last card and the set still claims "1 card".
- * Clamped at zero so a double-fire cannot render "-1 cards".
+ * The counts live on the set row so the list does not have to fetch them per set
+ * (plan §4.3), which means adding or removing a card leaves them stale in a way
+ * the user sees immediately — delete the last card and the set still claims
+ * "1 card". Clamped at zero so a double-fire cannot render "-1 cards".
+ *
+ * `subtreeCardCount` moves with `cardCount` because a set's subtree includes its
+ * own cards. Its *ancestors'* subtree totals move too, and are deliberately not
+ * patched: the client would have to know the chain, and the screen showing those
+ * numbers is one navigation and a refetch away.
  */
 function shiftCardCount(client: QueryClient, setId: string, delta: number): void {
   patchSet(client, setId, (set) => ({
     ...set,
     cardCount: Math.max(0, set.cardCount + delta),
+    subtreeCardCount: Math.max(0, set.subtreeCardCount + delta),
   }))
 }
 
@@ -149,14 +154,22 @@ function shiftCardCount(client: QueryClient, setId: string, delta: number): void
  * paginated: there is no page 3 to ask for, only "what follows this cursor".
  * That is also what keeps the list stable while the user is creating sets —
  * an offset would shift every subsequent page under them.
+ *
+ * `parent` defaults to the roots, matching the API. Passing a set id lists that
+ * set's direct children, which is how the set page renders its sub-sets.
  */
-export function useSets(options: { archived?: boolean } = {}) {
+export function useSets(options: { archived?: boolean; parent?: string | null } = {}) {
   const archived = options.archived ?? false
+  const parent = options.parent ?? null
 
   return useInfiniteQuery({
-    queryKey: setKeys.list(archived),
+    queryKey: setKeys.list({ archived, parent }),
     queryFn: ({ pageParam }) =>
-      api.listSets({ cursor: pageParam, archived: archived ? true : undefined }),
+      api.listSets({
+        cursor: pageParam,
+        archived: archived ? true : undefined,
+        parent: parent ?? undefined,
+      }),
     // `undefined` rather than `null`: react-query treats `undefined` as "no more
     // pages" and `hasNextPage` stays true for any other value, including null.
     getNextPageParam: (last: SetsResponse) => last.nextCursor ?? undefined,
@@ -183,6 +196,10 @@ export function useSet(id: string | undefined) {
  * Not optimistic: the id comes from the server and the UI navigates to it. An
  * invented id would have to be swapped out mid-navigation, and getting that wrong
  * strands the user on a route for a set that never existed.
+ *
+ * Every list is invalidated, not only the one the new set lands in: creating a
+ * child changes its parent's `childCount` and `subtreeCardCount`, and the parent
+ * sits in a different list from the child.
  */
 export function useCreateSet(): UseMutationResult<SetResponse, Error, CreateSetRequest> {
   const client = useQueryClient()
@@ -199,7 +216,7 @@ export function useCreateSet(): UseMutationResult<SetResponse, Error, CreateSetR
 }
 
 /**
- * Renames, recolours, archives or restores a set — optimistically.
+ * Renames, recolours, re-parents, archives or restores a set — optimistically.
  *
  * The id travels in the mutation variables rather than being bound at hook
  * creation, because the sets list needs one mutation for every row and hooks
@@ -225,10 +242,10 @@ export function useUpdateSet() {
       patchSet(client, id, (set) => ({
         ...set,
         title: body.title ?? set.title,
-        // `'description' in body` rather than `?? set.description`, because the
-        // API distinguishes clearing a description (null) from leaving it alone
-        // (absent) — and `??` would treat an intentional null as "leave alone".
-        description: 'description' in body ? (body.description ?? null) : set.description,
+        // `'parentId' in body` rather than `?? set.parentId`, because the API
+        // distinguishes moving a set to the root (null) from leaving it where it
+        // is (absent) — and `??` would treat an intentional null as "leave alone".
+        parentId: 'parentId' in body ? (body.parentId ?? null) : set.parentId,
         color: body.color ?? set.color,
         archivedAt:
           body.archived === undefined
@@ -238,12 +255,15 @@ export function useUpdateSet() {
               : null,
       }))
 
-      // Archiving moves the set between two separately-cached lists, and neither
-      // one can be patched into agreement — the archived list may never have been
-      // fetched. Removing it from the list it is leaving is the honest optimistic
-      // step; `onSettled` refetches both.
-      if (body.archived !== undefined) {
-        patchPages<StudySet>(client, setKeys.list(!body.archived), (items) =>
+      /**
+       * Archiving and re-parenting both move the set between separately-cached
+       * lists, and neither destination can be patched into agreement — it may
+       * never have been fetched. Dropping the row from every cached list is the
+       * honest optimistic step: it leaves the list it is leaving, and the one it
+       * is joining refetches in `onSettled`.
+       */
+      if (body.archived !== undefined || 'parentId' in body) {
+        patchPages<StudySet>(client, setKeys.lists(), (items) =>
           items.filter((item) => item.id !== id),
         )
       }
@@ -256,17 +276,26 @@ export function useUpdateSet() {
     },
 
     onSettled: () => {
+      // `all`, not `lists()`: re-parenting changes the old and new parents'
+      // `childCount`, and either of them may be cached as a detail rather than
+      // sitting in a list this screen fetched.
       void client.invalidateQueries({ queryKey: setKeys.all })
     },
   })
 }
 
 /**
- * Deletes a set and everything in it.
+ * Deletes a set, everything in it, and every set beneath it.
  *
- * The card caches go too. `removeQueries` rather than `invalidateQueries` for
- * those: invalidating would refetch cards for a set that no longer exists, and
- * every one of those requests is a 404 the error boundary would surface.
+ * The cascade is why the card caches are cleared wholesale rather than for the
+ * one set id: the server deletes descendants through the parent self-FK, and the
+ * client does not hold the subtree — only the `childCount` it warned the user
+ * with. Clearing more than strictly necessary costs a refetch; clearing too
+ * little leaves cards on screen that no longer exist.
+ *
+ * `removeQueries` rather than `invalidateQueries` throughout: invalidating would
+ * refetch cards for sets that are gone, and every one of those requests is a 404
+ * the error boundary would surface.
  */
 export function useDeleteSet() {
   const client = useQueryClient()
@@ -290,15 +319,18 @@ export function useDeleteSet() {
       for (const [key, data] of context?.previous ?? []) client.setQueryData(key, data)
     },
 
-    onSuccess: (_data, id) => {
-      client.removeQueries({ queryKey: cardKeys.listsForSet(id) })
+    onSuccess: () => {
+      client.removeQueries({ queryKey: cardKeys.all })
       // Cards carried tags, and the deleted ones may have been the last users of
       // theirs — the tag filter would otherwise offer a tag matching nothing.
       void client.invalidateQueries({ queryKey: tagKeys.all })
     },
 
     onSettled: () => {
-      void client.invalidateQueries({ queryKey: setKeys.lists() })
+      // The whole set cache, because a deleted child changes its parent's
+      // `childCount` and `subtreeCardCount`, and the parent is a different row
+      // in a list this screen may not be showing.
+      void client.invalidateQueries({ queryKey: setKeys.all })
     },
   })
 }
@@ -378,9 +410,10 @@ export function useCreateCard(
 /**
  * Edits a card.
  *
- * Optimistic on the summary fields only. `paragraph` and `answers` are left to
- * the server response: the answers come back with server-derived text and any
- * normalisation the server applied to the paragraph, so patching them from the
+ * Optimistic on the summary fields only. `paragraph` is patched because it is
+ * what the row is labelled with (`cardLabel` derives the label from it), but
+ * `answers` are left to the server response: they come back with server-derived
+ * text and any normalisation the server applied, so patching them from the
  * request would briefly show text that is not what was stored.
  */
 export function useUpdateCard(id: string) {
@@ -398,7 +431,6 @@ export function useUpdateCard(id: string) {
           item.id === id
             ? {
                 ...item,
-                title: body.title ?? item.title,
                 paragraph: body.paragraph ?? item.paragraph,
                 tags: body.tags ?? item.tags,
                 answerCount: body.answers?.length ?? item.answerCount,

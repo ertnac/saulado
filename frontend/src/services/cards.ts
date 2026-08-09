@@ -48,6 +48,14 @@ export interface ListSetsParams {
   limit?: number
   /** Absent means active sets only; archiving exists to get a set out of the way. */
   archived?: boolean
+  /**
+   * Absent lists the **root** sets; a set id lists that set's direct children.
+   *
+   * Not a filter narrowing one list but a different slice of the tree, which is
+   * why the library drills down rather than flattening: a flat list of every
+   * depth would show a child once under its parent and again on its own.
+   */
+  parent?: string
 }
 
 export function listSets(params: ListSetsParams = {}): Promise<SetsResponse> {

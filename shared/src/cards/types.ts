@@ -17,20 +17,38 @@ import type { SetColor } from './limits.js'
 export interface StudySet {
   id: string
   title: string
-  description: string | null
+  /**
+   * The set this one sits inside, or null at the root.
+   *
+   * Sets nest to `SET_DEPTH_MAX` levels. The client walks these pointers to
+   * build a breadcrumb, which is why the field is on the list shape and not
+   * only on the single-set response.
+   */
+  parentId: string | null
   color: SetColor
   /** Non-null once archived. Archive is reversible; delete is not. */
   archivedAt: string | null
   createdAt: string
   updatedAt: string
   /**
-   * Cards in this set.
+   * Cards directly in this set — not counting its children's.
    *
    * Denormalised into the list response because the list is unusable without it
    * — "12 cards" is the only thing distinguishing two sets at a glance — and
    * fetching it per row is the N+1 the plan §4.3 warns about.
    */
   cardCount: number
+  /**
+   * Cards in this set *and* every descendant.
+   *
+   * A second number rather than a smarter single one: the set page is showing
+   * you the cards it holds, and the library card is standing in for a subtree
+   * you cannot see. One figure would have to be wrong on one of those screens.
+   * Equal to `cardCount` for a set with no children.
+   */
+  subtreeCardCount: number
+  /** Direct children only. Drives "3 sub-sets" and the delete-cascade warning. */
+  childCount: number
 }
 
 /**
@@ -40,11 +58,13 @@ export interface StudySet {
  * blanked form is derived by `renderCloze` at display time (plan §2.1); shipping
  * it would make the paragraph unrecoverable and, in study mode, would put the
  * answers in the browser before the user submits.
+ *
+ * There is no title. The paragraph is the card; anywhere a short label is needed
+ * for a list, `cardLabel(paragraph)` derives one.
  */
 export interface StudyCard {
   id: string
   studySetId: string
-  title: string
   paragraph: string
   answers: CardAnswer[]
   tags: string[]
@@ -61,20 +81,21 @@ export type StudyCardSummary = Omit<StudyCard, 'answers'> & {
 
 export interface CreateSetRequest {
   title: string
-  description?: string | null
+  /** Omit or pass null to create at the root. */
+  parentId?: string | null
   color?: SetColor
 }
 
 /**
  * Every field optional — PATCH semantics.
  *
- * `description: null` clears it, `description: undefined` (absent) leaves it
- * alone. Collapsing those two into one would make it impossible to remove a
- * description once set.
+ * `parentId: null` moves the set to the root, `parentId: undefined` (absent)
+ * leaves it where it is. Collapsing those two would make it impossible to pull a
+ * set back out of a parent once nested.
  */
 export interface UpdateSetRequest {
   title?: string
-  description?: string | null
+  parentId?: string | null
   color?: SetColor
   /** `true` archives, `false` restores. */
   archived?: boolean
@@ -96,7 +117,6 @@ export interface AnswerInput {
 }
 
 export interface CreateCardRequest {
-  title: string
   paragraph: string
   answers: AnswerInput[]
   tags?: string[]
@@ -112,7 +132,6 @@ export interface CreateCardRequest {
  * resolve orphans before saving; the server then re-derives and re-validates.
  */
 export interface UpdateCardRequest {
-  title?: string
   paragraph?: string
   answers?: AnswerInput[]
   tags?: string[]

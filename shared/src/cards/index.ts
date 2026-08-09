@@ -29,14 +29,14 @@ export {
   ALT_ANSWERS_MAX_PER_ANSWER,
   ALT_ANSWER_MAX_LENGTH,
   ANSWERS_MAX_PER_CARD,
-  CARD_TITLE_MAX_LENGTH,
+  CARD_LABEL_MAX_CODE_POINTS,
   DEFAULT_SET_COLOR,
   PARAGRAPH_MAX_CODE_POINTS,
   PARAGRAPH_MIN_CODE_POINTS,
   PAGE_SIZE_DEFAULT,
   PAGE_SIZE_MAX,
   SET_COLORS,
-  SET_DESCRIPTION_MAX_LENGTH,
+  SET_DEPTH_MAX,
   SET_TITLE_MAX_LENGTH,
   TAG_MAX_LENGTH,
   TAGS_MAX_PER_CARD,
@@ -44,5 +44,7 @@ export {
   normalizeTag,
   normalizeTags,
 } from './limits.js'
+
+export { cardLabel } from './label.js'
 
 export type { SetColor } from './limits.js'

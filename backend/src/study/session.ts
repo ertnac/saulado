@@ -1,7 +1,8 @@
 import type { DayKey, SessionSummary, StudySession, UserSettings } from '@saulado/shared'
-import { codeToGrade, dayKeyToDate } from '@saulado/shared'
+import { cardLabel, codeToGrade, dayKeyToDate } from '@saulado/shared'
 import { prisma } from '../db/client.js'
 import { ApiError } from '../http/errors.js'
+import { subtreeIds } from '../routes/set-tree.js'
 import { SpacedRepetitionSource, type CandidateCard } from './card-source.js'
 import { readProgress } from './grading.js'
 import { loadSessionCards } from './render.js'
@@ -117,11 +118,18 @@ export async function startSession(
  * grades an empty card `again` — so an unhighlighted card in the queue is a
  * permanent failure loop the user cannot escape by knowing the material.
  *
+ * **A set by id means its whole subtree.** "Study this chapter" has to cover its
+ * sections, or a parent holding nothing directly reads as having nothing to
+ * study while its children hold forty cards. `subtreeIds` is already user-scoped,
+ * which is why the `set: { userId }` term is absent from that branch.
+ *
  * Archived sets are excluded from an all-sets sweep but *not* from a session the
- * user asked for by id. Archiving exists to get a set out of the way, so leaving
- * its cards in the daily queue would mean the one thing archiving promises never
- * happens; asking for that set by id is an explicit override, and mirrors the
- * library, where an archived set is hidden from the list but still opens.
+ * user asked for by id — and that now extends down the subtree: an archived child
+ * inside an explicitly-requested parent is included. Archiving exists to get a
+ * set out of the way, so leaving its cards in the daily queue would mean the one
+ * thing archiving promises never happens; asking for the parent by id is an
+ * explicit override, and mirrors the library, where an archived set is hidden
+ * from the list but still opens.
  */
 async function loadCandidates(
   userId: string,
@@ -129,7 +137,9 @@ async function loadCandidates(
   today: DayKey,
 ): Promise<{ due: CandidateCard[]; fresh: CandidateCard[] }> {
   const scope = {
-    set: studySetId ? { userId, id: studySetId } : { userId, archivedAt: null },
+    ...(studySetId
+      ? { studySetId: { in: await subtreeIds(userId, studySetId) } }
+      : { set: { userId, archivedAt: null } }),
     answers: { some: {} },
   }
 
@@ -278,7 +288,17 @@ async function buildSummary(
       cards: {
         where: { answeredAt: { not: null } },
         orderBy: { position: 'asc' },
-        select: { cardId: true, grade: true, correct: true, card: { select: { title: true } } },
+        // The paragraph is selected only to derive a label from, and the set id
+        // only to link to — see the `.map` below. Sending the paragraphs
+        // themselves would be both far more bytes than the summary renders and
+        // the answers' surrounding context arriving after the user has already
+        // been graded on it.
+        select: {
+          cardId: true,
+          grade: true,
+          correct: true,
+          card: { select: { paragraph: true, studySetId: true } },
+        },
       },
     },
   })
@@ -308,7 +328,11 @@ async function buildSummary(
         const grade = card.grade === null ? null : codeToGrade(card.grade)
         return grade === 'again' || grade === 'hard'
       })
-      .map((card) => ({ cardId: card.cardId, title: card.card.title })),
+      .map((card) => ({
+        cardId: card.cardId,
+        studySetId: card.card.studySetId,
+        label: cardLabel(card.card.paragraph),
+      })),
     reviewsToday: stats?.reviewsCount ?? 0,
     dailyGoal: settings.dailyGoal,
     goalMet: stats?.goalMet ?? false,

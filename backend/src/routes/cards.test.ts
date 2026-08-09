@@ -38,7 +38,6 @@ async function createSet(token: string, title = 'Computer Architecture'): Promis
 
 interface CardBody {
   id: string
-  title: string
   paragraph: string
   tags: string[]
   answers: { answerText: string; startOffset: number; ordinal: number; altAnswers: string[] }[]
@@ -52,7 +51,7 @@ async function createCard(
   const res = await request(app)
     .post(`/api/sets/${setId}/cards`)
     .set('Authorization', `Bearer ${token}`)
-    .send({ title: 'CPU basics', paragraph: PARAGRAPH, answers: [CPU], ...body })
+    .send({ paragraph: PARAGRAPH, answers: [CPU], ...body })
 
   expect(res.status).toBe(201)
   return (res.body as { card: CardBody }).card
@@ -140,7 +139,6 @@ describe('POST /api/sets/:setId/cards', () => {
       .post(`/api/sets/${setId}/cards`)
       .set('Authorization', `Bearer ${token}`)
       .send({
-        title: 'Bad offsets',
         paragraph: PARAGRAPH,
         answers: [{ startOffset: 4, endOffset: 9_999 }],
       })
@@ -157,7 +155,6 @@ describe('POST /api/sets/:setId/cards', () => {
       .post(`/api/sets/${setId}/cards`)
       .set('Authorization', `Bearer ${token}`)
       .send({
-        title: 'Collapsed',
         paragraph: PARAGRAPH,
         answers: [{ startOffset: 4, endOffset: 4 }],
       })
@@ -173,7 +170,7 @@ describe('POST /api/sets/:setId/cards', () => {
       .post(`/api/sets/${setId}/cards`)
       .set('Authorization', `Bearer ${token}`)
       // Offset 3 is the space between "The" and "CPU".
-      .send({ title: 'Blank', paragraph: PARAGRAPH, answers: [{ startOffset: 3, endOffset: 4 }] })
+      .send({ paragraph: PARAGRAPH, answers: [{ startOffset: 3, endOffset: 4 }] })
 
     expect(res.status).toBe(400)
   })
@@ -187,7 +184,6 @@ describe('POST /api/sets/:setId/cards', () => {
       .post(`/api/sets/${setId}/cards`)
       .set('Authorization', `Bearer ${token}`)
       .send({
-        title: 'Overlap',
         paragraph: PARAGRAPH,
         answers: [
           { startOffset: 4, endOffset: 7 },
@@ -206,7 +202,6 @@ describe('POST /api/sets/:setId/cards', () => {
       .post(`/api/sets/${setId}/cards`)
       .set('Authorization', `Bearer ${token}`)
       .send({
-        title: 'Worksheet',
         paragraph: PARAGRAPH,
         answers: Array.from({ length: 21 }, (_, index) => ({
           startOffset: index,
@@ -225,7 +220,7 @@ describe('POST /api/sets/:setId/cards', () => {
     const res = await request(app)
       .post(`/api/sets/${setId}/cards`)
       .set('Authorization', `Bearer ${intruder.token}`)
-      .send({ title: 'Smuggled', paragraph: PARAGRAPH, answers: [CPU] })
+      .send({ paragraph: PARAGRAPH, answers: [CPU] })
 
     expect(res.status).toBe(404)
   })
@@ -282,10 +277,9 @@ describe('GET /api/sets/:setId/cards', () => {
     const setId = await createSet(token)
 
     const both = await createCard(token, setId, {
-      title: 'Both',
       tags: ['hardware', 'memory'],
     })
-    await createCard(token, setId, { title: 'One', tags: ['hardware'] })
+    await createCard(token, setId, { tags: ['hardware'] })
 
     const res = await request(app)
       .get(`/api/sets/${setId}/cards?tag=hardware&tag=memory`)
@@ -301,7 +295,11 @@ describe('GET /api/sets/:setId/cards', () => {
 
     const created: string[] = []
     for (let index = 0; index < 7; index += 1) {
-      const card = await createCard(token, setId, { title: `Card ${String(index)}` })
+      // The paragraph carries the index now: it is the only thing distinguishing
+      // one card from another, and the pagination assertions compare ids anyway.
+      const card = await createCard(token, setId, {
+        paragraph: `${PARAGRAPH} — card ${String(index)}`,
+      })
       created.push(card.id)
     }
 
@@ -357,7 +355,15 @@ describe('GET /api/cards/:id', () => {
 })
 
 describe('PATCH /api/cards/:id', () => {
-  it('updates the title without touching the answers', async () => {
+  it('updates the tags without touching the answers', async () => {
+    /*
+      This used to patch the title. Cards have no title, so `tags` is the
+      remaining field that can be changed on its own — and the property being
+      guarded is the same one: a patch that does not carry a paragraph must
+      leave the derived answers exactly where they were anchored. Re-deriving
+      them against an unchanged paragraph would be invisible here but would
+      silently reset `answerText` for anything the offsets no longer cover.
+    */
     const { token } = await registerTestUser(app)
     const setId = await createSet(token)
     const card = await createCard(token, setId, { answers: [CPU, BRAIN] })
@@ -365,11 +371,12 @@ describe('PATCH /api/cards/:id', () => {
     const res = await request(app)
       .patch(`/api/cards/${card.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ title: 'Renamed' })
+      .send({ tags: ['hardware'] })
 
     expect(res.status).toBe(200)
     const updated = (res.body as { card: CardBody }).card
-    expect(updated.title).toBe('Renamed')
+    expect(updated.tags).toEqual(['hardware'])
+    expect(updated.paragraph).toBe(PARAGRAPH)
     expect(updated.answers.map((a) => a.answerText)).toEqual(['CPU', 'brain'])
   })
 
@@ -469,7 +476,7 @@ describe('PATCH /api/cards/:id', () => {
     const res = await request(app)
       .patch(`/api/cards/${card.id}`)
       .set('Authorization', `Bearer ${intruder.token}`)
-      .send({ title: 'Hijacked' })
+      .send({ tags: ['hijacked'] })
 
     expect(res.status).toBe(404)
   })
@@ -528,8 +535,8 @@ describe('GET /api/tags', () => {
     const { token } = await registerTestUser(app)
     const setId = await createSet(token)
 
-    await createCard(token, setId, { title: 'One', tags: ['hardware', 'memory'] })
-    await createCard(token, setId, { title: 'Two', tags: ['hardware'] })
+    await createCard(token, setId, { tags: ['hardware', 'memory'] })
+    await createCard(token, setId, { tags: ['hardware'] })
 
     const res = await request(app).get('/api/tags').set('Authorization', `Bearer ${token}`)
 

@@ -60,7 +60,16 @@ export const SEARCH_SORTS = ['relevance', 'recent'] as const
 /** One matching card. */
 export interface SearchHit {
   cardId: string
-  title: string
+  /**
+   * A one-line label, derived server-side with `cardLabel(paragraph)`.
+   *
+   * Distinct from {@link SearchHit.snippet}, and both are needed. The snippet is
+   * wherever the *query* matched, which can be four hundred words in; the label
+   * is always the paragraph's opening, so it identifies the card the same way
+   * every time regardless of what was searched for. A result list with only the
+   * snippet makes the same card look like a different one on each query.
+   */
+  label: string
   studySetId: string
   setTitle: string
   /**

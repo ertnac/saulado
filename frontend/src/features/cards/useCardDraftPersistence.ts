@@ -19,7 +19,15 @@ import type { DraftAnswer } from '@saulado/shared'
  * rest came with it.
  */
 
-const KEY_PREFIX = 'saulado-card-draft'
+/**
+ * Versioned, and bumped when the stored shape changed.
+ *
+ * A draft saved by the previous build carries a `title` the card model no longer
+ * has. Reading it back would restore a shape with a field nothing consumes —
+ * harmless today, but the version is what makes that provable rather than
+ * something to reason about, and the old entries age out on their own.
+ */
+const KEY_PREFIX = 'saulado-card-draft-v2'
 const DEBOUNCE_MS = 500
 
 /** Drafts older than this are treated as abandoned. */
@@ -28,7 +36,6 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 export interface CardDraftSnapshot {
   paragraph: string
   answers: DraftAnswer[]
-  title: string
   tags: string[]
   savedAt: number
 }
@@ -91,7 +98,7 @@ export function useCardDraftPersistence(
   snapshot: Omit<CardDraftSnapshot, 'savedAt'>,
   enabled = true,
 ): void {
-  const { paragraph, answers, title, tags } = snapshot
+  const { paragraph, answers, tags } = snapshot
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -99,13 +106,13 @@ export function useCardDraftPersistence(
 
     // Nothing typed yet — writing an empty draft would mask a real one saved
     // earlier in this scope.
-    if (paragraph.trim().length === 0 && title.trim().length === 0) return
+    if (paragraph.trim().length === 0) return
 
     timer.current = setTimeout(() => {
       try {
         localStorage.setItem(
           keyFor(scope),
-          JSON.stringify({ paragraph, answers, title, tags, savedAt: Date.now() }),
+          JSON.stringify({ paragraph, answers, tags, savedAt: Date.now() }),
         )
       } catch {
         // Quota exceeded or storage disabled. Silent by design: a toast here
@@ -116,5 +123,5 @@ export function useCardDraftPersistence(
     return () => {
       if (timer.current) clearTimeout(timer.current)
     }
-  }, [scope, paragraph, answers, title, tags, enabled])
+  }, [scope, paragraph, answers, tags, enabled])
 }

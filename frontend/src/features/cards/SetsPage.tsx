@@ -12,11 +12,16 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { useDueCounts } from '@/features/study/queries'
 import { cn } from '@/lib/utils'
 import { setAccentClass } from './colors'
+import { cardCountLabel, childCountLabel } from './counts'
 import { SetDialog } from './SetDialog'
 import { flattenPages, useCreateSet, useDeleteSet, useSets, useUpdateSet } from './queries'
 
 /**
  * The library — every set the user owns.
+ *
+ * Roots only. Sets nest now, so a child is reached through its parent's page,
+ * and a flat list of every depth would show each child twice — once under its
+ * parent and once on its own.
  *
  * Archived sets are behind a toggle rather than mixed in with a badge: archiving
  * exists to get a set out of the way, and a list that still shows it has not done
@@ -42,6 +47,7 @@ function SetCard({
   // records *when*, so the button label is derived rather than read off a boolean.
   const isArchived = set.archivedAt !== null
   const studiable = !isArchived && due + newCards > 0
+  const children = childCountLabel(set)
 
   return (
     <Card
@@ -69,16 +75,17 @@ function SetCard({
               {set.title}
             </Link>
           </h3>
-          {set.description && (
-            <p className="mt-1 text-sm text-muted-foreground">{set.description}</p>
-          )}
+          {/*
+            Where the description used to be. The counts say something the user
+            cannot see from the title — including how many cards live in
+            sub-sets, which is what studying this set will actually sweep in.
+          */}
+          <p className="mt-1 text-sm tabular-nums text-muted-foreground">{cardCountLabel(set)}</p>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
           {isArchived && <Badge>Archived</Badge>}
-          <p className="text-sm tabular-nums text-muted-foreground">
-            {set.cardCount} {set.cardCount === 1 ? 'card' : 'cards'}
-          </p>
+          {children !== null && <Badge tone="sand">{children}</Badge>}
         </div>
       </div>
 
@@ -110,6 +117,29 @@ function SetCard({
   )
 }
 
+/**
+ * What deleting a set actually takes.
+ *
+ * Nesting made this the one genuinely destructive edge in the library: the
+ * `parent_id` FK cascades, so deleting a subject removes every topic under it
+ * and every card in those. `childCount` is *direct* children only, which is why
+ * the copy says "everything inside them" rather than naming a number that would
+ * undercount a three-level tree.
+ *
+ * The card figure is `subtreeCardCount`, not `cardCount` — the total being
+ * destroyed, not the subset that happens to sit at this level.
+ */
+function deleteWarning(set: StudySet): string {
+  const cards = `${String(set.subtreeCardCount)} ${set.subtreeCardCount === 1 ? 'card' : 'cards'}`
+  const tail = 'This cannot be undone — archive it instead if you only want it out of the way.'
+
+  if (set.childCount === 0) return `“${set.title}” and its ${cards} will be removed. ${tail}`
+
+  const children = `${String(set.childCount)} ${set.childCount === 1 ? 'sub-set' : 'sub-sets'}`
+
+  return `“${set.title}”, its ${children} and everything inside them — ${cards} in total — will be removed. ${tail}`
+}
+
 export function SetsPage(): ReactElement {
   const [archived, setArchived] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -131,7 +161,7 @@ export function SetsPage(): ReactElement {
     <div className="space-y-6">
       <PageHeader
         title="Your sets"
-        description="A set groups cards on one subject."
+        description="A set groups cards on one subject. Open one to add cards or nest a sub-set inside it."
         actions={
           <Button
             onClick={() => {
@@ -293,13 +323,7 @@ export function SetsPage(): ReactElement {
         }}
         pending={remove.isPending}
         title="Delete this set?"
-        description={
-          deleting
-            ? `“${deleting.title}” and its ${String(deleting.cardCount)} ${
-                deleting.cardCount === 1 ? 'card' : 'cards'
-              } will be removed. This cannot be undone — archive it instead if you only want it out of the way.`
-            : ''
-        }
+        description={deleting ? deleteWarning(deleting) : ''}
         confirmLabel="Delete set"
         onConfirm={() => {
           if (!deleting) return

@@ -32,6 +32,7 @@ const app = createApp()
 const auth = (token: string): string => `Bearer ${token}`
 
 const CPU_PARAGRAPH = 'The CPU is the brain of the computer and executes instructions'
+const CACHE_PARAGRAPH = 'Cache sits between the CPU and main memory'
 const MITOCHONDRIA_PARAGRAPH = 'The mitochondria is the powerhouse of the cell'
 
 afterAll(async () => {
@@ -48,13 +49,12 @@ async function createSet(token: string, title: string): Promise<string> {
 async function createCard(
   token: string,
   setId: string,
-  card: { title: string; paragraph: string; tags?: string[] },
+  card: { paragraph: string; tags?: string[] },
 ): Promise<string> {
   const res = await request(app)
     .post(`/api/sets/${setId}/cards`)
     .set('Authorization', auth(token))
     .send({
-      title: card.title,
       paragraph: card.paragraph,
       // One blank on the first word, so the card is valid without the test
       // having to compute offsets it does not care about.
@@ -84,17 +84,14 @@ async function seedLibrary(label: string): Promise<{
   const biology = await createSet(user.token, 'Biology')
 
   await createCard(user.token, hardware, {
-    title: 'The CPU',
     paragraph: CPU_PARAGRAPH,
     tags: ['exam', 'core'],
   })
   await createCard(user.token, hardware, {
-    title: 'Memory hierarchy',
-    paragraph: 'Cache sits between the CPU and main memory',
+    paragraph: CACHE_PARAGRAPH,
     tags: ['core'],
   })
   await createCard(user.token, biology, {
-    title: 'The cell',
     paragraph: MITOCHONDRIA_PARAGRAPH,
     tags: ['exam'],
   })
@@ -113,15 +110,20 @@ describe('GET /api/search', () => {
     const body = await search(token, '?q=mitochondria')
 
     expect(body.total).toBe(1)
-    expect(body.items[0]?.title).toBe('The cell')
+    expect(body.items[0]?.label).toBe(MITOCHONDRIA_PARAGRAPH)
     expect(body.query).toBe('mitochondria')
   })
 
-  it('finds a card by a word in its title', async () => {
-    const { token } = await seedLibrary('search-title')
-    const body = await search(token, '?q=hierarchy')
+  it('finds a card by a word unique to one paragraph', async () => {
+    /*
+      This used to search a card's title. Titles are gone, and with them the
+      second field the vector indexed — so the guard that matters now is that a
+      word appearing in exactly one paragraph returns exactly that card.
+    */
+    const { token } = await seedLibrary('search-unique')
+    const body = await search(token, '?q=cache')
 
-    expect(body.items.map((item) => item.title)).toEqual(['Memory hierarchy'])
+    expect(body.items.map((item) => item.label)).toEqual([CACHE_PARAGRAPH])
   })
 
   it('stems, so a search for a plural finds the singular', async () => {
@@ -129,21 +131,37 @@ describe('GET /api/search', () => {
     const { token } = await seedLibrary('search-stem')
     const body = await search(token, '?q=instruction')
 
-    expect(body.items.map((item) => item.title)).toContain('The CPU')
+    expect(body.items.map((item) => item.label)).toContain(CPU_PARAGRAPH)
   })
 
-  it('ranks a title match above a paragraph match', async () => {
+  it('still ranks on the paragraph after the vector was rebuilt', async () => {
     /*
-      `setweight(..., 'A')` on the title and `'B'` on the paragraph, with
-      `ts_rank`'s default weights, makes a title hit score about 2.5x a body hit.
-      Both cards below contain "CPU"; only one has it in the title, and that is
-      the one a user looking for "CPU" means.
-    */
-    const { token } = await seedLibrary('search-rank')
-    const body = await search(token, '?q=cpu&sort=relevance')
+      The regression guard for the migration that dropped `title` from the
+      generated column. The old test asserted a title hit outranked a body hit,
+      which is no longer a thing that can happen — there is one weighted term
+      left.
 
-    expect(body.items.length).toBeGreaterThanOrEqual(2)
-    expect(body.items[0]?.title).toBe('The CPU')
+      What is still assertable is that `ts_rank` reads the paragraph at all: a
+      card naming the term twice must outrank one naming it once. If the rebuilt
+      expression had lost `setweight`, or indexed the wrong column, relevance
+      order here would be arbitrary rather than wrong — so this asserts the
+      order, not merely that both cards came back.
+
+      Seeded separately rather than from `seedLibrary`, whose card counts several
+      cases below assert on exactly.
+    */
+    const user = await registerTestUser(app, 'search-rank')
+    const set = await createSet(user.token, 'Hardware')
+
+    await createCard(user.token, set, { paragraph: 'Cache sits next to main memory' })
+    await createCard(user.token, set, {
+      paragraph: 'Cache misses are expensive, so cache locality is what tuning targets',
+    })
+
+    const body = await search(user.token, '?q=cache&sort=relevance')
+
+    expect(body.items).toHaveLength(2)
+    expect(body.items[0]?.label).toContain('cache locality')
   })
 
   it('sorts by recency when asked, ignoring rank', async () => {
@@ -151,8 +169,8 @@ describe('GET /api/search', () => {
     const body = await search(token, '?q=cpu&sort=recent')
 
     expect(body.sort).toBe('recent')
-    // Newest first: the memory card was created after the CPU card.
-    expect(body.items[0]?.title).toBe('Memory hierarchy')
+    // Newest first: the cache card was created after the CPU card.
+    expect(body.items[0]?.label).toBe(CACHE_PARAGRAPH)
   })
 
   it('returns snippet segments with the match flagged, not HTML', async () => {
@@ -190,7 +208,6 @@ describe('GET /api/search', () => {
     const user = await registerTestUser(app, 'search-xss')
     const setId = await createSet(user.token, 'Injection')
     await createCard(user.token, setId, {
-      title: 'Tag handling',
       paragraph: 'The <script>alert(1)</script> tag is inert here',
     })
 
@@ -211,7 +228,6 @@ describe('GET /api/search', () => {
     const user = await registerTestUser(app, 'browse-xss')
     const setId = await createSet(user.token, 'Injection')
     await createCard(user.token, setId, {
-      title: 'Tag handling',
       paragraph: 'The <script>alert(1)</script> tag is inert here',
     })
 
@@ -267,7 +283,7 @@ describe('GET /api/search', () => {
     const { token, biology } = await seedLibrary('search-set')
     const body = await search(token, `?setId=${biology}`)
 
-    expect(body.items.map((item) => item.title)).toEqual(['The cell'])
+    expect(body.items.map((item) => item.label)).toEqual([MITOCHONDRIA_PARAGRAPH])
   })
 
   it('requires every tag, not any of them', async () => {
@@ -282,7 +298,7 @@ describe('GET /api/search', () => {
     const two = await search(token, '?tags=core&tags=exam')
 
     expect(one.total).toBe(2)
-    expect(two.items.map((item) => item.title)).toEqual(['The CPU'])
+    expect(two.items.map((item) => item.label)).toEqual([CPU_PARAGRAPH])
   })
 
   it('includes cards that have never been studied', async () => {
@@ -383,7 +399,6 @@ describe('GET /api/search', () => {
     const user = await registerTestUser(app, 'search-archived')
     const setId = await createSet(user.token, 'Old term')
     await createCard(user.token, setId, {
-      title: 'Retired card',
       paragraph: 'The astrolabe measures the altitude of stars',
     })
 

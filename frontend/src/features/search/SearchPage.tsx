@@ -12,6 +12,7 @@ import { ChevronLeftIcon, ChevronRightIcon, SearchIcon } from '@/components/ui/i
 import { cn } from '@/lib/utils'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useTags } from '@/features/cards/queries'
+import { cardHref } from '@/features/cards/links'
 import { Snippet } from './CommandPalette'
 import { isSearchable, useSearch } from './queries'
 
@@ -313,11 +314,11 @@ function SearchResults({
               clipping the overflow would clip the link's own focus ring away.
             */}
             <Link
-              to={`/cards/${hit.cardId}`}
+              to={cardHref(hit.studySetId, hit.cardId)}
               className="block rounded-lg p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="font-medium">{hit.title}</span>
+                <span className="font-medium">{hit.label}</span>
                 <span className="text-xs text-muted-foreground">
                   {hit.setTitle}
                   {hit.setArchived && ' (archived)'}

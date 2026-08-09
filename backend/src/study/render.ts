@@ -21,7 +21,6 @@ export const SESSION_BATCH_SIZE = 20
 export interface RenderableCard {
   id: string
   studySetId: string
-  title: string
   paragraph: string
   tags: string[]
   answers: { startOffset: number; endOffset: number; answerText: string; altAnswers: string[] }[]
@@ -36,7 +35,6 @@ export function toSessionCard(
   return {
     cardId: card.id,
     studySetId: card.studySetId,
-    title: card.title,
     segments,
     blankCount: countBlanks(segments),
     tags: card.tags,
@@ -71,7 +69,6 @@ export async function loadSessionCards(
       select: {
         id: true,
         studySetId: true,
-        title: true,
         paragraph: true,
         tags: true,
         answers: {

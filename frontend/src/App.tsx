@@ -13,7 +13,6 @@ import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
-import { EditCardPage, NewCardPage } from '@/features/cards/CardEditorPage'
 import { SetDetailPage } from '@/features/cards/SetDetailPage'
 import { SetsPage } from '@/features/cards/SetsPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
@@ -118,19 +117,13 @@ export function App(): ReactElement {
                     /study and /sets/:id/study two routes rendering one component.
                   */}
                   <Route path="/study" element={<StudySessionPage />} />
+                  {/*
+                    There is no card route. Cards are written and edited inline
+                    on their set's page (`CardComposer`), so a card has no URL of
+                    its own — which is the whole point: adding five cards used to
+                    be five page transitions away from the set you were reading.
+                  */}
                   <Route path="/sets/:setId" element={<SetDetailPage />} />
-                  {/*
-                    Card creation is nested under its set because a card cannot
-                    exist without one — the route carries the owning set rather
-                    than making the editor guess it from state.
-                  */}
-                  <Route path="/sets/:setId/cards/new" element={<NewCardPage />} />
-                  {/*
-                    Editing is not, though: a card id is globally unique and the
-                    set is on the fetched card, so nesting it would only create a
-                    second URL for the same card that could disagree with itself.
-                  */}
-                  <Route path="/cards/:cardId" element={<EditCardPage />} />
                   <Route path="/search" element={<SearchPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/account" element={<AccountPage />} />

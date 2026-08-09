@@ -2,7 +2,6 @@ import { useState, type ReactElement } from 'react'
 import {
   DEFAULT_SET_COLOR,
   SET_COLORS,
-  SET_DESCRIPTION_MAX_LENGTH,
   SET_TITLE_MAX_LENGTH,
   type SetColor,
   type StudySet,
@@ -32,17 +31,27 @@ interface SetDialogProps {
   onClose: () => void
   /** Absent means create. */
   set?: StudySet
-  onSubmit: (values: {
-    title: string
-    description: string | null
-    color: SetColor
-  }) => Promise<void>
+  /**
+   * Create the new set inside this one. Ignored when editing.
+   *
+   * Passed rather than chosen in the form: a set is created from the page of the
+   * set it belongs under, so the parent is already unambiguous — and a parent
+   * picker would be a set-tree widget in a dialog that has one text field.
+   */
+  parentId?: string
+  onSubmit: (values: { title: string; parentId?: string | null; color: SetColor }) => Promise<void>
   pending: boolean
 }
 
-export function SetDialog({ open, onClose, set, onSubmit, pending }: SetDialogProps): ReactElement {
+export function SetDialog({
+  open,
+  onClose,
+  set,
+  parentId,
+  onSubmit,
+  pending,
+}: SetDialogProps): ReactElement {
   const [title, setTitle] = useState(set?.title ?? '')
-  const [description, setDescription] = useState(set?.description ?? '')
   const [color, setColor] = useState<SetColor>(set?.color ?? DEFAULT_SET_COLOR)
   const { errors, setFromError, clear } = useFormErrors()
 
@@ -54,9 +63,10 @@ export function SetDialog({ open, onClose, set, onSubmit, pending }: SetDialogPr
     try {
       await onSubmit({
         title: trimmed,
-        // Empty string is not a description — sending `null` is what actually
-        // clears one, and the API treats the two differently on purpose.
-        description: description.trim().length > 0 ? description.trim() : null,
+        // Omitted entirely when editing: `parentId` is PATCH-significant, and
+        // sending null there would move the set to the root as a side effect of
+        // a rename.
+        ...(editing ? {} : { parentId: parentId ?? null }),
         color,
       })
       onClose()
@@ -71,9 +81,13 @@ export function SetDialog({ open, onClose, set, onSubmit, pending }: SetDialogPr
     <Dialog
       open={open}
       onClose={onClose}
-      title={editing ? 'Edit set' : 'New set'}
+      title={editing ? 'Edit set' : parentId ? 'New sub-set' : 'New set'}
       description={
-        editing ? undefined : 'A set groups cards on one subject — a chapter, a lecture, a topic.'
+        editing
+          ? undefined
+          : parentId
+            ? 'A sub-set groups part of a subject — a chapter inside a course.'
+            : 'A set groups cards on one subject — a chapter, a lecture, a topic.'
       }
     >
       <form
@@ -83,10 +97,17 @@ export function SetDialog({ open, onClose, set, onSubmit, pending }: SetDialogPr
           void submit()
         }}
       >
-        {errors.general && (
+        {/*
+          `parentId` is folded in here rather than beside a field, because there
+          is no parent field — the parent is passed in, not chosen. Without this
+          the depth cap would be a dead Create button: the server rejects the
+          placement with a field error, `useFormErrors` files it under a name
+          nothing renders, and the user presses the button to no visible effect.
+        */}
+        {(errors.general ?? errors.fields.parentId) && (
           <p role="alert" className="flex items-start gap-1.5 text-sm text-warning">
             <AlertIcon className="mt-0.5 h-[1em] w-[1em]" />
-            {errors.general}
+            {errors.general ?? errors.fields.parentId}
           </p>
         )}
 
@@ -100,18 +121,6 @@ export function SetDialog({ open, onClose, set, onSubmit, pending }: SetDialogPr
           error={errors.fields.title}
           autoComplete="off"
           placeholder="Cell Biology"
-        />
-
-        <FormField
-          label="Description"
-          value={description}
-          onChange={(event) => {
-            setDescription(event.target.value)
-          }}
-          maxLength={SET_DESCRIPTION_MAX_LENGTH}
-          error={errors.fields.description}
-          hint="Optional."
-          autoComplete="off"
         />
 
         <fieldset>

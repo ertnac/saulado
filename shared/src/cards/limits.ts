@@ -42,8 +42,25 @@ export const ALT_ANSWERS_MAX_PER_ANSWER = 10
 export const ALT_ANSWER_MAX_LENGTH = 200
 
 export const SET_TITLE_MAX_LENGTH = 120
-export const SET_DESCRIPTION_MAX_LENGTH = 500
-export const CARD_TITLE_MAX_LENGTH = 200
+
+/**
+ * How deep sets may nest, counting the root as level 1.
+ *
+ * Three is subject → topic → subtopic, which is as far as a study library
+ * usefully goes before the breadcrumb is longer than the set names in it. The
+ * cap is also what keeps the tree walk in `set-tree.ts` cheap and lets the set
+ * page render children as a flat list instead of needing a tree widget.
+ */
+export const SET_DEPTH_MAX = 3
+
+/**
+ * Longest label derived from a paragraph, in code points.
+ *
+ * Cards have no title, so lists that need a one-line identifier derive one with
+ * {@link cardLabel}. 80 is about a line at the widths those lists use — long
+ * enough to tell two cards on the same topic apart, short enough not to wrap.
+ */
+export const CARD_LABEL_MAX_CODE_POINTS = 80
 
 export const TAG_MAX_LENGTH = 40
 export const TAGS_MAX_PER_CARD = 15

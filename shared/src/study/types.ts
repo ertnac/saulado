@@ -36,7 +36,6 @@ import type { DayKey } from './day.js'
 export interface SessionCard {
   cardId: string
   studySetId: string
-  title: string
   segments: Segment[]
   blankCount: number
   tags: string[]
@@ -133,7 +132,25 @@ export interface AnswerResponse {
 
 export interface SessionCardRef {
   cardId: string
-  title: string
+  /**
+   * The set the card lives in, because that is where it is now opened.
+   *
+   * Per-ref rather than reusing the session's own `studySetId`: a session
+   * started without one sweeps every set, and one started *with* one sweeps the
+   * whole subtree — so in both cases the cards worth revisiting can come from
+   * several different sets, and the session's id would send half these links to
+   * the wrong page.
+   */
+  studySetId: string
+  /**
+   * A one-line label, derived server-side with `cardLabel(paragraph)`.
+   *
+   * Derived rather than shipping the paragraph: the summary lists every card
+   * answered in the session, and a full paragraph per row is both far more bytes
+   * than the row renders and the answers' surrounding context arriving after the
+   * user has already been graded on it.
+   */
+  label: string
 }
 
 export interface SessionSummary {
@@ -177,6 +194,16 @@ export interface DueCount {
 }
 
 export interface DueCountsResponse {
+  /**
+   * One entry per set with something waiting, counting its **whole subtree**.
+   *
+   * A set's badge has to match what pressing Study next to it will serve, and
+   * studying a set sweeps its descendants — so a parent holding no cards of its
+   * own still reports its children's. This makes the entries deliberately
+   * non-additive: a card in a grandchild appears in three of them. Use
+   * {@link DueCountsResponse.totalDue} and {@link DueCountsResponse.totalNew}
+   * for aggregates rather than summing this list.
+   */
   counts: DueCount[]
   /**
    * Cards due across every set, *uncapped* and excluding new cards.
@@ -185,8 +212,18 @@ export interface DueCountsResponse {
    * Showing the capped figure would make a 300-card backlog read as whatever the
    * cap happens to be and look like it was shrinking on its own; folding in new
    * cards would make a freshly imported set read as overdue on day one.
+   *
+   * Summed from per-set *own* counts, so each card is counted exactly once.
    */
   totalDue: number
+  /**
+   * Never-studied cards across every set. Counted once each, as above.
+   *
+   * Separate from `totalDue` because they are different kinds of work: due cards
+   * are a debt, new cards are an opportunity. The dashboard shows them as two
+   * figures for that reason.
+   */
+  totalNew: number
   /**
    * Cards this user has a schedule row for — i.e. has studied at least once.
    *

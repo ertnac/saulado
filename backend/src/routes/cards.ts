@@ -39,7 +39,6 @@ const cardInclude = {
 const summarySelect = {
   id: true,
   studySetId: true,
-  title: true,
   paragraph: true,
   tags: true,
   createdAt: true,
@@ -109,7 +108,7 @@ setCardsRouter.post(
   '/',
   validateBody(createCardSchema),
   asyncHandler(async (req, res) => {
-    const { title, paragraph, answers, tags } = req.body as CreateCardBody
+    const { paragraph, answers, tags } = req.body as CreateCardBody
     const setId = req.params.setId ?? ''
 
     if (!(await findOwnedSet(setId, requireUserId(req)))) {
@@ -132,7 +131,6 @@ setCardsRouter.post(
     const card = await prisma.studyCard.create({
       data: {
         studySetId: setId,
-        title,
         paragraph,
         tags: tags ?? [],
         // Nested create: the card and its answers are one statement, so a
@@ -218,7 +216,6 @@ cardsRouter.patch(
       await tx.studyCard.update({
         where: { id: cardId },
         data: {
-          ...('title' in body ? { title: body.title } : {}),
           ...('tags' in body ? { tags: body.tags ?? [] } : {}),
           ...(body.studySetId ? { studySetId: body.studySetId } : {}),
           ...(rewriting ? { paragraph: body.paragraph } : {}),

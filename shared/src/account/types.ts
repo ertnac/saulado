@@ -17,9 +17,9 @@ import type { SetColor } from '../cards/limits.js'
 /**
  * PATCH semantics: every field optional, absent means "leave alone".
  *
- * No field is nullable, unlike `UpdateSetRequest.description` — every setting
- * has a real default and none of them can be cleared to nothing. "No timezone"
- * is not a state; it just means UTC, which is a value.
+ * No field is nullable, unlike `UpdateSetRequest.parentId` — every setting has a
+ * real default and none of them can be cleared to nothing. "No timezone" is not
+ * a state; it just means UTC, which is a value.
  */
 export interface UpdateSettingsRequest {
   darkMode?: boolean
@@ -147,8 +147,13 @@ export interface DataExport {
    * Bumped when a field is removed or changes meaning; adding one is not a
    * breaking change. Present from v1 so a future importer never has to guess
    * whether an unversioned file predates versioning.
+   *
+   * **v2** removed `ExportedSet.description` and `ExportedCard.title`, which no
+   * longer exist anywhere in the product. A v1 file still describes real data
+   * and a future importer should keep reading them — this number is what lets it
+   * know the two fields are absent by design rather than lost.
    */
-  formatVersion: 1
+  formatVersion: 2
   /** ISO timestamp the export was generated. */
   exportedAt: string
   account: PublicUser
@@ -161,7 +166,8 @@ export interface DataExport {
 export interface ExportedSet {
   id: string
   title: string
-  description: string | null
+  /** Null at the root. Preserved so an importer can rebuild the hierarchy. */
+  parentId: string | null
   color: SetColor
   archivedAt: string | null
   createdAt: string
@@ -175,10 +181,11 @@ export interface ExportedSet {
  * Nested under its set rather than listed flat, because the export doubles as
  * the human-readable copy — a flat card list keyed by `studySetId` is
  * machine-equivalent and unreadable.
+ *
+ * No title: the paragraph is the card, and it is right here.
  */
 export interface ExportedCard {
   id: string
-  title: string
   paragraph: string
   answers: CardAnswer[]
   tags: string[]

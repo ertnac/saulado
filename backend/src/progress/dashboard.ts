@@ -44,11 +44,12 @@ export async function getDashboard(userId: string, now: Date): Promise<Dashboard
     readRecentSets(userId),
   ])
 
-  const newCards = due.counts.reduce((sum, entry) => sum + entry.newCards, 0)
-
   return {
     totalDue: due.totalDue,
-    newCards,
+    // Both totals come off the response rather than being summed from `counts`.
+    // Those entries roll up each set's subtree, so a card under a grandchild
+    // appears in three of them — correct per badge, triple-counted in aggregate.
+    newCards: due.totalNew,
     // Same discriminator the dashboard already used in Phase 4: `counts` is
     // empty both for a caught-up user and for one who has never studied, and
     // only a schedule row tells those apart.
@@ -59,6 +60,7 @@ export async function getDashboard(userId: string, now: Date): Promise<Dashboard
       ...set,
       // Joined here rather than in SQL: the due counts are already loaded, and
       // a per-set correlated subquery would add N round-trips to save one map.
+      // Subtree-rolled, so this is the same figure the library badge shows.
       dueCount: due.counts.find((entry) => entry.studySetId === set.id)?.due ?? 0,
     })),
     sparkline: fillDaySeries(sparkSparse, sparkFrom, today),

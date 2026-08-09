@@ -3,13 +3,11 @@ import {
   ALT_ANSWERS_MAX_PER_ANSWER,
   ALT_ANSWER_MAX_LENGTH,
   ANSWERS_MAX_PER_CARD,
-  CARD_TITLE_MAX_LENGTH,
   PAGE_SIZE_DEFAULT,
   PAGE_SIZE_MAX,
   PARAGRAPH_MAX_CODE_POINTS,
   PARAGRAPH_MIN_CODE_POINTS,
   SET_COLORS,
-  SET_DESCRIPTION_MAX_LENGTH,
   SET_TITLE_MAX_LENGTH,
   TAGS_MAX_PER_CARD,
   TAG_MAX_LENGTH,
@@ -33,34 +31,31 @@ const setTitle = z
   .max(SET_TITLE_MAX_LENGTH, `Keep the title under ${String(SET_TITLE_MAX_LENGTH)} characters.`)
 
 /**
- * `null` clears the description, an absent key leaves it alone.
+ * `null` moves the set to the root, an absent key leaves it where it is.
  *
  * `.nullable()` without `.optional()` would force every PATCH to send the field;
- * `.optional()` without `.nullable()` would make a set description permanent
- * once written. PATCH needs both, and the handler distinguishes them with an
- * `in` check rather than a truthiness test.
+ * `.optional()` without `.nullable()` would trap a set inside its parent forever.
+ * PATCH needs both, and the handler distinguishes them with an `in` check rather
+ * than a truthiness test — `null` is a meaningful value here, not a missing one.
+ *
+ * Whether the parent exists, belongs to the caller, and leaves the set within
+ * `SET_DEPTH_MAX` is `assertPlacement`'s job: none of it is answerable from the
+ * request body alone.
  */
-const setDescription = z
-  .string()
-  .trim()
-  .max(
-    SET_DESCRIPTION_MAX_LENGTH,
-    `Keep the description under ${String(SET_DESCRIPTION_MAX_LENGTH)} characters.`,
-  )
-  .nullable()
+const setParentId = z.string().uuid('Not a valid set id.').nullable()
 
 const setColor = z.enum(SET_COLORS)
 
 export const createSetSchema = z.object({
   title: setTitle,
-  description: setDescription.optional(),
+  parentId: setParentId.optional(),
   color: setColor.optional(),
 })
 
 export const updateSetSchema = z
   .object({
     title: setTitle.optional(),
-    description: setDescription.optional(),
+    parentId: setParentId.optional(),
     color: setColor.optional(),
     archived: z.boolean().optional(),
   })
@@ -70,12 +65,6 @@ export const updateSetSchema = z
   .refine((body) => Object.keys(body).length > 0, {
     message: 'Send at least one field to update.',
   })
-
-const cardTitle = z
-  .string()
-  .trim()
-  .min(1, 'Give the card a title.')
-  .max(CARD_TITLE_MAX_LENGTH, `Keep the title under ${String(CARD_TITLE_MAX_LENGTH)} characters.`)
 
 /**
  * The paragraph, normalised before it is measured.
@@ -153,7 +142,6 @@ const tags = z
   })
 
 export const createCardSchema = z.object({
-  title: cardTitle,
   paragraph,
   answers,
   tags: tags.optional(),
@@ -171,7 +159,6 @@ export const createCardSchema = z.object({
  */
 export const updateCardSchema = z
   .object({
-    title: cardTitle.optional(),
     paragraph: paragraph.optional(),
     answers: answers.optional(),
     tags: tags.optional(),
@@ -218,6 +205,23 @@ export const listSetsQuerySchema = listQuerySchema.extend({
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
+
+  /**
+   * Which level of the tree to list. Absent means the roots.
+   *
+   * Roots-by-default rather than everything-by-default: the library drills down,
+   * so a flat list of every set at every depth is a page nobody asks for, and
+   * making it the default would mean each child appearing twice — once in its
+   * parent and once at the top.
+   *
+   * A literal `root` is accepted alongside an absent value so a client can be
+   * explicit. There is deliberately no "all levels" option; nothing needs one,
+   * and adding it later is easier than removing it.
+   */
+  parent: z
+    .union([z.literal('root'), z.string().uuid('Not a valid set id.')])
+    .optional()
+    .transform((value) => (value === undefined || value === 'root' ? null : value)),
 })
 
 export const listCardsQuerySchema = listQuerySchema.extend({

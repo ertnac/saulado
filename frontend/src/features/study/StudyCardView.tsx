@@ -59,27 +59,43 @@ export function StudyCardView({
   }, [card.cardId, results])
 
   const byOrdinal = new Map(results?.map((result) => [result.ordinal, result]))
+  const meta = card.isNew || card.isLeech || card.tags.length > 0
 
   return (
     <Card className="p-5 sm:p-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="mr-auto min-w-0 text-lg font-semibold tracking-tight">{card.title}</h2>
-        {card.isNew && <Badge tone="accent">New</Badge>}
-        {/*
-          Surfaced so the user can act on it — a leech is a card that keeps being
-          forgotten, and the fix is usually to rewrite it, not to keep failing it.
-        */}
-        {card.isLeech && <Badge tone="warning">Difficult</Badge>}
-      </div>
+      {/*
+        No heading. A card is a paragraph with blanks in it, so the paragraph
+        below *is* the question — a label above it was always the same opening
+        words twice, and now that titles are gone there is nothing to derive one
+        from that the user is not already reading. What is left here is the
+        status the paragraph cannot tell you itself, and it renders only when
+        there is some: an empty strip would push the question down the card for
+        the majority of reviews, which have neither a flag nor a tag.
+      */}
+      {meta && (
+        <div className="mb-4 space-y-2">
+          {(card.isNew || card.isLeech) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {card.isNew && <Badge tone="accent">New</Badge>}
+              {/*
+                Surfaced so the user can act on it — a leech is a card that keeps
+                being forgotten, and the fix is usually to rewrite it, not to
+                keep failing it.
+              */}
+              {card.isLeech && <Badge tone="warning">Difficult</Badge>}
+            </div>
+          )}
 
-      {card.tags.length > 0 && (
-        <ul className="mt-2 flex flex-wrap gap-1.5">
-          {card.tags.map((tag) => (
-            <li key={tag}>
-              <Badge tone="sand">{tag}</Badge>
-            </li>
-          ))}
-        </ul>
+          {card.tags.length > 0 && (
+            <ul className="flex flex-wrap gap-1.5">
+              {card.tags.map((tag) => (
+                <li key={tag}>
+                  <Badge tone="sand">{tag}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {/*
@@ -87,7 +103,7 @@ export function StudyCardView({
         parts of a sentence, and announcing "edit text, blank 1" in isolation
         loses the context that is the entire point of the exercise.
       */}
-      <p className="mt-4 whitespace-pre-wrap text-base leading-loose sm:text-lg">
+      <p className="whitespace-pre-wrap text-base leading-loose sm:text-lg">
         {card.segments.map((segment, index) =>
           segment.kind === 'text' ? (
             <span key={`t${String(index)}`}>{segment.text}</span>

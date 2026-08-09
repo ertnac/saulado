@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { CheckIcon } from '@/components/ui/icons'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { cardHref } from '@/features/cards/links'
 
 /**
  * What the session added up to (plan §4.4).
@@ -76,6 +77,9 @@ export function SessionSummaryView({
         Linked, not just listed. The cards worth another look are exactly the ones
         the user might want to rewrite — a card that keeps failing is usually a
         card whose paragraph does not carry enough context to recall the answer.
+
+        The link lands on the card's set with the card already open for editing,
+        which is where rewriting one happens now.
       */}
       {summary.toRevisit.length > 0 && (
         <Card as="section" tone="accent" className="p-5">
@@ -87,10 +91,10 @@ export function SessionSummaryView({
             {summary.toRevisit.map((card) => (
               <li key={card.cardId}>
                 <Link
-                  to={`/cards/${card.cardId}`}
+                  to={cardHref(card.studySetId, card.cardId)}
                   className="rounded text-sm hover:underline focus-visible:underline"
                 >
-                  {card.title}
+                  {card.label}
                 </Link>
               </li>
             ))}

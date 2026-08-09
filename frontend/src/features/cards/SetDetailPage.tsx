@@ -1,54 +1,192 @@
-import { useState, type ReactElement } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import type { StudyCardSummary } from '@saulado/shared'
+import { useState, type ReactElement, type ReactNode } from 'react'
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
+import { cardLabel, type StudyCardSummary, type StudySet } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { PlusIcon } from '@/components/ui/icons'
+import { ChevronRightIcon, PlusIcon } from '@/components/ui/icons'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { useDueCounts } from '@/features/study/queries'
 import { cn } from '@/lib/utils'
+import { CardComposer } from './CardComposer'
+import { setAccentClass } from './colors'
+import { cardCountLabel, childCountLabel } from './counts'
+import { CARD_PARAM } from './links'
 import { SetDialog } from './SetDialog'
-import { flattenPages, useCards, useDeleteCard, useSet, useTags, useUpdateSet } from './queries'
+import {
+  flattenPages,
+  useCards,
+  useCreateSet,
+  useDeleteCard,
+  useSet,
+  useSets,
+  useTags,
+  useUpdateSet,
+} from './queries'
 
 /**
- * One set and the cards in it.
+ * One set: what is inside it, and where you write more.
  *
- * The rows show the paragraph rather than the blanked form. A list is for finding
- * a card, and every blanked row starts "The ____ is…" — the words the cloze
- * removes are exactly the ones that would tell them apart.
+ * This page absorbed two routes. Cards used to be created at
+ * `/sets/:setId/cards/new` and edited at `/cards/:cardId`, so writing three
+ * cards meant three page transitions away from the set you were reading —
+ * away from the cards you were writing *against*. Both are now a
+ * `CardComposer` mounted here, the new-card one above the list and the edit
+ * one inside the row it belongs to.
+ *
+ * **Only one composer is mounted at a time**, which is why `composing` is a
+ * single value rather than a flag per row: `HighlightEditor` labels its
+ * textarea with a fixed `id`, and two of them would be two elements sharing it.
+ *
+ * The rows print `cardLabel(paragraph)`. Cards have no title any more, and the
+ * paragraph is not repeated underneath the label — they would be the same
+ * opening sentence twice.
  */
 
+/**
+ * Which composer is open. `null` collapses both.
+ *
+ * `inRow` says *where* an edit composer renders. A row's Edit button expands it
+ * in place among the cards; a `?card=` deep link from search opens one before
+ * the list has necessarily loaded — and possibly for a card on page three,
+ * whose row is not mounted at all — so that one renders at the top instead. One
+ * flag rather than "render in the row if it exists, else at the top", which
+ * would move the editor out from under the user the moment the page it was on
+ * arrived.
+ */
+type Composing = { kind: 'new' } | { kind: 'edit'; cardId: string; inRow: boolean } | null
+
+/** Decorative: the ordered list already conveys the nesting to a screen reader. */
+function Crumb(): ReactElement {
+  return <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 opacity-50" />
+}
+
+/**
+ * The trail back up the tree.
+ *
+ * A fixed pair of `useSet` calls rather than a loop, because `SET_DEPTH_MAX` is
+ * 3 — a set has at most two ancestors, and hooks cannot be called a variable
+ * number of times.
+ *
+ * The ancestors are rendered all-or-nothing behind one placeholder. The
+ * grandparent's id only arrives *with* the parent, so filling them in as they
+ * land would draw a two-level trail and then grow a third level into the middle
+ * of it. A breadcrumb whose shape changes under the pointer is worse than one
+ * that is visibly still loading.
+ */
+function Breadcrumb({ set }: { set: StudySet }): ReactElement {
+  const parent = useSet(set.parentId ?? undefined)
+  const grandparentId = parent.data?.set.parentId ?? undefined
+  const grandparent = useSet(grandparentId)
+
+  // An ancestor that failed to load counts as settled, not as pending — the
+  // trail drops it and still gets the user home, where waiting forever on a
+  // request that already failed would not.
+  const waiting =
+    (set.parentId !== null && parent.data === undefined && !parent.isError) ||
+    (grandparentId !== undefined && grandparent.data === undefined && !grandparent.isError)
+
+  const ancestors = [grandparent.data?.set, parent.data?.set].filter(
+    (entry): entry is StudySet => entry !== undefined,
+  )
+
+  return (
+    <nav aria-label="Breadcrumb">
+      <ol className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+        <li>
+          <Link to="/sets" className="rounded transition-colors hover:text-foreground">
+            Your sets
+          </Link>
+        </li>
+
+        {waiting ? (
+          <li className="flex items-center gap-1.5">
+            <Crumb />
+            <Skeleton className="h-4 w-20" />
+          </li>
+        ) : (
+          ancestors.map((ancestor) => (
+            <li key={ancestor.id} className="flex min-w-0 items-center gap-1.5">
+              <Crumb />
+              <Link
+                to={`/sets/${ancestor.id}`}
+                className="truncate rounded transition-colors hover:text-foreground"
+              >
+                {ancestor.title}
+              </Link>
+            </li>
+          ))
+        )}
+
+        <li className="flex min-w-0 items-center gap-1.5">
+          <Crumb />
+          {/* Text, not a link to the page you are already on. */}
+          <span aria-current="page" className="truncate font-medium text-foreground">
+            {set.title}
+          </span>
+        </li>
+      </ol>
+    </nav>
+  )
+}
+
+/** A set nested inside this one. The whole row navigates into it. */
+function ChildSetRow({ set }: { set: StudySet }): ReactElement {
+  const children = childCountLabel(set)
+
+  return (
+    // The padding lives on the link, not the card, so the tap target fills the
+    // row instead of sitting in the middle of it.
+    <Card as="li" interactive className={cn('border-l-4', setAccentClass(set.color))}>
+      <Link
+        to={`/sets/${set.id}`}
+        className="flex items-center justify-between gap-3 rounded-lg p-4"
+      >
+        <span className="min-w-0">
+          <span className="block truncate font-medium">{set.title}</span>
+          <span className="mt-0.5 block text-sm tabular-nums text-muted-foreground">
+            {cardCountLabel(set)}
+            {children !== null && ` · ${children}`}
+          </span>
+        </span>
+        <ChevronRightIcon className="shrink-0 text-muted-foreground" />
+      </Link>
+    </Card>
+  )
+}
+
+/**
+ * A card, as a row.
+ *
+ * When this row is the one being edited it hands its `<li>` over to the
+ * composer entirely, rather than showing the summary above an editor of the
+ * same paragraph. The list markup stays valid either way, which is why the
+ * `<li>` is here and not inside each branch.
+ */
 function CardRow({
   card,
+  composer,
+  onEdit,
   onDelete,
 }: {
   card: StudyCardSummary
+  /** Rendered in place of the row while this card is open for editing. */
+  composer?: ReactNode
+  onEdit: () => void
   onDelete: () => void
 }): ReactElement {
+  if (composer) return <li>{composer}</li>
+
   return (
-    <Card as="li" className="flex flex-col gap-2 p-5">
+    <Card as="li" className="flex flex-col gap-3 p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <h3 className="min-w-0 font-medium">
-          <Link
-            to={`/cards/${card.id}`}
-            className="rounded hover:underline focus-visible:underline"
-          >
-            {card.title}
-          </Link>
-        </h3>
+        <h3 className="min-w-0 font-medium">{cardLabel(card.paragraph)}</h3>
         <p className="shrink-0 text-sm tabular-nums text-muted-foreground">
           {card.answerCount} {card.answerCount === 1 ? 'blank' : 'blanks'}
         </p>
       </div>
-
-      {/*
-        Clamped rather than truncated in JS: a slice at 140 characters cuts
-        mid-word and mid-grapheme, and the browser already knows where the line
-        ends at this width.
-      */}
-      <p className="line-clamp-2 text-sm text-muted-foreground">{card.paragraph}</p>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <ul className="flex flex-wrap gap-1.5">
@@ -58,9 +196,14 @@ function CardRow({
             </li>
           ))}
         </ul>
-        <Button variant="ghost" size="sm" className="text-danger" onClick={onDelete}>
-          Delete
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={onEdit}>
+            Edit
+          </Button>
+          <Button variant="ghost" size="sm" className="text-danger" onClick={onDelete}>
+            Delete
+          </Button>
+        </div>
       </div>
     </Card>
   )
@@ -72,6 +215,9 @@ function CardRow({
  * Shown even at zero, unlike the badge in the library — this page is where the
  * user came *to* study one set, and a button that vanishes leaves them with no
  * way in and no explanation. Disabled with the reason instead.
+ *
+ * The count is the set's **subtree**: `/api/study/due` rolls a parent's badge up
+ * over its descendants, matching what pressing this will actually serve.
  */
 function StudyAction({ setId }: { setId: string }): ReactElement {
   const due = useDueCounts()
@@ -96,29 +242,73 @@ function StudyAction({ setId }: { setId: string }): ReactElement {
   )
 }
 
+/**
+ * Narrows the route param once.
+ *
+ * `/sets/:setId` cannot match without it, but typed as `string | undefined` it
+ * would need a `?? ''` at every hook below — and `useSets({ parent: undefined })`
+ * does not mean "wait", it means *the root sets*, so that fallback would quietly
+ * list the library as this set's children.
+ */
 export function SetDetailPage(): ReactElement {
   const { setId } = useParams<{ setId: string }>()
+
+  if (setId === undefined) return <Navigate to="/sets" replace />
+
+  return <SetDetail setId={setId} />
+}
+
+function SetDetail({ setId }: { setId: string }): ReactElement {
+  const [params, setParams] = useSearchParams()
+  // Read once, on the first render, so closing the composer does not fight a
+  // param that is still in the URL.
+  const linked = useState(() => params.get(CARD_PARAM))[0]
+
   const [tags, setTags] = useState<string[]>([])
-  const [editing, setEditing] = useState(false)
+  const [composing, setComposing] = useState<Composing>(
+    linked === null ? null : { kind: 'edit', cardId: linked, inRow: false },
+  )
+  const [editingSet, setEditingSet] = useState(false)
+  const [addingChild, setAddingChild] = useState(false)
   const [deleting, setDeleting] = useState<StudyCardSummary | null>(null)
 
   const set = useSet(setId)
+  const children = useSets({ parent: setId })
   const cards = useCards(setId, tags)
   const allTags = useTags()
+  const createSet = useCreateSet()
   const update = useUpdateSet()
-  const remove = useDeleteCard(setId ?? '')
+  const remove = useDeleteCard(setId)
 
   const items = flattenPages(cards.data)
+  const childSets = flattenPages(children.data)
   const filtering = tags.length > 0
-  // Pulled out of `set.data` once: TypeScript drops narrowing on a property access
-  // inside a callback, so `set.data.set.id` in the dialog's async `onSubmit` would
-  // not compile even directly under a `set.data &&` guard.
+  // Pulled out of `set.data` once: TypeScript drops narrowing on a property
+  // access inside a callback, so `set.data.set.id` in the dialog's async
+  // `onSubmit` would not compile even directly under a `set.data &&` guard.
   const current = set.data?.set
 
   const toggleTag = (tag: string): void => {
     setTags((selected) =>
       selected.includes(tag) ? selected.filter((item) => item !== tag) : [...selected, tag],
     )
+  }
+
+  /**
+   * Closes whichever composer is open, and drops `?card=` with it.
+   *
+   * `replace` so Back returns to wherever the user came from — search, usually —
+   * rather than to this same page with the card open again, which reads as the
+   * button having done nothing.
+   */
+  const closeComposer = (): void => {
+    setComposing(null)
+
+    if (params.has(CARD_PARAM)) {
+      const next = new URLSearchParams(params)
+      next.delete(CARD_PARAM)
+      setParams(next, { replace: true })
+    }
   }
 
   if (set.isError) {
@@ -135,37 +325,128 @@ export function SetDetailPage(): ReactElement {
     )
   }
 
+  const childLabel = current ? childCountLabel(current) : null
+
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          {current ? (
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{current.title}</h1>
-          ) : (
-            <Skeleton className="h-9 w-56" />
-          )}
-          {current?.description && (
-            <p className="mt-1 text-sm text-muted-foreground">{current.description}</p>
-          )}
-        </div>
+      {current ? <Breadcrumb set={current} /> : <Skeleton className="h-4 w-48" />}
 
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Button
-            variant="soft"
-            disabled={current === undefined}
-            onClick={() => {
-              setEditing(true)
-            }}
-          >
-            Edit set
-          </Button>
-          <Link className={buttonClass({ variant: 'soft' })} to={`/sets/${setId ?? ''}/cards/new`}>
-            <PlusIcon />
-            New card
-          </Link>
-          {setId !== undefined && <StudyAction setId={setId} />}
+      {current ? (
+        <PageHeader
+          className="mb-0"
+          title={current.title}
+          badge={
+            <>
+              <Badge>{cardCountLabel(current)}</Badge>
+              {childLabel !== null && <Badge tone="sand">{childLabel}</Badge>}
+            </>
+          }
+          actions={
+            <>
+              <Button
+                variant="soft"
+                onClick={() => {
+                  setEditingSet(true)
+                }}
+              >
+                Edit set
+              </Button>
+              <StudyAction setId={setId} />
+            </>
+          }
+        />
+      ) : (
+        <div className="flex items-start justify-between gap-4">
+          <Skeleton className="h-9 w-56" />
+          <Skeleton className="h-11 w-24" />
         </div>
-      </header>
+      )}
+
+      {/*
+        The composer sits above the list, not below it, and collapses to one
+        line when closed. Above because writing a card is what this page is for
+        — burying the box under fifty rows would put the app's primary action
+        behind a scroll — and collapsed because an editor permanently open on a
+        set the user came to read is a large empty box demanding attention.
+      */}
+      {composing?.kind === 'new' ? (
+        <CardComposer setId={setId} onClose={closeComposer} />
+      ) : composing?.kind === 'edit' && !composing.inRow ? (
+        <CardComposer setId={setId} cardId={composing.cardId} onClose={closeComposer} />
+      ) : (
+        <Card tone="dashed" className="p-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setComposing({ kind: 'new' })
+            }}
+            className={cn(
+              'flex min-h-[52px] w-full items-center gap-2 rounded-md px-3.5 text-left',
+              'text-muted-foreground transition-colors duration-150',
+              'hover:bg-surface-muted hover:text-foreground',
+            )}
+          >
+            <PlusIcon />
+            Write a card in this set
+          </button>
+        </Card>
+      )}
+
+      {/*
+        The sub-set affordance shrinks to a single button when there are none.
+        Nesting is new and worth advertising, but a permanent empty "Sub-sets"
+        heading on every leaf set is chrome on the common case.
+      */}
+      {childSets.length > 0 ? (
+        <section aria-labelledby="sub-sets-heading" className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="sub-sets-heading" className="text-lg font-semibold tracking-tight">
+              Sub-sets
+            </h2>
+            <Button
+              variant="soft"
+              size="sm"
+              onClick={() => {
+                setAddingChild(true)
+              }}
+            >
+              <PlusIcon />
+              New sub-set
+            </Button>
+          </div>
+
+          <ul className="space-y-2">
+            {childSets.map((child) => (
+              <ChildSetRow key={child.id} set={child} />
+            ))}
+          </ul>
+
+          {children.hasNextPage && (
+            <Button
+              variant="soft"
+              size="sm"
+              disabled={children.isFetchingNextPage}
+              onClick={() => {
+                void children.fetchNextPage()
+              }}
+            >
+              {children.isFetchingNextPage ? 'Loading…' : 'Load more sub-sets'}
+            </Button>
+          )}
+        </section>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setAddingChild(true)
+          }}
+        >
+          <PlusIcon />
+          New sub-set
+        </Button>
+      )}
+
       {allTags.data && allTags.data.tags.length > 0 && (
         <div className="space-y-1.5">
           <p id="tag-filter-label" className="text-sm font-medium">
@@ -217,8 +498,8 @@ export function SetDetailPage(): ReactElement {
           </div>
           {/*
             Says "all of", because the API matches with `hasEvery` — two chips
-            narrow the list rather than widening it, which is the opposite of what
-            most filter bars do and worth stating outright.
+            narrow the list rather than widening it, which is the opposite of
+            what most filter bars do and worth stating outright.
           */}
           {tags.length > 1 && (
             <p className="text-xs text-muted-foreground">
@@ -260,7 +541,11 @@ export function SetDetailPage(): ReactElement {
               ? 'No card in this set carries every tag you picked.'
               : 'Paste a paragraph, highlight the words worth recalling, and Saulado keeps the sentence around them.'}
           </p>
-          {/* Clearing the filter is the fix when filtering; creating one is not. */}
+          {/*
+            Clearing the filter is the fix when filtering; creating a card is
+            not. The prompt to write one is dropped once the composer is already
+            open above — it would be a button pointing at a box on screen.
+          */}
           {filtering ? (
             <Button
               className="mt-5"
@@ -272,13 +557,17 @@ export function SetDetailPage(): ReactElement {
               Clear filter
             </Button>
           ) : (
-            <Link
-              className={buttonClass({ className: 'mt-5' })}
-              to={`/sets/${setId ?? ''}/cards/new`}
-            >
-              <PlusIcon />
-              Add your first card
-            </Link>
+            composing === null && (
+              <Button
+                className="mt-5"
+                onClick={() => {
+                  setComposing({ kind: 'new' })
+                }}
+              >
+                <PlusIcon />
+                Add your first card
+              </Button>
+            )
           )}
         </Card>
       ) : (
@@ -288,6 +577,14 @@ export function SetDetailPage(): ReactElement {
               <CardRow
                 key={card.id}
                 card={card}
+                composer={
+                  composing?.kind === 'edit' && composing.inRow && composing.cardId === card.id ? (
+                    <CardComposer setId={setId} cardId={card.id} onClose={closeComposer} />
+                  ) : undefined
+                }
+                onEdit={() => {
+                  setComposing({ kind: 'edit', cardId: card.id, inRow: true })
+                }}
                 onDelete={() => {
                   setDeleting(card)
                 }}
@@ -309,16 +606,35 @@ export function SetDetailPage(): ReactElement {
         </>
       )}
 
-      {editing && current && (
+      {editingSet && current && (
         <SetDialog
           open
           set={current}
           onClose={() => {
-            setEditing(false)
+            setEditingSet(false)
           }}
           pending={update.isPending}
           onSubmit={async (values) => {
             await update.mutateAsync({ id: current.id, body: values })
+          }}
+        />
+      )}
+
+      {/*
+        `parentId` is this set, so the dialog never asks where the sub-set goes —
+        you are standing in the answer. The depth cap is enforced server-side and
+        comes back as a field error the dialog surfaces.
+      */}
+      {addingChild && (
+        <SetDialog
+          open
+          parentId={setId}
+          onClose={() => {
+            setAddingChild(false)
+          }}
+          pending={createSet.isPending}
+          onSubmit={async (values) => {
+            await createSet.mutateAsync(values)
           }}
         />
       )}
@@ -332,7 +648,7 @@ export function SetDetailPage(): ReactElement {
         title="Delete this card?"
         description={
           deleting
-            ? `“${deleting.title}” and its ${String(deleting.answerCount)} ${
+            ? `“${cardLabel(deleting.paragraph)}” and its ${String(deleting.answerCount)} ${
                 deleting.answerCount === 1 ? 'blank' : 'blanks'
               } will be removed. This cannot be undone.`
             : ''
@@ -340,6 +656,11 @@ export function SetDetailPage(): ReactElement {
         confirmLabel="Delete card"
         onConfirm={() => {
           if (!deleting) return
+          // The row unmounts with its composer, but the state pointing at it
+          // would outlive the card — cleared here so nothing holds the id of
+          // something that no longer exists.
+          if (composing?.kind === 'edit' && composing.cardId === deleting.id) closeComposer()
+
           remove.mutate(deleting.id, {
             onSettled: () => {
               setDeleting(null)

@@ -60,7 +60,7 @@ export async function buildExport(userId: string): Promise<DataExport> {
   ])
 
   return {
-    formatVersion: 1,
+    formatVersion: 2,
     exportedAt: new Date().toISOString(),
     account: toPublicUser(user),
     settings: user.settings ? toPublicSettings(user.settings) : DEFAULT_SETTINGS,
@@ -125,7 +125,9 @@ function toExportedSet(set: SetWithCards): ExportedSet {
   return {
     id: set.id,
     title: set.title,
-    description: set.description,
+    // Preserved so an importer can rebuild the hierarchy. Ids are exported as
+    // they are stored, so the pointers stay internally consistent within the file.
+    parentId: set.parentId,
     // The column is TEXT; narrow it back to the union on the way out, falling
     // back rather than emitting a value the type says cannot exist.
     color: isSetColor(set.color) ? set.color : DEFAULT_SET_COLOR,
@@ -141,7 +143,6 @@ function toExportedCard(card: CardWithRelations): ExportedCard {
 
   return {
     id: card.id,
-    title: card.title,
     paragraph: card.paragraph,
     answers: card.answers.map((answer) => ({
       // `id` is in the contract because `ordinal` is a position, not an

@@ -1,4 +1,5 @@
 import type { ReactElement, SVGProps } from 'react'
+import { cn } from '@/lib/utils'
 
 /**
  * The icon set — inline SVG, not glyphs.
@@ -19,7 +20,7 @@ import type { ReactElement, SVGProps } from 'react'
 
 export type IconProps = Omit<SVGProps<SVGSVGElement>, 'children'>
 
-function Icon({ children, ...props }: SVGProps<SVGSVGElement>): ReactElement {
+function Icon({ children, className, ...props }: SVGProps<SVGSVGElement>): ReactElement {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -32,7 +33,7 @@ function Icon({ children, ...props }: SVGProps<SVGSVGElement>): ReactElement {
       focusable="false"
       // `1em` rather than a fixed pixel size: an icon beside `text-sm` and the
       // same icon beside `text-lg` should not be the same height.
-      className="h-[1.15em] w-[1.15em] shrink-0"
+      className={cn('h-[1.15em] w-[1.15em] shrink-0', className)}
       {...props}
     >
       {children}

@@ -136,7 +136,7 @@ model EmailChange {
   @@map("email_changes")
 }
 
-/// A user's folder of cards.
+/// A user's folder of cards, and of other sets.
 ///
 /// `archivedAt` rather than a boolean: archive is reversible and the timestamp
 /// is worth keeping ("archived 3 months ago" is a useful sort), whereas delete
@@ -145,22 +145,39 @@ model EmailChange {
 /// `color` is a plain string here, not an enum. The closed list lives in shared
 /// `SET_COLORS` and is enforced by Zod at the edge; a Postgres enum would make
 /// adding a ninth colour a migration rather than a one-line constant change.
+///
+/// `parentId` makes this an **adjacency list**: one nullable self-FK, null at the
+/// root. Materialized paths and closure tables buy fast unbounded-depth queries,
+/// which this schema does not need — depth is capped at shared `SET_DEPTH_MAX`
+/// and a user has tens of sets, so `routes/set-tree.ts` loads `{id, parentId}`
+/// once and walks the subtree in memory rather than issuing a recursive CTE.
+///
+/// The cascade is deliberate and it is the destructive edge of this model:
+/// deleting a set takes its descendants, and their cards with them. It matches
+/// what deleting a set already did to its own cards, and the confirm dialog in
+/// `SetsPage` is responsible for saying so before the request is sent.
 model StudySet {
-  id          String    @id @default(uuid()) @db.Uuid
-  userId      String    @map("user_id") @db.Uuid
-  title       String
-  description String?
-  color       String    @default("slate")
-  archivedAt  DateTime? @map("archived_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  parentId   String?   @map("parent_id") @db.Uuid
+  title      String
+  color      String    @default("slate")
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
   user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// A self-relation needs a name — Prisma cannot infer which side is which.
+  parent   StudySet?      @relation("SetTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children StudySet[]     @relation("SetTree")
   cards    StudyCard[]
   sessions StudySession[]
 
   /// Matches the sets-list query: scoped by owner, most recently touched first.
   @@index([userId, updatedAt(sort: Desc)], map: "idx_sets_user")
+  /// Matches the same query once it filters by level: `?parent=` absent means
+  /// roots (`parent_id IS NULL`), a uuid means that set's children.
+  @@index([userId, parentId, updatedAt(sort: Desc)], map: "idx_sets_parent")
   @@map("study_sets")
 }
 
@@ -170,6 +187,9 @@ model StudySet {
 /// NFC-normalised on write. No blanked/rendered form is persisted — `renderCloze`
 /// derives it, so editing a highlight stays non-destructive.
 ///
+/// A card has no title. The paragraph *is* the card, and every list that used to
+/// show a title now derives one with shared `cardLabel()`.
+///
 /// `tags` is a `TEXT[]` column rather than a join table: v1 only ever reads all
 /// of a card's tags at once and filters with `&&`/`@>`, which the GIN index
 /// serves directly. A tags table would add two joins to every card read for a
@@ -178,21 +198,24 @@ model StudySet {
 /// `search_vector` is a **generated** column, maintained by Postgres rather than
 /// by application code (plan §6.1). Prisma cannot express `GENERATED ALWAYS AS`,
 /// so it is declared `Unsupported` here and created in the
-/// `20260808104500_search_vector` migration, along with its GIN index:
+/// `20260808104500_search_vector` migration, then rebuilt without `title` by
+/// `20260808153000_nested_sets_drop_title_description`. Current definition:
 ///
 /// ```sql
 /// ALTER TABLE "study_cards"
 ///   ADD COLUMN "search_vector" tsvector
 ///   GENERATED ALWAYS AS (
-///     setweight(to_tsvector('english', coalesce("title", '')), 'A') ||
-///     setweight(to_tsvector('english', coalesce("paragraph", '')), 'B')
+///     setweight(to_tsvector('english', coalesce("paragraph", '')), 'A')
 ///   ) STORED;
 /// CREATE INDEX "idx_cards_search" ON "study_cards" USING GIN ("search_vector");
 /// ```
+///
+/// `setweight` survives the loss of the second term on purpose: it pins the rank
+/// scale, so adding another weighted field later cannot silently reorder every
+/// existing result the way dropping and re-adding it would.
 model StudyCard {
   id         String   @id @default(uuid()) @db.Uuid
   studySetId String   @map("study_set_id") @db.Uuid
-  title      String
   paragraph  String
   tags       String[] @default([])
   createdAt  DateTime @default(now()) @map("created_at")

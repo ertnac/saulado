@@ -178,19 +178,30 @@ export function toPage<T extends { id: string }>(
 type SetRow = {
   id: string
   title: string
-  description: string | null
+  parentId: string | null
   color: string
   archivedAt: Date | null
   createdAt: Date
   updatedAt: Date
-  _count: { cards: number }
+  _count: { cards: number; children: number }
 }
 
-export function toStudySet(row: SetRow): StudySet {
+/**
+ * `subtreeCardCount` is passed in rather than read off the row.
+ *
+ * Prisma's `_count` covers direct relations only, so a set's descendants are not
+ * countable from a single row however the select is written. The caller runs one
+ * `groupBy` for the whole page and rolls it up through the parent map — see
+ * `subtreeCardCounts` in `sets.ts`. Making it a required argument rather than
+ * defaulting to `_count.cards` is deliberate: a silent default would report a
+ * parent's subtree as its own cards, which is precisely the "0 due while the
+ * children hold 40" bug nesting exists to avoid, and it would do it invisibly.
+ */
+export function toStudySet(row: SetRow, subtreeCardCount: number): StudySet {
   return {
     id: row.id,
     title: row.title,
-    description: row.description,
+    parentId: row.parentId,
     // The column is a plain string, so a colour retired from SET_COLORS in a
     // later release would still be sitting in old rows. Falling back keeps those
     // sets rendering instead of failing a type assertion at the edge.
@@ -199,6 +210,8 @@ export function toStudySet(row: SetRow): StudySet {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     cardCount: row._count.cards,
+    subtreeCardCount,
+    childCount: row._count.children,
   }
 }
 
@@ -214,7 +227,6 @@ type AnswerRow = {
 type CardRow = {
   id: string
   studySetId: string
-  title: string
   paragraph: string
   tags: string[]
   createdAt: Date
@@ -226,7 +238,6 @@ export function toStudyCard(row: CardRow): StudyCard {
   return {
     id: row.id,
     studySetId: row.studySetId,
-    title: row.title,
     paragraph: row.paragraph,
     answers: row.answers.map((answer): CardAnswer => ({
       id: answer.id,
@@ -256,7 +267,6 @@ export function toStudyCardSummary(
   return {
     id: row.id,
     studySetId: row.studySetId,
-    title: row.title,
     paragraph: row.paragraph,
     tags: row.tags,
     createdAt: row.createdAt.toISOString(),

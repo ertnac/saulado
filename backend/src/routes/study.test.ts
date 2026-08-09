@@ -30,7 +30,6 @@ interface SessionBody {
   studySetId: string | null
   queue: {
     cardId: string
-    title: string
     blankCount: number
     segments: { kind: string; text?: string; answerLength?: number }[]
   }[]
@@ -39,9 +38,29 @@ interface SessionBody {
 
 const auth = (token: string): string => `Bearer ${token}`
 
+/**
+ * The card's prose with its blanks taken out — what the browser actually renders.
+ *
+ * Cards have no title, so the cases below that used to name the card they expected
+ * in the queue identify it by its visible text instead. That is the stronger
+ * assertion of the two: it reads the segments the client is handed rather than a
+ * label that sat beside them and could have been right while they were wrong.
+ */
+function visibleText(card: SessionBody['queue'][number] | undefined): string {
+  return (card?.segments ?? []).map((segment) => segment.text ?? '').join('')
+}
+
+/**
+ * A set with the given cards in it.
+ *
+ * `paragraph` defaults to `PARAGRAPH`, and the `CPU` / `BRAIN` offsets above are
+ * only valid against text that starts with it — so a fixture wanting to be
+ * recognisable appends to `PARAGRAPH` rather than replacing it, unless it has no
+ * blanks to anchor.
+ */
 async function seedSet(
   token: string,
-  cards: { title: string; answers: { startOffset: number; endOffset: number }[] }[],
+  cards: { paragraph?: string; answers: { startOffset: number; endOffset: number }[] }[],
 ): Promise<string> {
   const setRes = await request(app)
     .post('/api/sets')
@@ -55,7 +74,7 @@ async function seedSet(
     const res = await request(app)
       .post(`/api/sets/${setId}/cards`)
       .set('Authorization', auth(token))
-      .send({ title: card.title, paragraph: PARAGRAPH, answers: card.answers })
+      .send({ paragraph: card.paragraph ?? PARAGRAPH, answers: card.answers })
 
     expect(res.status).toBe(201)
   }
@@ -76,10 +95,7 @@ async function startSession(token: string, studySetId?: string): Promise<Session
 describe('POST /api/study/sessions', () => {
   it('builds a queue from the set', async () => {
     const { token } = await registerTestUser(app)
-    const setId = await seedSet(token, [
-      { title: 'Card one', answers: [CPU] },
-      { title: 'Card two', answers: [CPU, BRAIN] },
-    ])
+    const setId = await seedSet(token, [{ answers: [CPU] }, { answers: [CPU, BRAIN] }])
 
     const session = await startSession(token, setId)
 
@@ -95,7 +111,9 @@ describe('POST /api/study/sessions', () => {
      * identically and leak every answer to anyone with devtools open.
      */
     const { token } = await registerTestUser(app)
-    const setId = await seedSet(token, [{ title: 'Card one', answers: [CPU, BRAIN] }])
+    // The default paragraph, deliberately: both blanks cover the two words this
+    // asserts the absence of, so anything still naming them came from the answers.
+    const setId = await seedSet(token, [{ answers: [CPU, BRAIN] }])
 
     const session = await startSession(token, setId)
 
@@ -111,7 +129,7 @@ describe('POST /api/study/sessions', () => {
     // Fixed blank width mode (plan §2.7): a 3-character slot beside a
     // 5-character one rules out "brain" before the user has thought about it.
     const { token } = await registerTestUser(app)
-    const setId = await seedSet(token, [{ title: 'Card one', answers: [CPU, BRAIN] }])
+    const setId = await seedSet(token, [{ answers: [CPU, BRAIN] }])
 
     const session = await startSession(token, setId)
     const widths = session.queue[0]?.segments
@@ -130,19 +148,20 @@ describe('POST /api/study/sessions', () => {
      */
     const { token } = await registerTestUser(app)
     const setId = await seedSet(token, [
-      { title: 'Highlighted', answers: [CPU] },
-      { title: 'Not yet highlighted', answers: [] },
+      { paragraph: `${PARAGRAPH} and it is highlighted`, answers: [CPU] },
+      // No blanks, so no offsets to keep valid — this one is free to say so.
+      { paragraph: 'This card was never highlighted', answers: [] },
     ])
 
     const session = await startSession(token, setId)
 
     expect(session.queue).toHaveLength(1)
-    expect(session.queue[0]?.title).toBe('Highlighted')
+    expect(visibleText(session.queue[0])).toContain('and it is highlighted')
   })
 
   it('returns the open session instead of starting a second', async () => {
     const { token } = await registerTestUser(app)
-    const setId = await seedSet(token, [{ title: 'Card one', answers: [CPU] }])
+    const setId = await seedSet(token, [{ answers: [CPU] }])
 
     const first = await startSession(token, setId)
     const second = await startSession(token, setId)
@@ -153,7 +172,7 @@ describe('POST /api/study/sessions', () => {
   it('404s for another user’s set', async () => {
     const owner = await registerTestUser(app, 'owner')
     const other = await registerTestUser(app, 'other')
-    const setId = await seedSet(owner.token, [{ title: 'Card one', answers: [CPU] }])
+    const setId = await seedSet(owner.token, [{ answers: [CPU] }])
 
     const res = await request(app)
       .post('/api/study/sessions')
@@ -187,14 +206,18 @@ describe('archived sets', () => {
 
   it('keeps an archived set out of an all-sets session', async () => {
     const { token } = await registerTestUser(app)
-    const kept = await seedSet(token, [{ title: 'Still studying', answers: [CPU] }])
-    const shelved = await seedSet(token, [{ title: 'Put away', answers: [CPU] }])
+    const kept = await seedSet(token, [
+      { paragraph: `${PARAGRAPH} in the kept set`, answers: [CPU] },
+    ])
+    const shelved = await seedSet(token, [
+      { paragraph: `${PARAGRAPH} in the shelved set`, answers: [CPU] },
+    ])
     await archive(token, shelved)
 
     const session = await startSession(token)
 
     expect(session.queue).toHaveLength(1)
-    expect(session.queue[0]?.title).toBe('Still studying')
+    expect(visibleText(session.queue[0])).toContain('in the kept set')
     expect(kept).toBeTruthy()
   })
 
@@ -202,18 +225,20 @@ describe('archived sets', () => {
     // Mirrors the library, where an archived set is hidden from the list but
     // still opens. Asking for it by id is an explicit override, not an accident.
     const { token } = await registerTestUser(app)
-    const setId = await seedSet(token, [{ title: 'Put away', answers: [CPU] }])
+    const setId = await seedSet(token, [
+      { paragraph: `${PARAGRAPH} in the shelved set`, answers: [CPU] },
+    ])
     await archive(token, setId)
 
     const session = await startSession(token, setId)
 
     expect(session.queue).toHaveLength(1)
-    expect(session.queue[0]?.title).toBe('Put away')
+    expect(visibleText(session.queue[0])).toContain('in the shelved set')
   })
 
   it('leaves an archived set out of the due counts', async () => {
     const { token } = await registerTestUser(app)
-    const setId = await seedSet(token, [{ title: 'Put away', answers: [CPU, BRAIN] }])
+    const setId = await seedSet(token, [{ answers: [CPU, BRAIN] }])
     await archive(token, setId)
 
     const res = await request(app).get('/api/study/due').set('Authorization', auth(token))
@@ -231,7 +256,7 @@ describe('GET /api/study/due', () => {
     // A freshly built set has no schedule rows at all. Counting those as "due"
     // would make a 500-card import read as 500 overdue reviews on day one.
     const { token } = await registerTestUser(app)
-    const setId = await seedSet(token, [{ title: 'Card one', answers: [CPU] }])
+    const setId = await seedSet(token, [{ answers: [CPU] }])
 
     const res = await request(app).get('/api/study/due').set('Authorization', auth(token))
 
@@ -251,7 +276,7 @@ describe('GET /api/study/due', () => {
 
   it('does not count a card with no blanks', async () => {
     const { token } = await registerTestUser(app)
-    const setId = await seedSet(token, [{ title: 'Not yet highlighted', answers: [] }])
+    const setId = await seedSet(token, [{ paragraph: 'Never highlighted', answers: [] }])
 
     const res = await request(app).get('/api/study/due').set('Authorization', auth(token))
 
@@ -262,7 +287,7 @@ describe('GET /api/study/due', () => {
   it('sees nothing belonging to another user', async () => {
     const owner = await registerTestUser(app, 'owner')
     const other = await registerTestUser(app, 'other')
-    await seedSet(owner.token, [{ title: 'Card one', answers: [CPU] }])
+    await seedSet(owner.token, [{ answers: [CPU] }])
 
     const res = await request(app).get('/api/study/due').set('Authorization', auth(other.token))
 

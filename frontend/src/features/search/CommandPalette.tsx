@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { SearchHit, SnippetSegment } from '@saulado/shared'
 import { SearchIcon } from '@/components/ui/icons'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import { cardHref } from '@/features/cards/links'
 import { useSearch } from './queries'
 
 /**
@@ -81,7 +82,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps): ReactEle
   function openHit(hit: SearchHit | undefined): void {
     if (!hit) return
     onClose()
-    void navigate(`/cards/${hit.cardId}`)
+    // The card's set, with the card named — `/cards/:id` is gone, and a card is
+    // now something you open *in* a set rather than on its own page.
+    void navigate(cardHref(hit.studySetId, hit.cardId))
   }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>): void {
@@ -247,7 +250,7 @@ function PaletteBody({
             }`}
           >
             <div className="flex items-baseline justify-between gap-3">
-              <span className="truncate font-medium">{hit.title}</span>
+              <span className="truncate font-medium">{hit.label}</span>
               <span className="shrink-0 text-xs text-muted-foreground">
                 {hit.setTitle}
                 {hit.setArchived && ' · archived'}
