@@ -31,6 +31,9 @@ yarn-error.*
 *.pem
 
 # local env files
+# `.env` too, not just `*.local`: EXPO_PUBLIC_API_URL is a machine-specific dev
+# address, not a shared setting. `.env.example` is the committed copy.
+.env
 .env*.local
 
 # typescript

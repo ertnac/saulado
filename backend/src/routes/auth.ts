@@ -1,11 +1,13 @@
 import { Prisma } from '@prisma/client'
 import { Router } from 'express'
+import type { Request, Response } from 'express'
 import type { AuthResponse, MessageResponse } from '@saulado/shared'
 import {
   clearRefreshCookie,
   hasAllowedOrigin,
-  readRefreshCookie,
-  setRefreshCookie,
+  isNativeClient,
+  issueRefreshToken,
+  readRefreshToken,
 } from '../auth/cookies.js'
 import { buildResetEmail, emailProvider } from '../auth/email.js'
 import { burnPasswordTiming, hashPassword, verifyPassword } from '../auth/password.js'
@@ -55,16 +57,30 @@ const INVALID_CREDENTIALS = 'Email or password is incorrect.'
 /** Prisma's code for a unique-constraint violation. */
 const UNIQUE_VIOLATION = 'P2002'
 
+/**
+ * Builds the auth response and issues the refresh token in one step.
+ *
+ * The two are together because they are one decision. Every caller that returns
+ * a session also has to hand over a refresh token, and it must reach the client
+ * by exactly one route — cookie for a browser, response body for a native app,
+ * never both. Splitting them left three call sites free to pick a different
+ * answer, and one of them eventually would.
+ */
 function authPayload(
+  req: Request,
+  res: Response,
   user: Parameters<typeof toPublicUser>[0],
   settings: Parameters<typeof toPublicSettings>[0],
-  session: { accessToken: string; expiresIn: number },
+  session: { accessToken: string; expiresIn: number; refreshToken: string },
 ): AuthResponse {
+  const refreshToken = issueRefreshToken(req, res, session.refreshToken)
+
   return {
     user: toPublicUser(user),
     settings: toPublicSettings(settings),
     accessToken: session.accessToken,
     expiresIn: session.expiresIn,
+    ...(refreshToken === undefined ? {} : { refreshToken }),
   }
 }
 
@@ -95,8 +111,7 @@ authRouter.post(
       })
       const session = await issueSession(user.id, req.get('user-agent'))
 
-      setRefreshCookie(res, session.refreshToken)
-      res.status(201).json(authPayload(user, settings, session))
+      res.status(201).json(authPayload(req, res, user, settings, session))
     } catch (err) {
       /**
        * Relies on the unique constraint rather than a prior SELECT. A
@@ -147,8 +162,7 @@ authRouter.post(
       user.settings ?? (await prisma.userSettings.create({ data: { userId: user.id } }))
 
     const session = await issueSession(user.id, req.get('user-agent'))
-    setRefreshCookie(res, session.refreshToken)
-    res.status(200).json(authPayload(user, settings, session))
+    res.status(200).json(authPayload(req, res, user, settings, session))
   }),
 )
 
@@ -158,14 +172,19 @@ authRouter.post(
   '/refresh',
   refreshLimiter,
   asyncHandler(async (req, res) => {
-    // Cookie-authenticated, so SameSite is not protecting this route in
-    // production. See auth/cookies.ts.
-    if (!hasAllowedOrigin(req)) {
+    /**
+     * The Origin check defends the cookie, so it applies only where a cookie is
+     * in play. A native client authenticates by presenting a token it holds in
+     * the keychain and sends deliberately — there is no ambient credential for a
+     * forged cross-site request to ride, which is the only thing CSRF exploits.
+     * Native apps also have no meaningful Origin to send.
+     */
+    if (!isNativeClient(req) && !hasAllowedOrigin(req)) {
       sendError(res, 'UNAUTHORIZED', 'Origin not allowed.')
       return
     }
 
-    const presented = readRefreshCookie(req)
+    const presented = readRefreshToken(req)
     if (!presented) {
       sendError(res, 'TOKEN_INVALID', 'No refresh token present.')
       return
@@ -203,8 +222,7 @@ authRouter.post(
     const settings =
       user.settings ?? (await prisma.userSettings.create({ data: { userId: user.id } }))
 
-    setRefreshCookie(res, result.session.refreshToken)
-    res.status(200).json(authPayload(user, settings, result.session))
+    res.status(200).json(authPayload(req, res, user, settings, result.session))
   }),
 )
 
@@ -213,9 +231,11 @@ authRouter.post(
 authRouter.post(
   '/logout',
   asyncHandler(async (req, res) => {
-    const presented = readRefreshCookie(req)
+    const presented = readRefreshToken(req)
     if (presented) await revokeSession(presented)
 
+    // Cleared unconditionally. A native client has no cookie to clear, and
+    // clearing one that was never set is a no-op — cheaper than branching.
     clearRefreshCookie(res)
 
     // 200 whether or not a token was present. Logout is idempotent — a client

@@ -82,3 +82,67 @@ export function hasAllowedOrigin(req: Request): boolean {
   if (!origin) return true
   return env.corsOrigins.includes(origin)
 }
+
+// ── Native clients ──────────────────────────────────────────────────────────
+
+/**
+ * The header a native client sets to opt into body-carried refresh tokens.
+ *
+ * React Native cannot use the cookie above: there is no browser, Android's
+ * OkHttp stack ignores `credentials: 'include'`, and cookie persistence across
+ * app restarts is not guaranteed on either platform. So the token travels in
+ * the JSON body instead and the app stores it in the OS keychain.
+ */
+const NATIVE_CLIENT_HEADER = 'x-saulado-client'
+const NATIVE_CLIENT_VALUE = 'native'
+
+/**
+ * Whether to return the refresh token in the body instead of setting a cookie.
+ *
+ * This is a gate, not a hint, and it is the entire safety argument for putting
+ * a long-lived credential in a response body. Without it every web response
+ * would carry one too, where a browser cache, a proxy log, or a service worker
+ * could retain it. Do not widen this to a user-agent sniff — an attacker
+ * controls that header just as freely, but a cookie-bearing browser sending an
+ * explicit opt-in header is not a request a cross-site page can forge.
+ *
+ * What makes the native path safe once the token is out is already built:
+ * `rotateSession` replaces the token on every use and treats a second
+ * presentation of a spent one as theft, revoking the whole family. A stolen
+ * token is usable once before it burns itself and logs the attacker out.
+ */
+export function isNativeClient(req: Request): boolean {
+  return req.get(NATIVE_CLIENT_HEADER) === NATIVE_CLIENT_VALUE
+}
+
+/**
+ * The presented refresh token, from the body for native clients and the cookie
+ * for everyone else.
+ *
+ * Native first, and only when the header says so. Reading the body
+ * unconditionally would let a cross-site page supply a token of its own
+ * choosing on a route that also accepts cookies — the confused-deputy shape
+ * this whole design exists to avoid.
+ */
+export function readRefreshToken(req: Request): string | null {
+  if (isNativeClient(req)) {
+    const body = req.body as { refreshToken?: unknown } | undefined
+    const token = body?.refreshToken
+    return typeof token === 'string' && token.length > 0 ? token : null
+  }
+  return readRefreshCookie(req)
+}
+
+/**
+ * Issues the refresh token by whichever transport the client asked for.
+ *
+ * Returns the token for native callers to merge into their JSON body, and
+ * `undefined` for web, where it has already been written as a cookie. Exactly
+ * one transport runs per request — a native response must not also carry a
+ * `Set-Cookie`, or the token exists in two places with one lifetime.
+ */
+export function issueRefreshToken(req: Request, res: Response, token: string): string | undefined {
+  if (isNativeClient(req)) return token
+  setRefreshCookie(res, token)
+  return undefined
+}

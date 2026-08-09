@@ -65,9 +65,19 @@ export interface ResetPasswordRequest {
 /**
  * The response to register / login / refresh.
  *
- * The refresh token is deliberately absent — it travels only as an httpOnly
- * cookie and is never readable by JavaScript. If it appeared here, any XSS
- * would be a full account takeover rather than a session-length nuisance.
+ * On the web the refresh token is absent, and that is load-bearing: it travels
+ * only as an httpOnly cookie no script can read, so an XSS costs a session
+ * rather than the account.
+ *
+ * Native clients have no such cookie. React Native has no browser, Android's
+ * OkHttp stack ignores `credentials: 'include'`, and cookie persistence across
+ * app restarts is not guaranteed on either platform — so `refreshToken` is
+ * populated for them and stored in the OS keychain instead.
+ *
+ * It is emitted only when the request carried `X-Saulado-Client: native`. That
+ * gate is the whole safety argument: without it, a long-lived credential would
+ * sit in a JSON body that a browser cache, a proxy log, or a service worker
+ * could retain. See `backend/src/auth/cookies.ts` and plan §4.2.
  */
 export interface AuthResponse {
   user: PublicUser
@@ -75,6 +85,8 @@ export interface AuthResponse {
   accessToken: string
   /** Seconds until `accessToken` expires. Drives the silent-refresh timer. */
   expiresIn: number
+  /** Native clients only. Absent on web, where the httpOnly cookie carries it. */
+  refreshToken?: string
 }
 
 export interface MessageResponse {
