@@ -139,6 +139,61 @@
   }
 }
 
+@layer components {
+  /**
+   * The brand sprite-sheet animations (see `components/ui/brand.tsx`).
+   *
+   * Both sheets are 8 frames of 128px laid out in a row, so both share this
+   * geometry and the one keyframe. The box is one frame wide and the sheet is
+   * stepped past it, which is why the timing function is `steps(8)` and the
+   * keyframe travels the full sheet width: `steps` lands on each frame boundary
+   * exactly, where a linear tween would show two half-frames at once.
+   *
+   * Sized in `em` so a caller can scale it by setting `font-size` — the frames
+   * are vector, so there is no resolution to lose.
+   */
+  .saulado-sprite,
+  .saulado-mascot {
+    display: block;
+    /* 8 frames wide, 1 frame tall, relative to this box. */
+    background-size: 800% 100%;
+    background-repeat: no-repeat;
+    background-position: 0 0;
+  }
+
+  .saulado-sprite {
+    width: 3em;
+    height: 3em;
+    background-image: url('/saulado-sprite.svg');
+    animation: saulado-sprite 0.8s steps(8) infinite;
+  }
+
+  /**
+   * The mascot waves three times on mount and then rests, rather than looping
+   * forever. The dashboard's one job is to point at "Start studying"
+   * (saulado-ux §4), and a figure moving in the corner of the eye competes with
+   * that on every visit. Three cycles is enough to be seen and then done.
+   *
+   * No `forwards`: when the animation ends the element falls back to the base
+   * `background-position`, which is frame 1 — the resting pose. That is the same
+   * frame reduced motion pins below, so the mascot settles identically either
+   * way.
+   */
+  .saulado-mascot {
+    width: 4.5em;
+    height: 4.5em;
+    background-image: url('/saulado-mascot.svg');
+    animation: saulado-sprite 1.6s steps(8) 3;
+  }
+
+  @keyframes saulado-sprite {
+    to {
+      /* One full sheet width. With `steps(8)` the last frame shown is 7/8. */
+      background-position: -800% 0;
+    }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -146,5 +201,14 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* The rule above would leave a sprite parked on whichever frame the 0.01ms
+     run ended on. Pin both to their resting frame instead, and keep the box the
+     same size so nothing reflows. */
+  .saulado-sprite,
+  .saulado-mascot {
+    animation: none !important;
+    background-position: 0 0 !important;
   }
 }

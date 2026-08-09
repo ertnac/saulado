@@ -8,6 +8,7 @@ import {
   sliceCodePoints,
   type AnswerRange,
 } from '@saulado/shared'
+import { BrainSprite } from '@/components/ui/brand'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogActions } from '@/components/ui/dialog'
 import { AlertIcon, ImageIcon } from '@/components/ui/icons'
@@ -209,6 +210,13 @@ export function ImportDialog({ open, onClose, onImport }: ImportDialogProps): Re
 
         {stage.kind === 'working' && (
           <div className="space-y-3 py-2">
+            {/*
+              The sprite is decoration over a determinate bar, not a substitute
+              for one — the bar below is what says how far along this is. Its
+              `role="status"` label is the only announcement; the bar carries its
+              own.
+            */}
+            <BrainSprite label="Reading the image" className="justify-center text-[1.25rem]" />
             <label htmlFor="ocr-progress" className="block text-sm font-medium">
               Reading the image…
             </label>

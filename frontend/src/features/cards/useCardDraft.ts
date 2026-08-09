@@ -67,6 +67,15 @@ export interface CardDraftActions {
 export interface CardDraftInit {
   paragraph?: string
   answers?: readonly DraftAnswer[]
+  /**
+   * Which surface to open on. Defaults to `compose`.
+   *
+   * `highlight` is for a draft that arrives with its blanks already placed — an
+   * image import, where the user highlighted them in the dialog. Opening that on
+   * the textarea would show a paragraph with no visible highlights, which reads
+   * as the work having been thrown away.
+   */
+  mode?: EditorMode
 }
 
 /** Sorts, renumbers, and caps a set of answers in one place. */
@@ -77,7 +86,7 @@ function renumber(answers: readonly DraftAnswer[]): EditorAnswer[] {
 export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDraftActions {
   const initialParagraph = normalizeParagraph(init.paragraph ?? '')
 
-  const [mode, setMode] = useState<EditorMode>('compose')
+  const [mode, setMode] = useState<EditorMode>(init.mode ?? 'compose')
   const [paragraph, setParagraph] = useState(initialParagraph)
   const [draftText, setDraftText] = useState(initialParagraph)
   const [answers, setAnswers] = useState<EditorAnswer[]>(() => renumber(init.answers ?? []))

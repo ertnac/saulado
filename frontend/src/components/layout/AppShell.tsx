@@ -12,6 +12,7 @@ import {
   SunIcon,
   type IconProps,
 } from '@/components/ui/icons'
+import { Avatar, Logo } from '@/components/ui/brand'
 import { CommandPalette } from '@/features/search/CommandPalette'
 import { useSearchShortcut } from '@/features/search/useSearchShortcut'
 import { useTheme } from '@/hooks/useTheme'
@@ -156,7 +157,6 @@ export function AppShell(): ReactElement {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const palette = useSearchShortcut()
-  const initial = (user?.email ?? '?').charAt(0).toUpperCase()
 
   return (
     <div className="min-h-screen md:pl-20">
@@ -176,8 +176,14 @@ export function AppShell(): ReactElement {
 
       <header className="sticky top-0 z-30 bg-background/70 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-5xl items-center gap-2 px-4 sm:gap-3">
-          <Link to="/" className="shrink-0 font-semibold tracking-tight">
-            Saulado
+          <Link
+            to="/"
+            aria-label="Saulado — go to dashboard"
+            className="shrink-0 rounded-full transition-opacity duration-150 hover:opacity-80"
+          >
+            {/* Wordmark hidden below `sm`, where the mark alone has to carry the
+                brand and the row needs the width for search. */}
+            <Logo className="[&>span]:hidden sm:[&>span]:inline" withWordmark />
           </Link>
 
           <div className="flex flex-1 justify-end sm:justify-center">
@@ -202,12 +208,7 @@ export function AppShell(): ReactElement {
               )
             }
           >
-            <span
-              aria-hidden="true"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground"
-            >
-              {initial}
-            </span>
+            <Avatar label={user?.email ?? 'Your account'} />
             <span className="hidden max-w-[12rem] truncate lg:inline">{user?.email}</span>
             <span className="sr-only">Settings</span>
           </NavLink>

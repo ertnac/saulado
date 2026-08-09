@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, type ReactElement, type ReactNode } from 'react'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
-import { cardLabel, type StudyCardSummary, type StudySet } from '@saulado/shared'
+import { cardLabel, type AnswerRange, type StudyCardSummary, type StudySet } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -71,14 +71,18 @@ const ImportDialog = lazy(async () => ({
 }))
 
 /**
- * Paragraphs waiting to become cards, and which one is on screen.
+ * Questions waiting to become cards, and which one is on screen.
  *
  * Two fields of state on this page rather than a hook: there is one consumer,
  * and a file wrapping two fields is a file to open before the feature can be
  * read.
+ *
+ * Each question carries the blanks the user placed in the import dialog. They
+ * are offsets into that question's own `text`, so the pair travels together and
+ * is never recombined with another paragraph.
  */
 interface Queue {
-  paragraphs: string[]
+  questions: { text: string; answers: AnswerRange[] }[]
   index: number
 }
 
@@ -341,9 +345,9 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
   }
 
   /**
-   * Moves to the next imported paragraph, or ends the import on the last.
+   * Moves to the next imported question, or ends the import on the last.
    *
-   * Saved and skipped land here alike: either way this paragraph is done with.
+   * Saved and skipped land here alike: either way this question is done with.
    * Falling back to the ordinary empty composer rather than collapsing, so the
    * user who has just made three cards can write a fourth without hunting for
    * the button again.
@@ -352,7 +356,7 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
     if (queue === null) return
 
     const next = queue.index + 1
-    if (next < queue.paragraphs.length) {
+    if (next < queue.questions.length) {
       setQueue({ ...queue, index: next })
       return
     }
@@ -430,9 +434,10 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
           setId={setId}
           onClose={closeComposer}
           importQueue={{
-            paragraph: queue.paragraphs[queue.index] ?? '',
+            paragraph: queue.questions[queue.index]?.text ?? '',
+            answers: queue.questions[queue.index]?.answers ?? [],
             index: queue.index,
-            total: queue.paragraphs.length,
+            total: queue.questions.length,
             onAdvance: advance,
           }}
         />
@@ -491,10 +496,10 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
             onClose={() => {
               setImporting(false)
             }}
-            onImport={(paragraphs) => {
+            onImport={(questions) => {
               setImporting(false)
               setComposing(null)
-              setQueue({ paragraphs, index: 0 })
+              setQueue({ questions, index: 0 })
             }}
           />
         </Suspense>

@@ -1,0 +1,13 @@
+{
+  "extends": ["expo/tsconfig.base", "../tsconfig.base.json"],
+  "compilerOptions": {
+    /* Expo's base owns `jsx`, `module`, and `moduleResolution`; the repo base
+       owns strictness, so both are extended rather than one being copied.
+       `lib` and `target` are restated because the repo base pins ES2022 for
+       Node and React Native runs on Hermes, which tracks newer syntax. */
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "jsx": "react-jsx"
+  },
+  "include": ["**/*.ts", "**/*.tsx", "expo-env.d.ts"]
+}

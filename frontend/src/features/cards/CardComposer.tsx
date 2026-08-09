@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactElement } from 'react'
-import type { AnswerInput, DraftAnswer, StudyCard } from '@saulado/shared'
+import type { AnswerInput, AnswerRange, DraftAnswer, StudyCard } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -53,14 +53,19 @@ function toAnswerInputs(answers: readonly DraftAnswer[]): AnswerInput[] {
 const PARAGRAPH_FIELD_ID = 'card-paragraph'
 
 /**
- * One paragraph of an image import, and the way to move past it.
+ * One question of an image import, and the way to move past it.
  *
  * `index` is 0-based and drives the "Card 2 of 3" counter. `onAdvance` is called
  * for both outcomes — saved and skipped — because from the queue's side they are
- * the same event: this paragraph is done with.
+ * the same event: this question is done with.
+ *
+ * `answers` are the blanks the user already placed in the import dialog. Their
+ * offsets index into `paragraph` and nothing else, which is why the two fields
+ * travel together and why the caller must key this component by `index`.
  */
 export interface ImportQueue {
   paragraph: string
+  answers: readonly AnswerRange[]
   index: number
   total: number
   onAdvance: () => void
@@ -92,11 +97,16 @@ function Composer({ setId, card, onClose, importQueue }: ComposerProps): ReactEl
   // Seeded through the initializer rather than a `reset` in an effect. A reset
   // landing after mount races the user — see the header of this file — and the
   // imported paragraph is known before the first render, so there is nothing to
-  // wait for.
-  const draft = useCardDraft({
-    paragraph: importQueue?.paragraph ?? restored?.paragraph ?? card?.paragraph,
-    answers: restored?.answers ?? card?.answers,
-  })
+  // wait for. The import's answers ride along with its paragraph; they index
+  // into that string and are meaningless against any other.
+  const draft = useCardDraft(
+    importQueue
+      ? { paragraph: importQueue.paragraph, answers: importQueue.answers, mode: 'highlight' }
+      : {
+          paragraph: restored?.paragraph ?? card?.paragraph,
+          answers: restored?.answers ?? card?.answers,
+        },
+  )
   const [tags, setTags] = useState<string[]>(restored?.tags ?? card?.tags ?? [])
   const [added, setAdded] = useState(0)
 

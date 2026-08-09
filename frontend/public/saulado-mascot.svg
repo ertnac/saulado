@@ -1,0 +1,218 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="128" viewBox="0 0 1024 128">
+  <title>Saulado mascot — 8-frame wave sprite sheet</title>
+  <desc>
+    Eight 128x128 frames laid out left to right, drawn from avatar.png: the
+    chibi study buddy in a cream hoodie with sage trim and an amber sparkle.
+
+    The hand stays raised in every frame and the wave is a rotation about the
+    shoulder, so any single frame is a usable still. That matters twice: frame 1
+    is what reduced-motion parks on, and it is also where the animation lands
+    when it stops. A pose that only reads mid-swing would leave the mascot
+    frozen looking broken.
+
+    The swing runs 0 to 19 degrees and back rather than symmetrically either
+    side of centre. Swinging inward would carry the hand across the face, and
+    the outward half is the half a wave is actually made of. Every frame is
+    clipped to its own 128px box so no overswing bleeds into its neighbour and
+    shows up as a stray hand.
+
+    Stepped through with background-position; see .saulado-mascot in index.css.
+  </desc>
+
+  <defs>
+    <clipPath id="av-cell"><rect width="128" height="128" /></clipPath>
+
+    <path id="av-star" d="M0-14C1.5-5 5-1.5 14 0 5 1.5 1.5 5 0 14-1.5 5-5 1.5-14 0-5-1.5-1.5-5 0-14Z" fill="#f7b03d" stroke="#ee9a1e" stroke-width="2" />
+
+    <!-- Torso. Drawn before the head so the collar tucks under the chin.
+         Everything cream carries a warm outline: the mascot sits on the page
+         background with nothing behind it, and unoutlined cream on a light
+         theme is a silhouette that disappears. -->
+    <g id="av-body">
+      <path d="M43 62h14v23H43z" fill="#f3c6a5" />
+      <path d="M50 84c-11 0-18 4-26 10C15 100 10 111 9 128h82c-1-17-6-28-15-34-8-6-15-10-26-10Z" fill="#f5efdd" stroke="#e0d8bf" stroke-width="2.4" />
+      <path d="M36 84c3 8 25 8 28 0" fill="none" stroke="#7fa184" stroke-width="9" stroke-linecap="round" />
+      <path d="M31 87c-6 3-11 8-13 14 6-4 13-6 20-7z" fill="#9dbea3" />
+      <path d="M69 87c6 3 11 8 13 14-6-4-13-6-20-7z" fill="#9dbea3" />
+      <g stroke="#9dbea3" stroke-width="3" stroke-linecap="round" fill="none">
+        <path d="M43 95v18" />
+        <path d="M57 95v18" />
+      </g>
+    </g>
+
+    <!-- Head, minus the eyes: those swap for the blink. -->
+    <g id="av-head">
+      <!-- Hair mass, then tufts. The mass alone renders as a bob; the triangles
+           are what put an anime silhouette on it, so they are load-bearing
+           rather than detail. Swept rather than vertical — straight-up spikes
+           read as a crown. -->
+      <g fill="#3d4a2c">
+        <circle cx="34" cy="32" r="14" />
+        <circle cx="50" cy="26" r="16" />
+        <circle cx="66" cy="32" r="14" />
+        <circle cx="26" cy="43" r="10" />
+        <circle cx="74" cy="43" r="10" />
+        <path d="M38 22 25 8l20 9z" />
+        <path d="M50 18 47 5l14 11z" />
+        <path d="M62 21 78 11l-9 14z" />
+        <path d="M27 35 15 29l12-3z" />
+        <path d="M73 35 85 29l-12-3z" />
+      </g>
+
+      <!-- Ears after the mass, before the face: behind the hair they vanish. -->
+      <ellipse cx="26" cy="51" rx="4.5" ry="6" fill="#f3c6a5" />
+      <ellipse cx="74" cy="51" rx="4.5" ry="6" fill="#f3c6a5" />
+
+      <path d="M27 44C27 29 37 21 50 21s23 8 23 23c0 16-10 28-23 28S27 60 27 44Z" fill="#fbe0c8" />
+
+      <!-- Fringe: lobes for volume, triangles for the pointed tips that sit
+           over the forehead in the reference. -->
+      <g fill="#3d4a2c">
+        <circle cx="31" cy="35" r="9" />
+        <circle cx="42" cy="30" r="10" />
+        <circle cx="58" cy="30" r="10" />
+        <circle cx="69" cy="35" r="9" />
+        <path d="M31 32l5 12 5-12z" />
+        <path d="M45 30l4 13 6-13z" />
+        <path d="M59 31l5 12 5-12z" />
+      </g>
+      <g fill="none" stroke="#5c6d40" stroke-width="2.4" stroke-linecap="round" opacity=".75">
+        <path d="M37 24c-4 3-6 6-7 10" />
+        <path d="M56 21c3 2 5 5 6 9" />
+      </g>
+
+      <g fill="none" stroke="#2e3a22" stroke-width="2.6" stroke-linecap="round">
+        <path d="M33 45c3-2 7-2 10 0" />
+        <path d="M57 45c3-2 7-2 10 0" />
+      </g>
+      <ellipse cx="31" cy="61" rx="5.5" ry="3" fill="#eda183" opacity=".65" />
+      <ellipse cx="69" cy="61" rx="5.5" ry="3" fill="#eda183" opacity=".65" />
+      <path d="M46 62h8c0 4-2 7-4 7s-4-3-4-7Z" fill="#8c3f3a" />
+      <path d="M48 66c1-.6 3-.6 4 0-.7 1.6-1.4 2.4-2 2.4s-1.3-.8-2-2.4Z" fill="#e08a86" />
+    </g>
+
+    <g id="av-eyes">
+      <ellipse cx="39" cy="54" rx="7" ry="8.5" fill="#fff" />
+      <ellipse cx="61" cy="54" rx="7" ry="8.5" fill="#fff" />
+      <ellipse cx="39" cy="55" rx="5.8" ry="7.2" fill="#3c8b5b" />
+      <ellipse cx="61" cy="55" rx="5.8" ry="7.2" fill="#3c8b5b" />
+      <ellipse cx="39" cy="56" rx="3" ry="4" fill="#1f4f34" />
+      <ellipse cx="61" cy="56" rx="3" ry="4" fill="#1f4f34" />
+      <circle cx="36.6" cy="51" r="2.1" fill="#fff" />
+      <circle cx="58.6" cy="51" r="2.1" fill="#fff" />
+      <g fill="none" stroke="#2e3a22" stroke-width="2.8" stroke-linecap="round">
+        <path d="M32.5 50c2-4 11-4 13.5 0" />
+        <path d="M54.5 50c2-4 11-4 13.5 0" />
+      </g>
+    </g>
+
+    <g id="av-eyes-shut" fill="none" stroke="#2e3a22" stroke-width="3" stroke-linecap="round">
+      <path d="M33 57c2.5-6 10.5-6 13 0" />
+      <path d="M55 57c2.5-6 10.5-6 13 0" />
+    </g>
+
+    <!-- The waving arm, drawn so (80 106) is the shoulder joint every frame
+         rotates about. The sleeve is outlined for the same reason the torso is,
+         and it has to be: an unoutlined cream sleeve against the cream torso is
+         an invisible lever, which leaves a hand floating with nothing visibly
+         swinging it. -->
+    <g id="av-arm">
+      <!-- Tapered: 17px at the shoulder, 13px at the wrist. One uniform stroke
+           made the whole arm a capsule the same width as the palm, which is what
+           read as a mitten rather than a limb. -->
+      <path d="M79 110C82 98 85 88 88 79" fill="none" stroke="#e6dcc2" stroke-width="21" stroke-linecap="round" />
+      <path d="M79 110C82 98 85 88 88 79" fill="none" stroke="#f5efdd" stroke-width="17" stroke-linecap="round" />
+      <use href="#av-star" transform="translate(82 100) scale(0.34)" />
+      <path d="M87.5 80l1.5-6" fill="none" stroke="#7fa184" stroke-width="16" />
+      <g fill="#fbe0c8" stroke="#dda87f" stroke-width="1.5" stroke-linejoin="round">
+        <path d="M84 66l1-6" stroke-width="13" stroke="#fbe0c8" stroke-linecap="round" fill="none" />
+        <path d="M79 52h20v8a10 10 0 0 1-20 0Z" />
+        <rect x="79.5" y="38" width="5" height="17" rx="2.5" />
+        <rect x="85.5" y="33" width="5" height="22" rx="2.5" />
+        <rect x="91.5" y="34" width="5" height="21" rx="2.5" />
+        <rect x="97" y="39" width="5" height="16" rx="2.5" />
+        <rect x="71" y="50" width="6" height="14" rx="3" transform="rotate(-22 74 57)" />
+      </g>
+    </g>
+
+    <!-- Amber speed marks, pulsing with the swing: what sells the arm as
+         moving rather than posed. -->
+    <g id="av-mark" fill="none" stroke="#f7b03d" stroke-width="3" stroke-linecap="round">
+      <path d="M15 31l-6-6" />
+      <path d="M11 42H3" />
+      <path d="M15 52l-7 4" />
+    </g>
+  </defs>
+
+  <!--
+    Each frame is clipped to its own cell, and the figure is inset inside that
+    clip by a second group. The two cannot be one transform: `clip-path` resolves
+    in the coordinate space the element's own transform establishes, so folding
+    the inset into the cell group would shrink the clip rect along with the art
+    and let the far end of the swing bleed into the next frame.
+  -->
+  <g clip-path="url(#av-cell)">
+    <g transform="translate(10 15) scale(0.88)">
+      <use href="#av-body" />
+      <g transform="rotate(0 50 84)"><use href="#av-head" /><use href="#av-eyes" /></g>
+      <use href="#av-arm" transform="rotate(0 79 110)" />
+      <use href="#av-mark" transform="translate(10 42) scale(1) translate(-10 -42)" />
+    </g>
+  </g>
+  <g clip-path="url(#av-cell)" transform="translate(128 0)">
+    <g transform="translate(10 15) scale(0.88)">
+      <use href="#av-body" />
+      <g transform="rotate(-1 50 84)"><use href="#av-head" /><use href="#av-eyes" /></g>
+      <use href="#av-arm" transform="rotate(6 79 110)" />
+      <use href="#av-mark" transform="translate(10 42) scale(1.12) translate(-10 -42)" />
+    </g>
+  </g>
+  <g clip-path="url(#av-cell)" transform="translate(256 0)">
+    <g transform="translate(10 15) scale(0.88)">
+      <use href="#av-body" />
+      <g transform="rotate(-2 50 84)"><use href="#av-head" /><use href="#av-eyes-shut" /></g>
+      <use href="#av-arm" transform="rotate(12 79 110)" />
+      <use href="#av-mark" transform="translate(10 42) scale(1.24) translate(-10 -42)" />
+    </g>
+  </g>
+  <g clip-path="url(#av-cell)" transform="translate(384 0)">
+    <g transform="translate(10 15) scale(0.88)">
+      <use href="#av-body" />
+      <g transform="rotate(-3 50 84)"><use href="#av-head" /><use href="#av-eyes-shut" /></g>
+      <use href="#av-arm" transform="rotate(17 79 110)" />
+      <use href="#av-mark" transform="translate(10 42) scale(1.34) translate(-10 -42)" />
+    </g>
+  </g>
+  <g clip-path="url(#av-cell)" transform="translate(512 0)">
+    <g transform="translate(10 15) scale(0.88)">
+      <use href="#av-body" />
+      <g transform="rotate(-3.5 50 84)"><use href="#av-head" /><use href="#av-eyes" /></g>
+      <use href="#av-arm" transform="rotate(19 79 110)" />
+      <use href="#av-mark" transform="translate(10 42) scale(1.38) translate(-10 -42)" />
+    </g>
+  </g>
+  <g clip-path="url(#av-cell)" transform="translate(640 0)">
+    <g transform="translate(10 15) scale(0.88)">
+      <use href="#av-body" />
+      <g transform="rotate(-2.5 50 84)"><use href="#av-head" /><use href="#av-eyes" /></g>
+      <use href="#av-arm" transform="rotate(14 79 110)" />
+      <use href="#av-mark" transform="translate(10 42) scale(1.2) translate(-10 -42)" />
+    </g>
+  </g>
+  <g clip-path="url(#av-cell)" transform="translate(768 0)">
+    <g transform="translate(10 15) scale(0.88)">
+      <use href="#av-body" />
+      <g transform="rotate(-1.5 50 84)"><use href="#av-head" /><use href="#av-eyes" /></g>
+      <use href="#av-arm" transform="rotate(9 79 110)" />
+      <use href="#av-mark" transform="translate(10 42) scale(1.06) translate(-10 -42)" />
+    </g>
+  </g>
+  <g clip-path="url(#av-cell)" transform="translate(896 0)">
+    <g transform="translate(10 15) scale(0.88)">
+      <use href="#av-body" />
+      <g transform="rotate(-0.5 50 84)"><use href="#av-head" /><use href="#av-eyes" /></g>
+      <use href="#av-arm" transform="rotate(4 79 110)" />
+      <use href="#av-mark" transform="translate(10 42) scale(1.02) translate(-10 -42)" />
+    </g>
+  </g>
+</svg>

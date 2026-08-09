@@ -10,6 +10,7 @@ export default tseslint.config(
       '**/coverage/**',
       'backend/src/generated/**',
       'frontend/postcss.config.js',
+      'mobile/metro.config.js',
     ],
   },
 
