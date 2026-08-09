@@ -195,6 +195,8 @@ describe('the study affordance', () => {
   it('counts new cards when nothing is due yet', async () => {
     // A brand-new set has no schedule rows, so `due` is 0 while there is plenty
     // to do. Hiding the button here would make a freshly built set unstudiable.
+    // The verb changes with it: nothing has been reviewed, so there is nothing
+    // to re-study.
     mocked.listSets.mockResolvedValue(page([set()]))
     mockedStudy.getDueCounts.mockResolvedValue({
       counts: [{ studySetId: 'set-1', due: 0, newCards: 5 }],
@@ -203,7 +205,8 @@ describe('the study affordance', () => {
     })
     render(renderPage())
 
-    expect(await screen.findByRole('link', { name: 'Study 5 new' })).toBeInTheDocument()
+    const link = await screen.findByRole('link', { name: 'Learn 5' })
+    expect(link).toHaveAttribute('href', '/study?set=set-1')
   })
 
   it('offers no study button when the set has nothing waiting', async () => {

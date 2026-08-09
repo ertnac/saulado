@@ -28,6 +28,19 @@ import { flattenPages, useCreateSet, useDeleteSet, useSets, useUpdateSet } from 
  * the one thing it was asked to do.
  */
 
+/**
+ * The library grid.
+ *
+ * A grid rather than the stack this used to be: full-width rows turn a set into
+ * a bar of text with three quarters of the line empty, and twelve of them read
+ * as a table nobody can scan. Tiles give the title, the count and the study pill
+ * a shape, and the same class string drives the skeleton so the two cannot drift.
+ *
+ * Two columns from `sm`, three from `xl`. Not four — the titles are user-written
+ * and a fourth column truncates most of them.
+ */
+const GRID = 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3'
+
 function SetCard({
   set,
   due,
@@ -52,64 +65,93 @@ function SetCard({
   return (
     <Card
       as="li"
+      interactive
       className={cn(
-        'flex flex-col gap-3 border-l-4 p-5',
+        // `relative` anchors the stretched title link below. `flex flex-col` plus
+        // `mt-auto` on the footer keeps every footer in a grid row on one line —
+        // tiles of different title lengths otherwise stagger their controls.
+        'relative flex flex-col p-5 pb-2',
         // The colour stripe survives the move off bordered cards: it is the only
         // per-set identifier, and eight background tints would be eight contrast
         // problems in two themes (see ./colors).
+        'border-l-4',
         setAccentClass(set.color),
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="font-medium">
-            {/*
-              The whole title is the link, not a separate "Open" button — the
-              title is what the user is reaching for, and a 44px row of text is
-              already a better touch target than an icon beside it.
-            */}
-            <Link
-              to={`/sets/${set.id}`}
-              className="rounded hover:underline focus-visible:underline"
-            >
-              {set.title}
-            </Link>
-          </h3>
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="min-w-0 text-lg font-semibold leading-snug tracking-tight">
           {/*
-            Where the description used to be. The counts say something the user
-            cannot see from the title — including how many cards live in
-            sub-sets, which is what studying this set will actually sweep in.
+            The title's link is stretched over the whole tile with an `::after`
+            overlay, so the card behaves like the single object it looks like
+            rather than a bar with a small text target in one corner. Everything
+            that must stay clickable through it is `relative` — the pill below
+            and the footer — which puts them above an overlay that has no z-index
+            of its own.
           */}
-          <p className="mt-1 text-sm tabular-nums text-muted-foreground">{cardCountLabel(set)}</p>
-        </div>
+          <Link to={`/sets/${set.id}`} className="rounded after:absolute after:inset-0">
+            {set.title}
+          </Link>
+        </h3>
 
-        <div className="flex shrink-0 items-center gap-2">
-          {isArchived && <Badge>Archived</Badge>}
-          {children !== null && <Badge tone="sand">{children}</Badge>}
-        </div>
+        {/*
+          The count *is* the button. A "Study 12" control under a "12 due" badge
+          is the same number printed twice and a second thing to aim at.
+
+          `accent` despite the badge note reserving it for one pill per group:
+          across a grid this is exactly what makes the pill worth having. Most
+          sets are caught up or empty and render none, so the clay pills are the
+          page's map of where the work is rather than a decoration every tile
+          gets. Archived sets show their state instead — the queue skips them, so
+          a study link would open on "nothing due".
+        */}
+        {isArchived ? (
+          <Badge className="relative shrink-0">Archived</Badge>
+        ) : studiable ? (
+          <Link
+            to={`/study?set=${set.id}`}
+            className={buttonClass({
+              variant: 'accent',
+              // `md`, not `sm`: this is the tile's primary control and `sm` is
+              // 36px tall, under the 44px touch minimum (saulado-ux §7).
+              className: 'relative shrink-0 px-4',
+            })}
+          >
+            {due > 0 ? 'Study' : 'Learn'}
+            <span className="tabular-nums">{due > 0 ? due : newCards}</span>
+          </Link>
+        ) : null}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {/*
-          Study leads, and only appears when there is something to study — a
-          "Study (0)" button teaches the user that the button lies. Archived sets
-          never get one: the queue skips them, so it would open on "nothing due".
-        */}
-        {studiable && (
-          <Link className={buttonClass({ size: 'sm' })} to={`/study?set=${set.id}`}>
-            Study{' '}
-            <span className="tabular-nums opacity-80">
-              {due > 0 ? due : `${String(newCards)} new`}
-            </span>
-          </Link>
-        )}
-        <Button variant="soft" size="sm" onClick={onEdit}>
+      {/*
+        Where the description used to be. The counts say something the user
+        cannot see from the title — including how many cards live in sub-sets,
+        which is what studying this set will actually sweep in. Joined on one
+        line rather than split across two badges, matching the child rows on the
+        set page.
+      */}
+      <p className="mb-4 mt-1 text-sm tabular-nums text-muted-foreground">
+        {cardCountLabel(set)}
+        {children !== null && ` · ${children}`}
+      </p>
+
+      {/*
+        Management, not study. Held below a hairline and in `ghost` so the tile
+        reads title → count → the one pill, instead of four controls of equal
+        weight. `h-11` restores the 44px touch target `sm` gives up (saulado-ux §7).
+      */}
+      <div className="relative -mx-5 mt-auto flex items-center gap-1 border-t border-border/60 px-2 pt-1">
+        <Button variant="ghost" size="sm" className="h-11 px-3" onClick={onEdit}>
           Edit
         </Button>
-        <Button variant="ghost" size="sm" onClick={onArchive}>
+        <Button variant="ghost" size="sm" className="h-11 px-3" onClick={onArchive}>
           {isArchived ? 'Restore' : 'Archive'}
         </Button>
-        <Button variant="ghost" size="sm" className="text-danger" onClick={onDelete}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto h-11 px-3 text-danger"
+          onClick={onDelete}
+        >
           Delete
         </Button>
       </div>
@@ -204,13 +246,16 @@ export function SetsPage(): ReactElement {
       </div>
 
       {sets.isPending ? (
-        // Shaped like the cards it stands in for, so nothing shifts when the real
-        // list arrives (saulado-ux §5).
-        <ul className="space-y-3" aria-busy="true">
+        // Shaped like the tiles it stands in for, down to the grid and the
+        // footer rule, so nothing shifts when the real list arrives (saulado-ux §5).
+        <ul className={GRID} aria-busy="true">
           {[0, 1, 2].map((key) => (
-            <Card as="li" key={key} className="p-5">
-              <Skeleton className="h-5 w-48" />
-              <Skeleton className="mt-2 h-4 w-72" />
+            <Card as="li" key={key} className="border-l-4 border-l-border p-5 pb-2">
+              <Skeleton className="h-6 w-40" />
+              <Skeleton className="mb-4 mt-2 h-4 w-28" />
+              <div className="border-t border-border/60 pt-4">
+                <Skeleton className="h-5 w-32" />
+              </div>
             </Card>
           ))}
         </ul>
@@ -250,7 +295,7 @@ export function SetsPage(): ReactElement {
         </Card>
       ) : (
         <>
-          <ul className="space-y-3">
+          <ul className={GRID}>
             {items.map((set) => (
               <SetCard
                 key={set.id}

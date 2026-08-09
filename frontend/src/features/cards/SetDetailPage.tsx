@@ -1,4 +1,4 @@
-import { useState, type ReactElement, type ReactNode } from 'react'
+import { lazy, Suspense, useState, type ReactElement, type ReactNode } from 'react'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { cardLabel, type StudyCardSummary, type StudySet } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ChevronRightIcon, PlusIcon } from '@/components/ui/icons'
+import { ChevronRightIcon, ImageIcon, PlusIcon } from '@/components/ui/icons'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { useDueCounts } from '@/features/study/queries'
 import { cn } from '@/lib/utils'
@@ -57,6 +57,30 @@ import {
  * arrived.
  */
 type Composing = { kind: 'new' } | { kind: 'edit'; cardId: string; inRow: boolean } | null
+
+/**
+ * Lazy, and this is the only import of `ImportDialog` anywhere.
+ *
+ * That dialog reaches `tesseract.js` and its several megabytes of WASM and
+ * English training data. Imported statically it would join this route's chunk
+ * and be fetched by every user who opens a set, including the ones who never
+ * import an image.
+ */
+const ImportDialog = lazy(async () => ({
+  default: (await import('./ImportDialog')).ImportDialog,
+}))
+
+/**
+ * Paragraphs waiting to become cards, and which one is on screen.
+ *
+ * Two fields of state on this page rather than a hook: there is one consumer,
+ * and a file wrapping two fields is a file to open before the feature can be
+ * read.
+ */
+interface Queue {
+  paragraphs: string[]
+  index: number
+}
 
 /** Decorative: the ordered list already conveys the nesting to a screen reader. */
 function Crumb(): ReactElement {
@@ -271,6 +295,8 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
   const [editingSet, setEditingSet] = useState(false)
   const [addingChild, setAddingChild] = useState(false)
   const [deleting, setDeleting] = useState<StudyCardSummary | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [queue, setQueue] = useState<Queue | null>(null)
 
   const set = useSet(setId)
   const children = useSets({ parent: setId })
@@ -303,12 +329,36 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
    */
   const closeComposer = (): void => {
     setComposing(null)
+    // An open import ends with the composer that was working through it, and
+    // "Stop importing" is the same button as Done.
+    setQueue(null)
 
     if (params.has(CARD_PARAM)) {
       const next = new URLSearchParams(params)
       next.delete(CARD_PARAM)
       setParams(next, { replace: true })
     }
+  }
+
+  /**
+   * Moves to the next imported paragraph, or ends the import on the last.
+   *
+   * Saved and skipped land here alike: either way this paragraph is done with.
+   * Falling back to the ordinary empty composer rather than collapsing, so the
+   * user who has just made three cards can write a fourth without hunting for
+   * the button again.
+   */
+  const advance = (): void => {
+    if (queue === null) return
+
+    const next = queue.index + 1
+    if (next < queue.paragraphs.length) {
+      setQueue({ ...queue, index: next })
+      return
+    }
+
+    setQueue(null)
+    setComposing({ kind: 'new' })
   }
 
   if (set.isError) {
@@ -369,19 +419,36 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
         behind a scroll — and collapsed because an editor permanently open on a
         set the user came to read is a large empty box demanding attention.
       */}
-      {composing?.kind === 'new' ? (
+      {queue ? (
+        /*
+          Keyed by the queue position, so advancing remounts the draft. Without
+          the key, `useCardDraft`'s initializers would not run again and card N's
+          highlights would sit on top of card N+1's paragraph.
+        */
+        <CardComposer
+          key={`import:${String(queue.index)}`}
+          setId={setId}
+          onClose={closeComposer}
+          importQueue={{
+            paragraph: queue.paragraphs[queue.index] ?? '',
+            index: queue.index,
+            total: queue.paragraphs.length,
+            onAdvance: advance,
+          }}
+        />
+      ) : composing?.kind === 'new' ? (
         <CardComposer setId={setId} onClose={closeComposer} />
       ) : composing?.kind === 'edit' && !composing.inRow ? (
         <CardComposer setId={setId} cardId={composing.cardId} onClose={closeComposer} />
       ) : (
-        <Card tone="dashed" className="p-1.5">
+        <Card tone="dashed" className="flex flex-wrap items-center gap-1.5 p-1.5">
           <button
             type="button"
             onClick={() => {
               setComposing({ kind: 'new' })
             }}
             className={cn(
-              'flex min-h-[52px] w-full items-center gap-2 rounded-md px-3.5 text-left',
+              'flex min-h-[52px] flex-1 items-center gap-2 rounded-md px-3.5 text-left',
               'text-muted-foreground transition-colors duration-150',
               'hover:bg-surface-muted hover:text-foreground',
             )}
@@ -389,7 +456,48 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
             <PlusIcon />
             Write a card in this set
           </button>
+          {/*
+            Beside the writing affordance rather than in the header: it is the
+            same action — get a paragraph into a card — reached a different way,
+            and a user looking for one will look here for the other.
+          */}
+          <button
+            type="button"
+            onClick={() => {
+              setImporting(true)
+            }}
+            className={cn(
+              'flex min-h-[52px] items-center gap-2 rounded-md px-3.5 text-left',
+              'text-muted-foreground transition-colors duration-150',
+              'hover:bg-surface-muted hover:text-foreground',
+            )}
+          >
+            <ImageIcon />
+            Import from an image
+          </button>
         </Card>
+      )}
+
+      {/*
+        Mounted only while open, so the chunk is fetched on the click rather than
+        with the route. No fallback: the dialog's own idle state is the first
+        thing the user sees, and a skeleton behind a modal that has not painted
+        yet would be a flash of layout nobody can read.
+      */}
+      {importing && (
+        <Suspense fallback={null}>
+          <ImportDialog
+            open
+            onClose={() => {
+              setImporting(false)
+            }}
+            onImport={(paragraphs) => {
+              setImporting(false)
+              setComposing(null)
+              setQueue({ paragraphs, index: 0 })
+            }}
+          />
+        </Suspense>
       )}
 
       {/*
@@ -557,7 +665,8 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
               Clear filter
             </Button>
           ) : (
-            composing === null && (
+            composing === null &&
+            queue === null && (
               <Button
                 className="mt-5"
                 onClick={() => {
@@ -583,6 +692,12 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
                   ) : undefined
                 }
                 onEdit={() => {
+                  // Ends a running import. Only one composer may be mounted at
+                  // a time — see this file's header — and editing an existing
+                  // card is a deliberate move away from the queue. The paragraphs
+                  // left in it are re-readable from the image; a second textarea
+                  // sharing `card-paragraph` is not recoverable at all.
+                  setQueue(null)
                   setComposing({ kind: 'edit', cardId: card.id, inRow: true })
                 }}
                 onDelete={() => {

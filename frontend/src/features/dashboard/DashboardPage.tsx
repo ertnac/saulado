@@ -168,6 +168,37 @@ function GettingStarted({ onCreate }: { onCreate: () => void }): ReactElement {
   )
 }
 
+/**
+ * Sets exist, but nothing in them can be studied yet.
+ *
+ * Split out from `GettingStarted` because that one says "create your first set",
+ * which is plainly false for a user whose own set list renders directly below
+ * it. Two routes land here — a set with no cards, and a card whose words have
+ * not been highlighted — and both end in the same place, so this points into the
+ * set rather than guessing which of the two the user is in.
+ *
+ * The highlighting half is the one worth naming: a card saves without blanks, is
+ * listed on its set page, and is still not a question. Nothing else on the
+ * dashboard would ever say so.
+ */
+function NothingReady({ set }: { set: RecentSet }): ReactElement {
+  return (
+    <Card tone="dashed" className="p-5 sm:p-6">
+      <p className="text-sm text-muted-foreground">
+        A card becomes a question when you highlight the words worth recalling. Until then it is
+        just a paragraph, and there is nothing to ask you.
+      </p>
+      <Link
+        className={buttonClass({ size: 'lg', className: 'mt-5 max-w-full' })}
+        to={`/sets/${set.id}`}
+      >
+        <span className="min-w-0 truncate">Open {set.title}</span>
+        <ChevronRightIcon />
+      </Link>
+    </Card>
+  )
+}
+
 // ── Secondary: only ever rendered for a user who has studied ────────────────
 
 function RecentSetRow({ set }: { set: RecentSet }): ReactElement {
@@ -296,6 +327,12 @@ export function DashboardPage(): ReactElement {
     if (data.totalDue > 0) return <DuePanel due={data.totalDue} />
     if (data.newCards > 0) return <ReadyToLearn newCards={data.newCards} />
     if (data.hasStudied) return <CaughtUp />
+
+    // Sets exist, but nothing in them is studiable yet. Checked before the
+    // never-started state so the dashboard never tells a user to create their
+    // first set while that set is listed further down the same page.
+    const [firstSet] = data.recentSets
+    if (firstSet) return <NothingReady set={firstSet} />
 
     return (
       <GettingStarted

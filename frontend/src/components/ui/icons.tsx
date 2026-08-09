@@ -175,6 +175,16 @@ export function LogoutIcon(props: IconProps): ReactElement {
   )
 }
 
+export function ImageIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.5" />
+      <path d="m3 17 5-4.5 4 3.5 3-2.5 6 5" />
+    </Icon>
+  )
+}
+
 export function SparkIcon(props: IconProps): ReactElement {
   return (
     <Icon {...props}>

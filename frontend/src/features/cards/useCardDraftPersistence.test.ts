@@ -131,23 +131,12 @@ describe('useCardDraftPersistence', () => {
     // An empty write would mask a real draft saved earlier in this scope.
     vi.useFakeTimers()
     renderHook(() => {
-      useCardDraftPersistence(SCOPE, snapshot({ paragraph: '   ', title: '', answers: [] }))
+      useCardDraftPersistence(SCOPE, snapshot({ paragraph: '   ', answers: [] }))
     })
 
     vi.advanceTimersByTime(500)
 
     expect(localStorage.getItem(KEY)).toBeNull()
-  })
-
-  it('saves a title typed before any paragraph', () => {
-    vi.useFakeTimers()
-    renderHook(() => {
-      useCardDraftPersistence(SCOPE, snapshot({ paragraph: '', title: 'Hardware' }))
-    })
-
-    vi.advanceTimersByTime(500)
-
-    expect(readDraft(SCOPE)?.title).toBe('Hardware')
   })
 
   it('does not resurrect a draft the caller just cleared', () => {

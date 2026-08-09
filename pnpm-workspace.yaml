@@ -5,9 +5,13 @@ packages:
 
 # pnpm 11 moved this out of package.json. These packages need postinstall
 # scripts: Prisma downloads its query engine, esbuild its platform binary.
+# tesseract.js is denied: its only script is `opencollective-postinstall`, a
+# donation banner. The WASM and the English training data are fetched from a CDN
+# at runtime, so nothing about OCR depends on install-time scripts.
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
   bcrypt: true
   esbuild: true
   prisma: true
+  tesseract.js: false

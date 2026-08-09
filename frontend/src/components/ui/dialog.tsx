@@ -26,6 +26,20 @@ interface DialogProps {
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
+/**
+ * The focusable controls inside the panel, in Tab order.
+ *
+ * `hidden` ones are dropped: the selector matches them, but the browser will
+ * not focus them, so leaving one at either end of this list makes Tab wrap onto
+ * nothing and strand the user. A hidden `<input type="file">` behind a real
+ * button is the common case.
+ */
+function focusable(panel: HTMLElement | null): HTMLElement[] {
+  return Array.from(panel?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter(
+    (node) => !node.hidden,
+  )
+}
+
 export function Dialog({
   open,
   onClose,
@@ -45,7 +59,7 @@ export function Dialog({
     restoreRef.current = document.activeElement as HTMLElement | null
 
     const panel = panelRef.current
-    const first = panel?.querySelector<HTMLElement>(FOCUSABLE)
+    const first = focusable(panel)[0]
     // The panel itself is the fallback: a dialog whose body is all text still has
     // to receive focus, or the screen reader keeps reading the page behind it.
     ;(first ?? panel)?.focus()
@@ -67,7 +81,7 @@ export function Dialog({
 
       if (event.key !== 'Tab') return
 
-      const nodes = Array.from(panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])
+      const nodes = focusable(panelRef.current)
       if (nodes.length === 0) return
 
       const first = nodes[0]

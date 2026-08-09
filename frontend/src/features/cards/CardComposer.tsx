@@ -52,25 +52,49 @@ function toAnswerInputs(answers: readonly DraftAnswer[]): AnswerInput[] {
  */
 const PARAGRAPH_FIELD_ID = 'card-paragraph'
 
+/**
+ * One paragraph of an image import, and the way to move past it.
+ *
+ * `index` is 0-based and drives the "Card 2 of 3" counter. `onAdvance` is called
+ * for both outcomes — saved and skipped — because from the queue's side they are
+ * the same event: this paragraph is done with.
+ */
+export interface ImportQueue {
+  paragraph: string
+  index: number
+  total: number
+  onAdvance: () => void
+}
+
 interface ComposerProps {
   setId: string
   /** Absent means create. */
   card?: StudyCard
   /** Collapse the composer: Cancel, or a successful save when editing. */
   onClose: () => void
+  /** Seeds a new-card composer from an import. */
+  importQueue?: ImportQueue
 }
 
-function Composer({ setId, card, onClose }: ComposerProps): ReactElement {
+function Composer({ setId, card, onClose, importQueue }: ComposerProps): ReactElement {
   const editing = card !== undefined
+  const importing = importQueue !== undefined
   // Scoped per card, and per set for new ones: two half-written cards in
   // different sets are two drafts, and one key would have them overwrite each
   // other. Restoring only applies to create — reopening a saved card should show
   // what is stored, not a week-old draft of it.
   const scope = editing ? `card:${card.id}` : `set:${setId}:new`
-  const restored = useState(() => (editing ? null : readDraft(scope)))[0]
+  // An import does not restore either: the stored answers are offsets into the
+  // paragraph they were highlighted in, and pairing them with an imported one
+  // would put every blank over the wrong words.
+  const restored = useState(() => (editing || importing ? null : readDraft(scope)))[0]
 
+  // Seeded through the initializer rather than a `reset` in an effect. A reset
+  // landing after mount races the user — see the header of this file — and the
+  // imported paragraph is known before the first render, so there is nothing to
+  // wait for.
   const draft = useCardDraft({
-    paragraph: restored?.paragraph ?? card?.paragraph,
+    paragraph: importQueue?.paragraph ?? restored?.paragraph ?? card?.paragraph,
     answers: restored?.answers ?? card?.answers,
   })
   const [tags, setTags] = useState<string[]>(restored?.tags ?? card?.tags ?? [])
@@ -95,11 +119,16 @@ function Composer({ setId, card, onClose }: ComposerProps): ReactElement {
    * before Save would otherwise fire once the composer has already cleared and
    * reset — restoring the paragraph of a card that now exists. Flipping
    * `enabled` cancels the pending timer through the effect's own cleanup.
+   *
+   * Off entirely while importing. Every new card in a set shares the scope key
+   * `set:${setId}:new`, so a queue of N paragraphs would write all of them to
+   * one entry, each overwriting the last — and the survivor would then be
+   * restored into the user's own next card as if they had written it.
    */
   useCardDraftPersistence(
     scope,
     { paragraph: draft.paragraph, answers: draft.answers, tags },
-    !editing && !pending,
+    !editing && !importing && !pending,
   )
 
   /**
@@ -129,6 +158,17 @@ function Composer({ setId, card, onClose }: ComposerProps): ReactElement {
       }
 
       await create.mutateAsync(body)
+
+      if (importQueue) {
+        // No `clearDraft` and no `reset`: persistence is off while importing, so
+        // this scope still holds whatever the user was writing before the import
+        // started and is not this composer's to delete — and the parent remounts
+        // on the next index, which clears the paragraph, the answers and the
+        // tags in one go.
+        importQueue.onAdvance()
+        return
+      }
+
       clearDraft(scope)
       // Emptied rather than collapsed. Tags are cleared with it: they described
       // the card that was just saved, and carrying them silently onto the next
@@ -142,7 +182,37 @@ function Composer({ setId, card, onClose }: ComposerProps): ReactElement {
   }
 
   return (
-    <Card as="section" aria-label={editing ? 'Edit card' : 'New card'} className="space-y-5 p-5">
+    <Card
+      as="section"
+      aria-label={importing ? 'New card from image' : editing ? 'Edit card' : 'New card'}
+      className="space-y-5 p-5"
+    >
+      {/*
+        The queue's position. The composer remounts on every advance, and this
+        line mounts with it — a polite live region, because a user who just
+        saved has had the focus moved into the next card's paragraph.
+      */}
+      {importQueue && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-medium text-muted-foreground" aria-live="polite">
+            Card {String(importQueue.index + 1)} of {String(importQueue.total)}
+          </p>
+          {/*
+            Not optional. OCR will hand over a paragraph nobody wants, and
+            without a way past it the only exit is abandoning the whole import.
+          */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={importQueue.onAdvance}
+            disabled={pending}
+          >
+            Skip this one
+          </Button>
+        </div>
+      )}
+
       <form
         className="space-y-5"
         onSubmit={(event) => {
@@ -181,7 +251,7 @@ function Composer({ setId, card, onClose }: ComposerProps): ReactElement {
             {pending ? 'Saving…' : editing ? 'Save card' : 'Add card'}
           </Button>
           <Button type="button" variant="ghost" onClick={onClose} disabled={pending}>
-            {editing ? 'Cancel' : 'Done'}
+            {importing ? 'Stop importing' : editing ? 'Cancel' : 'Done'}
           </Button>
           {draft.answers.length === 0 && (
             <p className="text-sm text-muted-foreground">
@@ -210,6 +280,15 @@ interface CardComposerProps {
   cardId?: string
   /** Collapse the composer. */
   onClose: () => void
+  /**
+   * Seeds a new-card composer from an import.
+   *
+   * Ignored when `cardId` is set — an import writes new cards, and seeding an
+   * edit from one would replace a stored paragraph its offsets do not belong to.
+   * The caller must key this component by {@link ImportQueue.index} so advancing
+   * remounts the draft rather than leaving card N's highlights on card N+1.
+   */
+  importQueue?: ImportQueue
 }
 
 /**
@@ -226,10 +305,16 @@ interface CardComposerProps {
  * the row would render a paragraph with every highlight missing — and saving it
  * would then persist that as the truth.
  */
-export function CardComposer({ setId, cardId, onClose }: CardComposerProps): ReactElement {
+export function CardComposer({
+  setId,
+  cardId,
+  onClose,
+  importQueue,
+}: CardComposerProps): ReactElement {
   const card = useCard(cardId)
 
-  if (cardId === undefined) return <Composer setId={setId} onClose={onClose} />
+  if (cardId === undefined)
+    return <Composer setId={setId} onClose={onClose} importQueue={importQueue} />
 
   if (card.isError) {
     return (

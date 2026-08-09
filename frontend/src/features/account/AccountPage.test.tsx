@@ -149,7 +149,7 @@ describe('changing the password', () => {
 
 describe('exporting data', () => {
   const EXPORT: DataExport = {
-    formatVersion: 1,
+    formatVersion: 2,
     exportedAt: '2026-08-08T09:30:00.000Z',
     account: USER,
     settings: {
