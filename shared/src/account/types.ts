@@ -30,6 +30,8 @@ export interface UpdateSettingsRequest {
   blankWidthMode?: BlankWidthMode
   /** IANA zone name. Rejected if the runtime does not recognise it. */
   timezone?: string
+  nickname?: string
+  profileImage?: string | null
 }
 
 export interface SettingsResponse {

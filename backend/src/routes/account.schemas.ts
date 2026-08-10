@@ -40,6 +40,8 @@ export const updateSettingsSchema = z
      * restore or a seed script.
      */
     timezone: z.string().refine(isValidTimeZone, 'Not a timezone this server knows.').optional(),
+    nickname: z.string().max(30).optional(),
+    profileImage: z.string().nullable().optional(),
   })
   .refine((body) => Object.keys(body).length > 0, {
     message: 'Send at least one setting to update.',

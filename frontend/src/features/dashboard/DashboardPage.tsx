@@ -13,6 +13,7 @@ import { Sparkline } from '@/components/charts/Sparkline'
 import { SetDialog } from '@/features/cards/SetDialog'
 import { useCreateSet } from '@/features/cards/queries'
 import { useAuthStore } from '@/stores/auth'
+import { useSettings } from '@/features/account/queries'
 import { useDashboard } from './queries'
 import { StreakCard } from './StreakCard'
 
@@ -305,10 +306,18 @@ function TodaySection({ data }: { data: DashboardResponse }): ReactElement {
 
 export function DashboardPage(): ReactElement {
   const user = useAuthStore((s) => s.user)
+
+  // Fetch settings to update the auth store on mount
+  useSettings()
+
+  const settings = useAuthStore((s) => s.settings)
   const dashboard = useDashboard()
   const createSet = useCreateSet()
   const navigate = useNavigate()
   const [creating, setCreating] = useState(false)
+
+  const nickname = settings?.nickname ?? ''
+  const profileImage = settings?.profileImage ?? null
 
   const data = dashboard.data
 
@@ -355,13 +364,28 @@ export function DashboardPage(): ReactElement {
         Hidden below `sm`. At 320px it would take a third of the width from the
         greeting it is decorating, and it carries no information to lose.
       */}
-      <div className="flex items-center gap-4">
-        <MascotSprite className="hidden text-[1rem] sm:block" />
-        <PageHeader
-          title={user ? `Welcome, ${user.email.split('@')[0] ?? 'there'}` : 'Welcome'}
-          description="Build a set, highlight what matters, and study it in context."
-          className="mb-0 min-w-0 flex-1"
-        />
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0 flex-1">
+          <MascotSprite className="hidden text-[1rem] sm:block" />
+          <PageHeader
+            title={
+              nickname
+                ? `Welcome, ${nickname}`
+                : user
+                  ? `Welcome, ${user.email.split('@')[0] ?? 'there'}`
+                  : 'Welcome'
+            }
+            description="Build a set, highlight what matters, and study it in context."
+            className="mb-0 min-w-0 flex-1"
+          />
+        </div>
+        {profileImage && (
+          <img
+            src={profileImage}
+            alt=""
+            className="h-14 w-14 rounded-full object-cover border border-border shrink-0 shadow-sm"
+          />
+        )}
       </div>
 
       <section aria-labelledby="study-heading" className="space-y-4">

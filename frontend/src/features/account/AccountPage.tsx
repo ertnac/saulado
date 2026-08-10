@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactElement } from 'react'
+import { useEffect, useState, type FormEvent, type ReactElement } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ACCOUNT_DELETE_CONFIRMATION, PASSWORD_MIN_LENGTH, checkPassword } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,14 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { useFormErrors } from '@/hooks/useFormErrors'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/stores/toast'
-import { useChangeEmail, useChangePassword, useDeleteAccount, useExportData } from './queries'
+import {
+  useChangeEmail,
+  useChangePassword,
+  useDeleteAccount,
+  useExportData,
+  useSettings,
+  useUpdateSettings,
+} from './queries'
 import { Section } from './SettingsControls'
 
 /**
@@ -39,11 +46,135 @@ export function AccountPage(): ReactElement {
         className="mb-0"
       />
 
+      <ProfileSection />
       <ChangeEmailSection currentEmail={email} />
       <ChangePasswordSection />
       <ExportSection />
       <DeleteSection />
     </div>
+  )
+}
+
+function ProfileSection(): ReactElement {
+  const settingsQuery = useSettings()
+  const updateSettings = useUpdateSettings()
+
+  const settings = settingsQuery.data?.settings
+  const storedNickname = settings?.nickname ?? ''
+  const storedProfileImage = settings?.profileImage ?? null
+
+  const [nickname, setLocalNickname] = useState(storedNickname)
+  const [profileImage, setLocalProfileImage] = useState<string | null>(storedProfileImage)
+
+  // Sync state when data is loaded from query
+  useEffect(() => {
+    if (settings) {
+      setLocalNickname(settings.nickname)
+      setLocalProfileImage(settings.profileImage)
+    }
+  }, [settings])
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const base64String = reader.result as string
+      setLocalProfileImage(base64String)
+      updateSettings.mutate({ profileImage: base64String })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault()
+    updateSettings.mutate(
+      { nickname: nickname.trim() },
+      {
+        onSuccess: () => {
+          toast.success('Nickname updated.')
+        },
+      },
+    )
+  }
+
+  const handleRemovePhoto = () => {
+    setLocalProfileImage(null)
+    updateSettings.mutate({ profileImage: null })
+  }
+
+  if (settingsQuery.isPending) {
+    return (
+      <Section title="Profile">
+        <p className="text-sm text-muted-foreground">Loading profile...</p>
+      </Section>
+    )
+  }
+
+  return (
+    <Section title="Profile">
+      <div className="flex flex-col items-center gap-4 py-2 sm:flex-row sm:items-start">
+        <div className="relative">
+          {profileImage ? (
+            <img
+              src={profileImage}
+              alt="Profile"
+              className="h-20 w-20 rounded-full object-cover border border-border"
+            />
+          ) : (
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 border border-primary/20 text-primary text-xl font-semibold">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="36"
+                height="36"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2 justify-center pt-2">
+          <label className="inline-flex cursor-pointer items-center justify-center rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium hover:bg-surface-muted transition-colors">
+            Change photo
+            <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+          </label>
+          {profileImage && (
+            <Button variant="ghost" onClick={handleRemovePhoto}>
+              Remove
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <form onSubmit={handleSave} className="space-y-4 mt-4">
+        <FormField
+          label="Nickname"
+          type="text"
+          value={nickname}
+          onChange={(e) => {
+            setLocalNickname(e.target.value)
+          }}
+          hint="Your nickname is displayed on the dashboard welcome banner."
+          maxLength={30}
+        />
+
+        <Button
+          type="submit"
+          disabled={nickname.trim() === storedNickname || updateSettings.isPending}
+        >
+          Save Profile
+        </Button>
+      </form>
+    </Section>
   )
 }
 

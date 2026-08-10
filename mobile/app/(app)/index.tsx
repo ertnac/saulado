@@ -1,14 +1,16 @@
 import type { ReactElement } from 'react'
-import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
+import { Image, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import type { DashboardResponse, RecentSet } from '@saulado/shared'
+import sauladoLogo from '../../assets/saulado.png'
 import { Button, TextLink } from '../../components/button'
 import { Card, CardFigure, CardLabel } from '../../components/card'
-import { ChevronRightIcon } from '../../components/icons'
+import { ChevronRightIcon, UserIcon } from '../../components/icons'
 import { GoalRing } from '../../components/goal-ring'
 import { Sparkline } from '../../components/sparkline'
 import { StreakCard } from '../../components/streak-card'
 import { useDashboard } from '../../hooks/progress'
+import { useSettings } from '../../hooks/settings'
 import { useAuthStore } from '../../stores/auth'
 import { useTokenColor } from '../../stores/theme'
 
@@ -184,6 +186,9 @@ function TodaySection({
   data: DashboardResponse
   onProgress: () => void
 }): ReactElement {
+  const { reviews, goal, goalMet } = data.today
+  const left = Math.max(0, goal - reviews)
+
   return (
     <View className="gap-4">
       <View className="flex-row items-center justify-between gap-4">
@@ -195,14 +200,31 @@ function TodaySection({
 
       <StreakCard streak={data.streak} />
 
+      {/*
+        Today and the week in one card, and the ring beside its own numbers rather
+        than under a label. Stacked, each was a `p-5` box holding one 72pt graphic
+        and a two-word caption — the ring floated in a card that was mostly empty,
+        which reads as a component that failed to load rather than as a small
+        number. The divider keeps the two readings apart without a second border.
+      */}
       <Card>
-        <CardLabel>Today</CardLabel>
-        <View className="mt-3">
-          <GoalRing value={data.today.reviews} goal={data.today.goal} met={data.today.goalMet} />
+        <View className="flex-row items-center gap-4">
+          <GoalRing value={reviews} goal={goal} met={goalMet} />
+          <View className="min-w-0 flex-1">
+            <CardLabel>Today</CardLabel>
+            <Text className="mt-0.5 text-base font-medium text-foreground">
+              {reviews === 1 ? '1 review' : `${String(reviews)} reviews`}
+            </Text>
+            <Text className="mt-0.5 text-sm text-muted-foreground">
+              {goalMet
+                ? 'Daily goal met.'
+                : `${String(left)} more to reach your goal of ${String(goal)}.`}
+            </Text>
+          </View>
         </View>
-      </Card>
 
-      <Card>
+        <View className="my-5 h-px bg-border" />
+
         <CardLabel>Last 7 days</CardLabel>
         <View className="mt-3">
           <Sparkline days={data.sparkline} label="Reviews in the last 7 days" />
@@ -280,6 +302,13 @@ export default function DashboardScreen(): ReactElement {
   const dashboard = useDashboard()
   const primary = useTokenColor('--primary')
 
+  // Fetch settings to update the auth store on mount/focus
+  useSettings()
+
+  const settings = useAuthStore((s) => s.settings)
+  const nickname = settings?.nickname ?? ''
+  const profileImage = settings?.profileImage ?? null
+
   const data = dashboard.data
 
   function heading(): string {
@@ -334,7 +363,7 @@ export default function DashboardScreen(): ReactElement {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-8 p-5 pb-10"
+      contentContainerClassName="gap-8 p-5 pb-32"
       refreshControl={
         <RefreshControl
           refreshing={dashboard.isRefetching}
@@ -345,13 +374,35 @@ export default function DashboardScreen(): ReactElement {
         />
       }
     >
-      <View className="gap-1">
-        <Text className="text-2xl font-semibold tracking-tight text-foreground">
-          {user ? `Welcome, ${user.email.split('@')[0] ?? 'there'}` : 'Welcome'}
-        </Text>
-        <Text className="text-sm text-muted-foreground">
-          Build a set, highlight what matters, and study it in context.
-        </Text>
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1 pr-4">
+          <View className="flex-row items-center gap-2">
+            <Image source={sauladoLogo} style={{ width: 28, height: 28 }} resizeMode="contain" />
+            <Text className="text-lg font-bold text-foreground tracking-tight">Saulado</Text>
+          </View>
+          <Text className="text-2xl font-bold tracking-tight text-foreground mt-2">
+            {nickname
+              ? `Welcome, ${nickname}`
+              : user
+                ? `Welcome, ${user.email.split('@')[0] ?? 'there'}`
+                : 'Welcome'}
+          </Text>
+          <Text className="text-sm text-muted-foreground mt-1">
+            Build a set, highlight what matters, and study it in context.
+          </Text>
+        </View>
+
+        {profileImage ? (
+          <Image
+            source={{ uri: profileImage }}
+            style={{ width: 56, height: 56, borderRadius: 28 }}
+            className="border border-border"
+          />
+        ) : (
+          <View className="w-14 h-14 rounded-full bg-primary/10 items-center justify-center border border-primary/20">
+            <UserIcon color={primary} size={28} />
+          </View>
+        )}
       </View>
 
       <View className="gap-4">

@@ -62,6 +62,8 @@ model UserSettings {
   /// IANA zone. Streak day boundaries are computed in the user's own timezone
   /// (plan §2.3), so this is load-bearing, not cosmetic.
   timezone             String  @default("UTC")
+  nickname             String  @default("")
+  profileImage         String? @map("profile_image")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

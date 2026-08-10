@@ -1,23 +1,28 @@
-import { useState, type ReactElement } from 'react'
-import { Alert, ScrollView, Share, Text, View } from 'react-native'
+import { useEffect, useState, type ReactElement } from 'react'
+import { Alert, Image, ScrollView, Share, Text, View } from 'react-native'
 import {
   ACCOUNT_DELETE_CONFIRMATION,
   PASSWORD_MIN_LENGTH,
   checkPassword,
   type DataExport,
 } from '@saulado/shared'
+import * as ImagePicker from 'expo-image-picker'
 import { Button } from '../../components/button'
 import { Card } from '../../components/card'
 import { Field, FormAlert, FormStack } from '../../components/form'
 import { Section } from '../../components/settings-controls'
+import { UserIcon } from '../../components/icons'
 import {
   useChangeEmail,
   useChangePassword,
   useDeleteAccount,
   useExportData,
+  useSettings,
+  useUpdateSettings,
 } from '../../hooks/settings'
 import { useFormErrors } from '../../hooks/useFormErrors'
 import { useAuthStore } from '../../stores/auth'
+import { useTokenColor } from '../../stores/theme'
 
 /**
  * Account and data — a port of `frontend/src/features/account/AccountPage.tsx`.
@@ -36,21 +41,139 @@ import { useAuthStore } from '../../stores/auth'
  * second navigation for the same event.
  */
 export default function AccountScreen(): ReactElement {
-  const email = useAuthStore((s) => s.user?.email ?? '')
+  const user = useAuthStore((s) => s.user)
+  const email = user?.email ?? ''
 
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-5 p-5 pb-10"
+      contentContainerClassName="gap-5 p-5 pb-32"
       keyboardShouldPersistTaps="handled"
     >
       <Text className="text-sm text-muted-foreground">{`Signed in as ${email}.`}</Text>
 
+      <ProfileSection />
       <ChangeEmailSection currentEmail={email} />
       <ChangePasswordSection />
       <ExportSection />
       <DeleteSection />
     </ScrollView>
+  )
+}
+
+function ProfileSection(): ReactElement {
+  const settingsQuery = useSettings()
+  const updateSettings = useUpdateSettings()
+
+  const settings = settingsQuery.data?.settings
+  const storedNickname = settings?.nickname ?? ''
+  const storedProfileImage = settings?.profileImage ?? null
+
+  const [nickname, setLocalNickname] = useState(storedNickname)
+  const [profileImage, setLocalProfileImage] = useState<string | null>(storedProfileImage)
+  const primary = useTokenColor('--primary')
+
+  // Keep local state in sync when store loads
+  useEffect(() => {
+    if (settings) {
+      setLocalNickname(settings.nickname)
+      setLocalProfileImage(settings.profileImage)
+    }
+  }, [settings])
+
+  const selectPhoto = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!permissionResult.granted) {
+      Alert.alert(
+        'Permission denied',
+        'We need photo library permissions to change your profile picture.',
+      )
+      return
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    })
+
+    if (!result.canceled && result.assets && result.assets.length > 0 && result.assets[0]) {
+      const selectedUri = result.assets[0].uri
+      setLocalProfileImage(selectedUri)
+      updateSettings.mutate({ profileImage: selectedUri })
+    }
+  }
+
+  const removePhoto = () => {
+    setLocalProfileImage(null)
+    updateSettings.mutate({ profileImage: null })
+  }
+
+  const handleSave = () => {
+    updateSettings.mutate(
+      { nickname: nickname.trim() },
+      {
+        onSuccess: () => {
+          Alert.alert('Saved', 'Profile details updated successfully.')
+        },
+      },
+    )
+  }
+
+  if (settingsQuery.isPending) {
+    return (
+      <Section title="Profile">
+        <Text className="text-sm text-muted-foreground">Loading profile...</Text>
+      </Section>
+    )
+  }
+
+  return (
+    <Section title="Profile">
+      <View className="items-center gap-4 py-2">
+        {profileImage ? (
+          <Image
+            source={{ uri: profileImage }}
+            style={{ width: 80, height: 80, borderRadius: 40 }}
+            className="border border-border"
+          />
+        ) : (
+          <View className="w-20 h-20 rounded-full bg-primary/10 items-center justify-center border border-primary/20">
+            <UserIcon color={primary} size={36} />
+          </View>
+        )}
+
+        <View className="flex-row gap-2">
+          <Button
+            label="Change photo"
+            variant="outline"
+            onPress={() => {
+              void selectPhoto()
+            }}
+          />
+          {profileImage && <Button label="Remove" variant="ghost" onPress={removePhoto} />}
+        </View>
+      </View>
+
+      <View className="mt-2">
+        <FormStack>
+          <Field
+            label="Nickname"
+            value={nickname}
+            onChangeText={setLocalNickname}
+            hint="Your nickname is displayed on the dashboard welcome banner."
+            autoCorrect={false}
+            maxLength={30}
+          />
+          <Button
+            label="Save Profile"
+            onPress={handleSave}
+            disabled={nickname.trim() === storedNickname || updateSettings.isPending}
+          />
+        </FormStack>
+      </View>
+    </Section>
   )
 }
 

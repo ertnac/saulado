@@ -20,6 +20,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   typoTolerance: true,
   blankWidthMode: 'fixed',
   timezone: 'UTC',
+  nickname: '',
+  profileImage: null,
 }
 
 export async function loadSettings(userId: string): Promise<UserSettings> {
@@ -40,6 +42,8 @@ export async function loadSettings(userId: string): Promise<UserSettings> {
      * for that user with a 500 they cannot fix from the UI.
      */
     timezone: isValidTimeZone(row.timezone) ? row.timezone : 'UTC',
+    nickname: row.nickname,
+    profileImage: row.profileImage,
   }
 }
 

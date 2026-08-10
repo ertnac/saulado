@@ -2,14 +2,8 @@ import { Redirect, useRouter, useUnstableGlobalHref } from 'expo-router'
 import { Tabs } from 'expo-router/js-tabs'
 import type { ReactElement } from 'react'
 import { ActivityIndicator, Pressable, View } from 'react-native'
-import {
-  ChartIcon,
-  HomeIcon,
-  LayersIcon,
-  SearchIcon,
-  SettingsIcon,
-  type IconProps,
-} from '../../components/icons'
+import { ChevronLeftIcon, SettingsIcon } from '../../components/icons'
+import { TabBar } from '../../components/tab-bar'
 import { ThemeToggle } from '../../components/theme-toggle'
 import { useAuthStore } from '../../stores/auth'
 import { useTokenColor } from '../../stores/theme'
@@ -20,41 +14,34 @@ import { useTokenColor } from '../../stores/theme'
  *
  * `Tabs` comes from `expo-router/js-tabs`: the same component re-exported from the
  * package root is deprecated in SDK 57.
+ *
+ * The bar itself is `components/tab-bar.tsx` rather than React Navigation's, so
+ * the scan action can sit apart at the left edge; the order and the icons live
+ * there. What stays here is only what the navigator owns — the header, and which
+ * routes exist.
  */
 
 /**
- * Mirrors `AppShell`'s `NAV`. Order is the tab order.
+ * Every screen in the group, and the title its header shows.
  *
  * `name` is the route file relative to this layout, not the URL — `sets/index`
  * rather than `/sets`, because there is no `sets/_layout.tsx` and so both files
  * under `sets/` are screens of *this* navigator.
- */
-const NAV: { name: string; title: string; icon: (p: IconProps) => ReactElement }[] = [
-  { name: 'index', title: 'Dashboard', icon: HomeIcon },
-  { name: 'sets/index', title: 'Sets', icon: LayersIcon },
-  /*
-    A tab, not a header button. The web reaches search through `Ctrl+K`, which has
-    no touch equivalent — plan §5 drops the palette and says a search tab covers
-    the same need.
-  */
-  { name: 'search', title: 'Search', icon: SearchIcon },
-  { name: 'progress', title: 'Progress', icon: ChartIcon },
-]
-
-/**
- * Reachable, but not from the tab bar.
  *
- * `href: null` hides the item and swallows the press rather than removing the
- * route, so `router.push('/settings')` and a deep link both still work. Without
- * an entry here every screen in the group gets a tab, and the bar becomes eight
- * items wide.
- *
- * They still carry a `title`, because the header reads it: left unset it falls
- * back to the route name and the set detail screen is captioned `sets/[setId]`.
+ * No `href: null` on any of them any more. That option existed to hide the six
+ * screens the tab bar should not list, and a custom `tabBar` decides that by
+ * itself — what is left for the navigator is the `title` its header reads, which
+ * left unset falls back to the route name and captions the set screen
+ * `sets/[setId]`.
  */
-const HIDDEN: { name: string; title: string }[] = [
+const SCREENS: { name: string; title: string }[] = [
+  { name: 'index', title: 'Dashboard' },
+  { name: 'sets/index', title: 'Sets' },
+  { name: 'progress', title: 'Progress' },
+  { name: 'scan', title: 'Scan a page' },
   { name: 'sets/[setId]', title: 'Set' },
   { name: 'study', title: 'Study' },
+  { name: 'scan-review', title: 'Review the scan' },
   { name: 'settings', title: 'Settings' },
   { name: 'account', title: 'Account' },
 ]
@@ -88,12 +75,11 @@ function SettingsButton(): ReactElement {
 export default function AppLayout(): ReactElement {
   const status = useAuthStore((s) => s.status)
   const href = useUnstableGlobalHref()
+  const router = useRouter()
 
   const primary = useTokenColor('--primary')
   const foreground = useTokenColor('--foreground')
-  const mutedForeground = useTokenColor('--muted-foreground')
-  const surface = useTokenColor('--surface')
-  const border = useTokenColor('--border')
+  const background = useTokenColor('--background')
 
   /**
    * `restoring` is its own branch and not folded into `anonymous`. Treating "we
@@ -125,6 +111,7 @@ export default function AppLayout(): ReactElement {
 
   return (
     <Tabs
+      tabBar={(props) => <TabBar {...props} />}
       screenOptions={{
         /*
           The navigator's own header, rather than a ported `AppShell`. It is what
@@ -133,34 +120,54 @@ export default function AppLayout(): ReactElement {
           the phases filling these screens would only rewrite. The web header's
           other controls come with the screens that own them: search with
           `/search`, the account menu with `/account`.
+
+          Painted `--background`, not `--surface`. A header in the surface colour
+          over a page in the background colour is a bar with an edge, and the two
+          stacked titles it produced — "Dashboard" above "Welcome, …" — read as
+          two headers rather than one screen. Flush with the page, it reads as the
+          top of the content, which is what every current phone OS does with it.
         */
-        headerStyle: { backgroundColor: surface },
+        headerStyle: { backgroundColor: background },
         headerTintColor: foreground,
         headerShadowVisible: false,
         headerRight: () => (
-          <View className="flex-row items-center">
+          <View className="flex-row items-center pr-1">
             <SettingsButton />
             <ThemeToggle />
           </View>
         ),
-        tabBarActiveTintColor: primary,
-        tabBarInactiveTintColor: mutedForeground,
-        tabBarStyle: { backgroundColor: surface, borderTopColor: border },
       }}
     >
-      {NAV.map(({ name, title, icon: Icon }) => (
-        <Tabs.Screen
-          key={name}
-          name={name}
-          options={{
-            title,
-            tabBarIcon: ({ color, size }) => <Icon color={color} size={size} />,
-          }}
-        />
-      ))}
-      {HIDDEN.map(({ name, title }) => (
-        <Tabs.Screen key={name} name={name} options={{ title, href: null }} />
-      ))}
+      {SCREENS.map(({ name, title }) => {
+        const options = {
+          title,
+          ...(name === 'study' ||
+          name === 'scan' ||
+          name === 'scan-review' ||
+          name === 'sets/[setId]'
+            ? {
+                headerLeft: () => (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Go back"
+                    onPress={() => {
+                      if (router.canGoBack()) {
+                        router.back()
+                      } else {
+                        router.replace('/')
+                      }
+                    }}
+                    className="h-11 w-11 items-center justify-center rounded-md ml-2 active:opacity-60"
+                  >
+                    <ChevronLeftIcon color={foreground} size={24} />
+                  </Pressable>
+                ),
+              }
+            : {}),
+        }
+
+        return <Tabs.Screen key={name} name={name} options={options} />
+      })}
     </Tabs>
   )
 }

@@ -162,7 +162,7 @@ export default function ProgressScreen(): ReactElement {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-6 p-5 pb-10"
+      contentContainerClassName="gap-6 p-5 pb-32"
       refreshControl={
         <RefreshControl
           refreshing={progress.isRefetching}

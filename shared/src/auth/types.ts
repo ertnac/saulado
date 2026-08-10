@@ -26,6 +26,8 @@ export interface UserSettings {
   typoTolerance: boolean
   blankWidthMode: BlankWidthMode
   timezone: string
+  nickname: string
+  profileImage: string | null
 }
 
 /**

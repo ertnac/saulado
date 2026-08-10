@@ -9,3 +9,8 @@
 // longer does, and that file is gitignored anyway. Kept here rather than in
 // `tsconfig.json#compilerOptions.types` because Expo rewrites the tsconfig on
 // start and would drop the entry.
+
+declare module '*.png' {
+  const value: number
+  export default value
+}

@@ -41,6 +41,24 @@ export interface HighlightSurfaceProps {
   answers: readonly (AnswerRange & { ordinal: number })[]
   onAddHighlight: (range: Pick<AnswerRange, 'startOffset' | 'endOffset'>) => void
   onRemoveHighlight: (ordinal: number) => void
+  /**
+   * What a highlight is, in the words shown to the user. Defaults to `blank`.
+   *
+   * The scanner's first stage highlights *questions* out of a whole recognized
+   * page, and telling that user their selection "overlaps blank 2" describes
+   * something they have not done yet. Two words and a cap are the entire
+   * difference between the two stages, which is why this is a prop rather than a
+   * second surface.
+   */
+  noun?: 'blank' | 'question'
+  /**
+   * How many highlights this surface allows. Defaults to a card's blank limit.
+   *
+   * A page of notes can easily hold more than twelve question spans, and the
+   * per-card limit applied there would refuse selections for a reason that is not
+   * true of the thing being selected.
+   */
+  max?: number
 }
 
 export function HighlightSurface({
@@ -48,6 +66,8 @@ export function HighlightSurface({
   answers,
   onAddHighlight,
   onRemoveHighlight,
+  noun = 'blank',
+  max = ANSWERS_MAX_PER_CARD,
 }: HighlightSurfaceProps): ReactElement {
   const [anchor, setAnchor] = useState<WordToken | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -70,15 +90,15 @@ export function HighlightSurface({
       const names = collisions.map((answer) => String(answer.ordinal + 1)).join(', ')
       setMessage(
         collisions.length === 1
-          ? `That overlaps blank ${names}. Remove it first, or select different words.`
-          : `That overlaps blanks ${names}. Remove them first, or select different words.`,
+          ? `That overlaps ${noun} ${names}. Remove it first, or select different words.`
+          : `That overlaps ${noun}s ${names}. Remove them first, or select different words.`,
       )
       return
     }
 
     // Checked here rather than left to `addHighlight`, which caps silently.
-    if (answers.length >= ANSWERS_MAX_PER_CARD) {
-      setMessage(`You have reached the limit of ${String(ANSWERS_MAX_PER_CARD)} blanks.`)
+    if (answers.length >= max) {
+      setMessage(`You have reached the limit of ${String(max)} ${noun}s.`)
       return
     }
 
@@ -117,6 +137,7 @@ export function HighlightSurface({
                 key={piece.start}
                 ordinal={ordinal}
                 text={piece.text}
+                noun={noun}
                 onPress={() => {
                   onRemoveHighlight(ordinal)
                   // The removed blank may be the one the anchor was measured
@@ -144,7 +165,7 @@ export function HighlightSurface({
 
       <Text className="text-xs text-muted-foreground">
         {anchor === null
-          ? 'Tap the first word of a phrase, then the last. Tap a blank to remove it.'
+          ? `Tap the first word of a phrase, then the last. Tap a ${noun} to remove it.`
           : `Now tap the last word of the phrase — or "${anchor.text}" again for a single word.`}
       </Text>
     </View>
@@ -215,10 +236,12 @@ function PlainRun({
 function HighlightMark({
   ordinal,
   text,
+  noun,
   onPress,
 }: {
   ordinal: number
   text: string
+  noun: 'blank' | 'question'
   onPress: () => void
 }): ReactElement {
   const label = String(ordinal + 1)
@@ -227,7 +250,7 @@ function HighlightMark({
     <Text
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Blank ${label}: ${text}. Tap to remove.`}
+      accessibilityLabel={`${noun === 'blank' ? 'Blank' : 'Question'} ${label}: ${text}. Tap to remove.`}
       className="rounded bg-highlight font-medium text-highlight-foreground"
     >
       {text}

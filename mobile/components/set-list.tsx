@@ -40,7 +40,13 @@ function countLabel(set: StudySet): string {
   return nested <= 0 ? own + children : `${own} · ${String(nested)} in sub-sets${children}`
 }
 
-function SetRow({ set }: { set: StudySet }): ReactElement {
+function SetRow({
+  set,
+  onPick,
+}: {
+  set: StudySet
+  onPick?: (set: StudySet) => void
+}): ReactElement {
   const router = useRouter()
   const muted = useTokenColor('--muted-foreground')
 
@@ -49,6 +55,10 @@ function SetRow({ set }: { set: StudySet }): ReactElement {
       accessibilityRole="button"
       accessibilityLabel={`${set.title}. ${countLabel(set)}`}
       onPress={() => {
+        if (onPick) {
+          onPick(set)
+          return
+        }
         router.push(`/sets/${set.id}`)
       }}
       className="min-h-14 flex-row items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 active:opacity-70"
@@ -66,9 +76,20 @@ export function SetList({
   parent,
   /** Copy for the empty state — the root library and an open set need different words. */
   emptyText,
+  /**
+   * Turns the list into a chooser: a row hands its set back instead of opening
+   * it, and creating one selects it immediately.
+   *
+   * Exists for the scan flow, which can arrive with no destination — the tab-bar
+   * scan button belongs to no set. Reusing this list rather than writing a picker
+   * is what gives that step pagination, the create input and the error states for
+   * free, and a user with no sets at all can make one without leaving the scan.
+   */
+  onPick,
 }: {
   parent: string | null
   emptyText: string
+  onPick?: (set: StudySet) => void
 }): ReactElement {
   const [title, setTitle] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -87,8 +108,12 @@ export function SetList({
     create.mutate(
       { title: trimmed, parentId: parent },
       {
-        onSuccess: () => {
+        onSuccess: (data) => {
           setTitle('')
+          // In pick mode the new set *is* the choice — typing a title and then
+          // hunting for the row that just appeared is a step with no decision in
+          // it.
+          if (onPick) onPick(data.set)
         },
         // The depth cap and the duplicate-title rule are both server-side, so the
         // message has to come from there rather than be guessed at here.
@@ -155,7 +180,7 @@ export function SetList({
         // parent. Pagination caps it at a screenful at a time anyway.
         <View className="gap-2">
           {items.map((set) => (
-            <SetRow key={set.id} set={set} />
+            <SetRow key={set.id} set={set} onPick={onPick} />
           ))}
         </View>
       )}

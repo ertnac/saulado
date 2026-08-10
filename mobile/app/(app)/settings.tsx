@@ -1,6 +1,5 @@
 import { useEffect, type ReactElement } from 'react'
 import { Alert, ScrollView, Text, View } from 'react-native'
-import { useRouter } from 'expo-router'
 import {
   BLANK_WIDTH_MODES,
   DAILY_GOAL_MAX,
@@ -10,7 +9,6 @@ import {
   type BlankWidthMode,
   type UpdateSettingsRequest,
 } from '@saulado/shared'
-import { TextLink } from '../../components/button'
 import { Card } from '../../components/card'
 import {
   ChoiceSetting,
@@ -42,7 +40,6 @@ const BLANK_WIDTH_LABELS: Record<BlankWidthMode, string> = {
 }
 
 export default function SettingsScreen(): ReactElement {
-  const router = useRouter()
   const { data, isPending, isError } = useSettings()
   const update = useUpdateSettings()
   const theme = useTheme()
@@ -131,14 +128,6 @@ export default function SettingsScreen(): ReactElement {
     >
       <View className="gap-1">
         <Text className="text-sm text-muted-foreground">Changes save as you make them.</Text>
-        <TextLink
-          className="text-sm"
-          onPress={() => {
-            router.push('/account')
-          }}
-        >
-          Account and data
-        </TextLink>
       </View>
 
       <Section title="Appearance">

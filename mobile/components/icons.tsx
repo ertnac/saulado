@@ -178,10 +178,64 @@ export function SunIcon(props: IconProps): ReactElement {
   )
 }
 
+export function ImageIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M4 5.5h16v13H4z" />
+      <Circle cx={9} cy={10} r={1.5} />
+      <Path d="m4 16 4.5-4.5 3.5 3.5 3-2.5L20 17" />
+    </Icon>
+  )
+}
+
+/**
+ * Four viewfinder corners around a line of text.
+ *
+ * A camera body was the other candidate and it is the wrong picture: the tab does
+ * not take photographs, it reads a page, and the corner brackets are the gesture
+ * the user is about to perform.
+ */
+export function ScanIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M4 8.5V6a2 2 0 0 1 2-2h2.5" />
+      <Path d="M15.5 4H18a2 2 0 0 1 2 2v2.5" />
+      <Path d="M20 15.5V18a2 2 0 0 1-2 2h-2.5" />
+      <Path d="M8.5 20H6a2 2 0 0 1-2-2v-2.5" />
+      <Path d="M7.5 12h9" />
+    </Icon>
+  )
+}
+
 export function MoonIcon(props: IconProps): ReactElement {
   return (
     <Icon {...props}>
       <Path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5Z" />
+    </Icon>
+  )
+}
+
+export function ZapIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z" />
+    </Icon>
+  )
+}
+
+export function ChevronDownIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="m5 9 7 7 7-7" />
+    </Icon>
+  )
+}
+
+export function UserIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Circle cx={12} cy={8} r={4} />
+      <Path d="M20 21a8 8 0 0 0-16 0" />
     </Icon>
   )
 }

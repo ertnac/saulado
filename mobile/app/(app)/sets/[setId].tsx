@@ -127,7 +127,7 @@ export default function SetDetailScreen(): ReactElement {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
-        contentContainerClassName="gap-6 p-5 pb-8"
+        contentContainerClassName="gap-6 p-5 pb-32"
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
@@ -169,6 +169,20 @@ export default function SetDetailScreen(): ReactElement {
               setEditing(null)
             }}
           />
+          {/*
+            Under the composer rather than beside "Study this set": scanning is a
+            way of filling this box, so it belongs with it. Hidden while editing
+            an existing card, where a scan would have nowhere to land.
+          */}
+          {editing === null && (
+            <Button
+              label="Read a page with the camera"
+              variant="outline"
+              onPress={() => {
+                router.push(`/scan?setId=${setId}`)
+              }}
+            />
+          )}
         </View>
 
         <View className="gap-3">

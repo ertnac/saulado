@@ -85,7 +85,40 @@ const config: ExpoConfig = {
       : undefined,
   },
 
-  plugins: ['expo-secure-store', 'expo-router'],
+  /**
+   * The two permission strings are not boilerplate: Apple rejects a build that
+   * opens the camera or reads the photo library without one, and the string is
+   * what the system dialog shows, so it is the only place the app gets to explain
+   * itself before the user decides. Both say where the text goes, because that is
+   * the question someone pointing a camera at their own notes is actually asking.
+   *
+   * `recordAudioAndroid` and `microphonePermission` are off because nothing here
+   * records: left at their defaults, both plugins add `RECORD_AUDIO` to the
+   * manifest and a microphone string to the plist for a feature the app does not
+   * have. `barcodeScannerEnabled` off drops the scanner out of the binary for the
+   * same reason.
+   */
+  plugins: [
+    'expo-secure-store',
+    'expo-router',
+    [
+      'expo-camera',
+      {
+        cameraPermission:
+          'Saulado uses the camera to read text from a page you point it at. The photo is processed on this device and is never uploaded or saved.',
+        recordAudioAndroid: false,
+        barcodeScannerEnabled: false,
+      },
+    ],
+    [
+      'expo-image-picker',
+      {
+        photosPermission:
+          'Saulado reads text from a photo you choose. It stays on this device and is never uploaded.',
+        microphonePermission: false,
+      },
+    ],
+  ],
 }
 
 export default config

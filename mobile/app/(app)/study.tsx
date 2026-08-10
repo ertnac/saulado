@@ -361,9 +361,8 @@ export default function StudyScreen(): ReactElement {
   return (
     <KeyboardAvoidingView
       className="flex-1 bg-background"
-      // Android resizes the window for the keyboard on its own; iOS does not, and
-      // padding there is what keeps the footer above it.
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
     >
       <ScrollView
         className="flex-1"

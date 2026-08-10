@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from 'react'
 import { ActivityIndicator, Pressable, Text } from 'react-native'
-import { useTokenColor } from '../stores/theme'
+import { useTokenColor, type Token } from '../stores/theme'
 
 type Variant = 'default' | 'outline' | 'ghost' | 'danger'
 type Size = 'md' | 'lg'
@@ -30,7 +30,7 @@ interface ButtonProps {
  * disabled button is the user's turn, a loading one is ours. Collapsing them
  * leaves a submit that looks broken for the two seconds the request takes.
  */
-const VARIANTS: Record<Variant, { view: string; text: string; spinner: string }> = {
+const VARIANTS: Record<Variant, { view: string; text: string; spinner: Token }> = {
   default: { view: 'bg-primary', text: 'text-primary-foreground', spinner: '--primary-foreground' },
   outline: {
     view: 'border border-border bg-surface',

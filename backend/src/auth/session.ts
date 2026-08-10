@@ -27,6 +27,8 @@ export function toPublicSettings(settings: UserSettings): AuthResponse['settings
       ? 'proportional'
       : 'fixed') satisfies BlankWidthMode,
     timezone: settings.timezone,
+    nickname: settings.nickname,
+    profileImage: settings.profileImage,
   }
 }
 

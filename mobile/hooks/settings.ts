@@ -50,7 +50,11 @@ export const settingsKeys = {
 export function useSettings(): UseQueryResult<SettingsResponse> {
   return useQuery({
     queryKey: settingsKeys.all,
-    queryFn: () => api.getSettings(),
+    queryFn: async () => {
+      const data = await api.getSettings()
+      useAuthStore.getState().updateSettings(data.settings)
+      return data
+    },
     staleTime: 5 * 60_000,
   })
 }
