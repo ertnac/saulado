@@ -260,6 +260,20 @@ export function useCards(setId: string | undefined, tags: readonly string[] = []
 }
 
 /**
+ * Every tag the user has, with counts.
+ *
+ * Tag counts drift constantly and nothing depends on them being exact — the
+ * filter row is a navigation aid, not a report.
+ */
+export function useTags() {
+  return useQuery({
+    queryKey: tagKeys.all,
+    queryFn: () => api.listTags(),
+    staleTime: 5 * 60_000,
+  })
+}
+
+/**
  * One card, with its answers.
  *
  * The list carries `StudyCardSummary` — no answers — so this is the fetch the

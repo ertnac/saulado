@@ -133,6 +133,32 @@ export function ChevronRightIcon(props: IconProps): ReactElement {
   )
 }
 
+export function ChevronLeftIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="m15 5-7 7 7 7" />
+    </Icon>
+  )
+}
+
+export function SearchIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Circle cx={11} cy={11} r={6.5} />
+      <Path d="m16 16 4.5 4.5" />
+    </Icon>
+  )
+}
+
+export function SettingsIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Circle cx={12} cy={12} r={3} />
+      <Path d="M12 2.5v2.2M12 19.3v2.2M4.2 7.2l1.9 1.1M17.9 15.7l1.9 1.1M4.2 16.8l1.9-1.1M17.9 8.3l1.9-1.1" />
+    </Icon>
+  )
+}
+
 export function TrashIcon(props: IconProps): ReactElement {
   return (
     <Icon {...props}>

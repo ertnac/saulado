@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from 'react'
 import { ActivityIndicator, Pressable, Text } from 'react-native'
 import { useTokenColor } from '../stores/theme'
 
-type Variant = 'default' | 'outline' | 'ghost'
+type Variant = 'default' | 'outline' | 'ghost' | 'danger'
 type Size = 'md' | 'lg'
 
 interface ButtonProps {
@@ -17,9 +17,9 @@ interface ButtonProps {
 }
 
 /**
- * Ported from `frontend/src/components/ui/button.tsx`, minus the variants Phase 2
- * has no caller for — `accent`, `soft` and `danger` come across with the screens
- * that use them, and the `icon` size is `ThemeToggle`'s own 44×44 box.
+ * Ported from `frontend/src/components/ui/button.tsx`, minus the variants no
+ * screen has a caller for — `accent` and `soft` come across when something needs
+ * them, and the `icon` size is `ThemeToggle`'s own 44×44 box.
  *
  * `buttonClass` does not port. It exists on the web so a navigating `<a>` can
  * look like a button without becoming one; React Native has no anchor element
@@ -38,6 +38,15 @@ const VARIANTS: Record<Variant, { view: string; text: string; spinner: string }>
     spinner: '--foreground',
   },
   ghost: { view: 'bg-transparent', text: 'text-foreground', spinner: '--foreground' },
+  /*
+    `--danger`, and the only variant allowed to use it. The palette reserves it
+    for destructive and irreversible actions — every recoverable failure in the
+    app uses `--warning` — so spending it anywhere else leaves nothing louder for
+    "this will delete your account". `--primary-foreground` on top, matching the
+    web: there is no `--danger-foreground` token, and the danger fill is dark
+    enough in both themes for the light foreground to clear 4.5:1.
+  */
+  danger: { view: 'bg-danger', text: 'text-primary-foreground', spinner: '--primary-foreground' },
 }
 
 /** Both meet the 44px minimum touch target from saulado-ux §7. */

@@ -1,8 +1,15 @@
-import { Redirect, useUnstableGlobalHref } from 'expo-router'
+import { Redirect, useRouter, useUnstableGlobalHref } from 'expo-router'
 import { Tabs } from 'expo-router/js-tabs'
 import type { ReactElement } from 'react'
-import { ActivityIndicator, View } from 'react-native'
-import { ChartIcon, HomeIcon, LayersIcon, type IconProps } from '../../components/icons'
+import { ActivityIndicator, Pressable, View } from 'react-native'
+import {
+  ChartIcon,
+  HomeIcon,
+  LayersIcon,
+  SearchIcon,
+  SettingsIcon,
+  type IconProps,
+} from '../../components/icons'
 import { ThemeToggle } from '../../components/theme-toggle'
 import { useAuthStore } from '../../stores/auth'
 import { useTokenColor } from '../../stores/theme'
@@ -25,6 +32,12 @@ import { useTokenColor } from '../../stores/theme'
 const NAV: { name: string; title: string; icon: (p: IconProps) => ReactElement }[] = [
   { name: 'index', title: 'Dashboard', icon: HomeIcon },
   { name: 'sets/index', title: 'Sets', icon: LayersIcon },
+  /*
+    A tab, not a header button. The web reaches search through `Ctrl+K`, which has
+    no touch equivalent — plan §5 drops the palette and says a search tab covers
+    the same need.
+  */
+  { name: 'search', title: 'Search', icon: SearchIcon },
   { name: 'progress', title: 'Progress', icon: ChartIcon },
 ]
 
@@ -42,10 +55,35 @@ const NAV: { name: string; title: string; icon: (p: IconProps) => ReactElement }
 const HIDDEN: { name: string; title: string }[] = [
   { name: 'sets/[setId]', title: 'Set' },
   { name: 'study', title: 'Study' },
-  { name: 'search', title: 'Search' },
   { name: 'settings', title: 'Settings' },
   { name: 'account', title: 'Account' },
 ]
+
+/**
+ * The way into settings and account.
+ *
+ * The web keeps them behind a header dropdown. There is no dropdown here, and a
+ * fifth tab for a screen visited once a month would cost a fifth of the tab bar
+ * permanently — so it is a header button beside the theme toggle, matching where
+ * the web puts the same affordance.
+ */
+function SettingsButton(): ReactElement {
+  const router = useRouter()
+  const foreground = useTokenColor('--foreground')
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Settings"
+      onPress={() => {
+        router.push('/settings')
+      }}
+      className="h-11 w-11 items-center justify-center rounded-md"
+    >
+      <SettingsIcon color={foreground} />
+    </Pressable>
+  )
+}
 
 export default function AppLayout(): ReactElement {
   const status = useAuthStore((s) => s.status)
@@ -99,7 +137,12 @@ export default function AppLayout(): ReactElement {
         headerStyle: { backgroundColor: surface },
         headerTintColor: foreground,
         headerShadowVisible: false,
-        headerRight: () => <ThemeToggle />,
+        headerRight: () => (
+          <View className="flex-row items-center">
+            <SettingsButton />
+            <ThemeToggle />
+          </View>
+        ),
         tabBarActiveTintColor: primary,
         tabBarInactiveTintColor: mutedForeground,
         tabBarStyle: { backgroundColor: surface, borderTopColor: border },
