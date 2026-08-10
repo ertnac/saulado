@@ -109,6 +109,14 @@ export function CheckIcon(props: IconProps): ReactElement {
   )
 }
 
+export function CloseIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M6 6l12 12M18 6 6 18" />
+    </Icon>
+  )
+}
+
 export function SunIcon(props: IconProps): ReactElement {
   return (
     <Icon {...props}>
