@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAMID.com.saulado.app"],
+        "components": [
+          { "/": "/reset-password", "comment": "Password reset link from email" },
+          { "/": "/account/email/confirm", "comment": "Email change confirmation link" }
+        ]
+      }
+    ]
+  }
+}

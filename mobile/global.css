@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Design tokens, ported from `frontend/src/index.css`.
+ *
+ * The values are copied rather than re-derived. `tailwind.config.js` references
+ * every one of them through `hsl(var(--x))`, exactly as the web config does, so
+ * `bg-surface` and `text-muted-foreground` mean the same colour on both
+ * platforms and there is only one place to change a token.
+ *
+ * Two things about this file are NativeWind-specific and are not cosmetic:
+ *
+ * 1. The dark block is `.dark:root`, not the web's `.dark`. NativeWind only
+ *    recognises a variable block as *root* variables — the ones that apply to
+ *    the whole tree — for `:root`, and as the dark set for a `dark` class
+ *    immediately followed by `:root`. A bare `.dark { --x: … }` is read as an
+ *    ordinary class selector, its declarations go nowhere, and dark mode
+ *    silently renders in the light palette.
+ * 2. The triplets stay space-separated and unwrapped, so `hsl(var(--border))`
+ *    resolves. NativeWind splits the substituted string on whitespace before
+ *    handing the parts to `hsl()`; a pre-wrapped `hsl(...)` value would arrive
+ *    as a single argument and fail to parse.
+ *
+ * Dropped from the web file, because nothing behind them exists in React
+ * Native: `--wash` (radial gradients), `--shadow-soft` / `--shadow-lift`
+ * (multi-layer box shadows — RN takes one shadow, and the built-in `shadow-*`
+ * utilities already map to it), the `:focus-visible` ring, and
+ * `font-feature-settings`.
+ */
+
+@layer base {
+  :root {
+    --background: 150 30% 97%;
+    --surface: 0 0% 100%;
+    --surface-muted: 150 28% 95%;
+
+    --foreground: 162 30% 12%;
+    --muted: 150 28% 95%;
+    --muted-foreground: 160 12% 38%;
+
+    --primary: 158 42% 24%;
+    --primary-foreground: 150 40% 97%;
+
+    /* Clay — sage's companion in print long before it was ours. Carries the
+       one hot thing on a screen: a count, an active filter, a due badge. */
+    --accent: 14 72% 58%;
+    --accent-foreground: 20 60% 99%;
+    /* Accent as *text* rather than as a fill. The 58% swatch above is too
+       light to hold 4.5:1 against a white card, so anything that spells words
+       in the accent colour uses this one instead. */
+    --accent-strong: 14 62% 42%;
+
+    --sand: 40 62% 90%;
+    --sand-foreground: 30 45% 22%;
+    --info: 196 42% 40%;
+
+    --border: 152 20% 88%;
+    --ring: 158 42% 34%;
+
+    --success: 142 58% 30%;
+    --warning: 32 85% 36%;
+    /* Destructive only. Distinct from --warning, which the editor already uses
+       for a rejected selection — "this cannot be highlighted" and "this will
+       erase your account" must not be the same colour. */
+    --danger: 358 60% 44%;
+
+    /* Marked text in the highlight editor. Yellow because that is what
+       "highlighted" means outside software too, and because a green-tinted
+       highlight in a green-themed app would read as "correct". */
+    --highlight: 48 96% 76%;
+    --highlight-foreground: 26 83% 14%;
+  }
+
+  /**
+   * Dark is not the light theme dimmed — the relationship inverts. Pale green
+   * stops being the surface and becomes the bright element, over a forest
+   * charcoal that keeps the green cast rather than falling back to blue-black.
+   */
+  .dark:root {
+    --background: 166 24% 7%;
+    --surface: 166 20% 11%;
+    --surface-muted: 166 16% 15%;
+
+    --foreground: 150 18% 94%;
+    --muted: 166 16% 15%;
+    /* Lightened against the light theme to hold 4.5:1 on --surface. Dark mode
+       is where contrast usually breaks (saulado-ux). */
+    --muted-foreground: 150 10% 68%;
+
+    --primary: 152 46% 62%;
+    --primary-foreground: 166 40% 9%;
+
+    --accent: 14 78% 64%;
+    --accent-foreground: 18 50% 10%;
+    /* The text-safe direction is *lighter* here, not darker. */
+    --accent-strong: 14 78% 70%;
+
+    --sand: 40 25% 22%;
+    --sand-foreground: 40 40% 88%;
+    --info: 196 58% 66%;
+
+    --border: 166 14% 22%;
+    --ring: 152 46% 62%;
+
+    --success: 142 69% 58%;
+    --warning: 38 92% 60%;
+    --danger: 358 70% 68%;
+
+    /* Deliberately still a light swatch with dark text. A dimmed highlight
+       reads as disabled, and dark-on-dark loses the "marked with a pen" cue. */
+    --highlight: 45 90% 62%;
+    --highlight-foreground: 26 83% 12%;
+  }
+}
