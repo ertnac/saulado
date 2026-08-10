@@ -117,6 +117,32 @@ export function CloseIcon(props: IconProps): ReactElement {
   )
 }
 
+export function PlusIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M12 5v14M5 12h14" />
+    </Icon>
+  )
+}
+
+export function ChevronRightIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="m9 5 7 7-7 7" />
+    </Icon>
+  )
+}
+
+export function TrashIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M4 7h16" />
+      <Path d="M9 7V4.5h6V7" />
+      <Path d="M6 7l1 13h10l1-13" />
+    </Icon>
+  )
+}
+
 export function SunIcon(props: IconProps): ReactElement {
   return (
     <Icon {...props}>
