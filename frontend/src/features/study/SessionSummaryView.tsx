@@ -22,6 +22,7 @@ interface SessionSummaryViewProps {
   /** Where "study again" should go — the set just studied, or everything. */
   studySetId: string | null
   onStudyAgain: () => void
+  onRetake?: () => void
   pending: boolean
 }
 
@@ -44,6 +45,7 @@ export function SessionSummaryView({
   summary,
   studySetId,
   onStudyAgain,
+  onRetake,
   pending,
 }: SessionSummaryViewProps): ReactElement {
   return (
@@ -72,6 +74,30 @@ export function SessionSummaryView({
         <Stat label="Accuracy" value={`${String(Math.round(summary.accuracy * 100))}%`} />
         <Stat label="Time" value={minutes(summary.durationMs)} />
       </div>
+
+      {summary.unanswered && summary.unanswered.length > 0 && onRetake && (
+        <Card
+          as="section"
+          tone="accent"
+          className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        >
+          <div>
+            <h3 className="font-semibold text-foreground">Retake unanswered cards</h3>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              You left {summary.unanswered.length} cards unanswered. Finish them now in practice
+              mode.
+            </p>
+          </div>
+          <button
+            type="button"
+            className={buttonClass({ variant: 'accent' })}
+            disabled={pending}
+            onClick={onRetake}
+          >
+            Retake blanks
+          </button>
+        </Card>
+      )}
 
       {/*
         Linked, not just listed. The cards worth another look are exactly the ones

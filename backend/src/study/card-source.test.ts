@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { SpacedRepetitionSource, type CandidateCard } from './card-source.js'
+import {
+  SpacedRepetitionSource,
+  SequentialSource,
+  ShuffledSource,
+  RetakeSource,
+  verdictFor,
+  type CandidateCard,
+  type PoolCard,
+} from './card-source.js'
 
 /**
  * Queue composition, tested without a database.
@@ -209,3 +217,177 @@ describe('SpacedRepetitionSource.verdict', () => {
     expect(s.onGraded('any', 'again', 1)).toEqual(SpacedRepetitionSource.verdict('again', 1))
   })
 })
+
+describe('SequentialSource', () => {
+  it('orders by creation date, oldest first', () => {
+    const source = new SequentialSource({
+      cards: [pool('c', '2026-03-01'), pool('a', '2026-01-01'), pool('b', '2026-02-01')],
+    })
+
+    expect(source.build().map((slot) => slot.cardId)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('breaks a creation-date tie on card id', () => {
+    // A bulk import shares created_at to the millisecond, so without this the
+    // order is whatever Postgres returns and "resume" can reorder the queue.
+    const source = new SequentialSource({
+      cards: [pool('z', '2026-01-01'), pool('a', '2026-01-01'), pool('m', '2026-01-01')],
+    })
+
+    expect(source.build().map((slot) => slot.cardId)).toEqual(['a', 'm', 'z'])
+  })
+
+  it('marks every card as not new', () => {
+    // isNew drives a UI badge that means "never studied". A sequential drill
+    // over a whole set says nothing about whether a card has been seen.
+    const source = new SequentialSource({ cards: [pool('a', '2026-01-01')] })
+
+    expect(source.build()[0]?.isNew).toBe(false)
+  })
+
+  it('reports its kind and totals', () => {
+    const source = new SequentialSource({
+      cards: [pool('a', '2026-01-01'), pool('b', '2026-02-01')],
+    })
+
+    expect(source.kind).toBe('sequential')
+    expect(source.total()).toBe(2)
+    expect(source.size()).toBe(2)
+    expect(source.next()?.cardId).toBe('a')
+    expect(source.size()).toBe(1)
+  })
+})
+
+describe('ShuffledSource', () => {
+  it('returns every card exactly once', () => {
+    const cards = ['a', 'b', 'c', 'd'].map((id) => pool(id, '2026-01-01'))
+    const source = new ShuffledSource({ cards, rng: () => 0.5 })
+
+    expect(
+      source
+        .build()
+        .map((slot) => slot.cardId)
+        .sort(),
+    ).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('produces a pinned order for a pinned rng', () => {
+    const cards = ['a', 'b', 'c', 'd'].map((id) => pool(id, '2026-01-01'))
+    const source = new ShuffledSource({ cards, rng: () => 0 })
+
+    // Sorted by (createdAt, cardId) first, then rotated by the all-zero rng.
+    expect(source.build().map((slot) => slot.cardId)).toEqual(['b', 'c', 'd', 'a'])
+  })
+
+  it('numbers positions from zero regardless of order', () => {
+    const cards = ['a', 'b', 'c'].map((id) => pool(id, '2026-01-01'))
+    const source = new ShuffledSource({ cards, rng: () => 0 })
+
+    expect(source.build().map((slot) => slot.position)).toEqual([0, 1, 2])
+  })
+})
+
+describe('RetakeSource', () => {
+  it('keeps the order it was handed', () => {
+    // The rows come from the prior session already ordered by position; a
+    // retake re-walks that pass rather than inventing a new order.
+    const source = new RetakeSource({ cards: ['c', 'a', 'b'] })
+
+    expect(source.build().map((slot) => slot.cardId)).toEqual(['c', 'a', 'b'])
+    expect(source.kind).toBe('retake')
+  })
+})
+
+describe('verdictFor', () => {
+  const base = {
+    grade: 'good' as const,
+    attempts: 1,
+    hadEmptyBlank: false,
+    isDue: true,
+    correct: true,
+  }
+
+  it('records and reschedules in spaced mode', () => {
+    expect(verdictFor('spaced', base)).toEqual({ requeue: false, reschedule: true, record: true })
+  })
+
+  it('requeues a wrong answer in spaced mode, as today', () => {
+    expect(verdictFor('spaced', { ...base, grade: 'again', correct: false }).requeue).toBe(true)
+  })
+
+  it('never reschedules in sequential mode', () => {
+    expect(verdictFor('sequential', base)).toEqual({
+      requeue: false,
+      reschedule: false,
+      record: true,
+    })
+  })
+
+  it('requeues a wrong answer in sequential mode', () => {
+    expect(verdictFor('sequential', { ...base, grade: 'again', correct: false }).requeue).toBe(true)
+  })
+
+  it('does not requeue a blank, in either new mode', () => {
+    // D8: a blank is held for the end-of-session retake prompt instead.
+    for (const mode of ['sequential', 'shuffled'] as const) {
+      const verdict = verdictFor(mode, {
+        ...base,
+        grade: 'again',
+        correct: false,
+        hadEmptyBlank: true,
+      })
+
+      expect(verdict.requeue).toBe(false)
+    }
+  })
+
+  it('lets a blank beat a wrong answer on the requeue decision', () => {
+    // A card can be both: two blanks filled wrong, a third left empty.
+    const verdict = verdictFor('sequential', {
+      ...base,
+      grade: 'again',
+      correct: false,
+      hadEmptyBlank: true,
+      attempts: 1,
+    })
+
+    expect(verdict.requeue).toBe(false)
+  })
+
+  it('reschedules a due card in shuffled mode whether right or wrong', () => {
+    expect(verdictFor('shuffled', { ...base, isDue: true, correct: true }).reschedule).toBe(true)
+    expect(
+      verdictFor('shuffled', { ...base, isDue: true, correct: false, grade: 'again' }).reschedule,
+    ).toBe(true)
+  })
+
+  it('never punishes a not-due card answered wrong in shuffled mode', () => {
+    // D4: the card keeps its existing next_review rather than resetting to
+    // tomorrow. Drilling ahead must not be able to damage the schedule.
+    expect(
+      verdictFor('shuffled', { ...base, isDue: false, correct: false, grade: 'again' }).reschedule,
+    ).toBe(false)
+  })
+
+  it('still rewards a not-due card answered correctly in shuffled mode', () => {
+    expect(verdictFor('shuffled', { ...base, isDue: false, correct: true }).reschedule).toBe(true)
+  })
+
+  it('records nothing at all in retake mode', () => {
+    expect(verdictFor('retake', base)).toEqual({
+      requeue: false,
+      reschedule: false,
+      record: false,
+    })
+  })
+
+  it('records nothing in retake mode even for a wrong answer', () => {
+    expect(
+      verdictFor('retake', { ...base, grade: 'again', correct: false, hadEmptyBlank: true }),
+    ).toEqual({ requeue: false, reschedule: false, record: false })
+  })
+})
+
+function pool(cardId: string, createdAt: string): PoolCard {
+  return { cardId, studySetId: 'set-1', createdAt: new Date(`${createdAt}T00:00:00.000Z`) }
+}

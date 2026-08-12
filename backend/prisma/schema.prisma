@@ -377,18 +377,29 @@ model UserDailyStats {
 
 /// One sitting. Server-side so a refresh does not lose progress (plan §4.2).
 ///
+/// Which source built a session's queue. See `shared/src/study/types.ts`.
+enum SessionMode {
+  spaced
+  sequential
+  shuffled
+  retake
+
+  @@map("session_mode")
+}
+
 /// The queue could have lived in the client — it is, after all, just a list. But
 /// then closing the tab mid-review loses the ordering, the count, and any card
 /// the user was part-way through; and a client that owns the queue is a client
 /// that can reorder it to see the easy cards first. The server holds it, and
 /// `GET /api/study/sessions/:id` returns whatever is left.
 model StudySession {
-  id          String    @id @default(uuid()) @db.Uuid
-  userId      String    @map("user_id") @db.Uuid
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String      @map("user_id") @db.Uuid
   /// Null when studying across every set.
-  studySetId  String?   @map("study_set_id") @db.Uuid
-  startedAt   DateTime  @default(now()) @map("started_at")
-  completedAt DateTime? @map("completed_at")
+  studySetId  String?     @map("study_set_id") @db.Uuid
+  mode        SessionMode @default(spaced)
+  startedAt   DateTime    @default(now()) @map("started_at")
+  completedAt DateTime?   @map("completed_at")
 
   user  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   set   StudySet?          @relation(fields: [studySetId], references: [id], onDelete: Cascade)
@@ -421,6 +432,8 @@ model StudySessionCard {
   answeredAt DateTime? @map("answered_at")
   grade      Int?      @db.SmallInt
   correct    Boolean?
+  /// At least one blank was submitted empty — the retake trigger.
+  hadEmptyBlank Boolean @default(false) @map("had_empty_blank")
   idempotencyKey String? @map("idempotency_key")
   lastResult     Json?   @map("last_result")
 

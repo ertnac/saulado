@@ -15,6 +15,30 @@ import type { DayKey } from './day.js'
  * the leak would be invisible — the UI would look identical.
  */
 
+// ── Modes ───────────────────────────────────────────────────────────────────
+
+/**
+ * How a session picks and orders its cards.
+ *
+ * - `spaced` — due cards plus interleaved new ones, capped. The scheduler's own
+ *   session, reached from the dashboard.
+ * - `sequential` — every card in the set subtree, in creation order. "Learn this
+ *   set top to bottom."
+ * - `shuffled` — the same pool, randomised. Tests recall rather than sequence.
+ * - `retake` — a practice pass over the cards a prior session left blank.
+ *   Records nothing.
+ */
+export type SessionMode = 'spaced' | 'sequential' | 'shuffled' | 'retake'
+
+/**
+ * The modes a client may ask for by name.
+ *
+ * `retake` is absent deliberately: a retake session is derived from
+ * `retakeOf`, so a client cannot start one over an arbitrary pool and have it
+ * silently skip recording.
+ */
+export type StartableMode = Exclude<SessionMode, 'retake'>
+
 // ── The queue ───────────────────────────────────────────────────────────────
 
 /**
@@ -57,6 +81,8 @@ export interface StudySession {
   id: string
   /** `null` when studying across every set. */
   studySetId: string | null
+  /** Which source built this queue. Needed to resume into the right mode. */
+  mode: SessionMode
   startedAt: string
   completedAt: string | null
   queue: SessionCard[]
@@ -165,6 +191,26 @@ export interface SessionSummary {
   durationMs: number
   /** Graded `again` or `hard` — the cards worth another look today. */
   toRevisit: SessionCardRef[]
+  /**
+   * Which method produced this session.
+   *
+   * The summary screen reads it to caption a practice pass honestly: a retake's
+   * Cards and Correct tiles are real counts of a pass that changed nothing, and
+   * without a caption they read as progress the user did not earn.
+   */
+  mode: SessionMode
+  /**
+   * Cards the user left at least one blank empty on — the retake candidates.
+   *
+   * Distinct from {@link SessionSummary.toRevisit}, which is about *grades*: a
+   * card answered wrong is worth revisiting but was attempted, and the user
+   * already has their verdict on it. These were not attempted at all, which is
+   * a different offer ("finish these") and a different pass (practice only).
+   *
+   * Always empty for a `retake` session — nothing it does is recorded, so there
+   * is nothing to build a second list from.
+   */
+  unanswered: SessionCardRef[]
   /** Reviews today across *all* sessions, against the user's goal. */
   reviewsToday: number
   dailyGoal: number
@@ -174,8 +220,17 @@ export interface SessionSummary {
 // ── Requests and responses ──────────────────────────────────────────────────
 
 export interface StartSessionRequest {
-  /** Omit to study every set. */
+  /** Omit to study every set. Required for `sequential` and `shuffled`. */
   studySetId?: string
+  /** Defaults to `spaced` server-side. */
+  mode?: StartableMode
+  /**
+   * Start a retake pass over this session's unanswered cards.
+   *
+   * Mutually exclusive with `mode` — the server derives `retake` from this,
+   * rather than trusting a client to name a mode that records nothing.
+   */
+  retakeOf?: string
 }
 
 export interface SessionResponse {

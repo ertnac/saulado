@@ -1,11 +1,21 @@
-import type { ReactElement } from 'react'
-import { Image, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
+import { type ReactElement, useEffect, useRef } from 'react'
+import {
+  Animated,
+  Easing,
+  Image,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native'
 import { useRouter } from 'expo-router'
 import type { DashboardResponse, RecentSet } from '@saulado/shared'
 import sauladoLogo from '../../assets/saulado.png'
+import welcomeAvatar from '../../assets/welcome-avatar.png'
 import { Button, TextLink } from '../../components/button'
 import { Card, CardFigure, CardLabel } from '../../components/card'
-import { ChevronRightIcon, UserIcon } from '../../components/icons'
+import { ChevronRightIcon } from '../../components/icons'
 import { GoalRing } from '../../components/goal-ring'
 import { Sparkline } from '../../components/sparkline'
 import { StreakCard } from '../../components/streak-card'
@@ -13,6 +23,67 @@ import { useDashboard } from '../../hooks/progress'
 import { useSettings } from '../../hooks/settings'
 import { useAuthStore } from '../../stores/auth'
 import { useTokenColor } from '../../stores/theme'
+
+/**
+ * The mascot waving at the user. Runs a smooth oscillating rotation that mimics
+ * a hand wave — three cycles then rests, so it greets without looping forever.
+ */
+function WavingAvatar(): ReactElement {
+  const wave = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    // 3 full wave cycles (left → right → left) then stop.
+    Animated.sequence([
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(wave, {
+            toValue: 1,
+            duration: 200,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(wave, {
+            toValue: -1,
+            duration: 200,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(wave, {
+            toValue: 0,
+            duration: 200,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+        { iterations: 3 },
+      ),
+    ]).start()
+  }, [wave])
+
+  const rotate = wave.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: ['-18deg', '0deg', '18deg'],
+  })
+
+  return (
+    <Animated.View
+      style={{
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        overflow: 'hidden',
+        transform: [{ rotate }],
+      }}
+    >
+      <Image
+        source={welcomeAvatar}
+        style={{ width: 96, height: 96 }}
+        resizeMode="cover"
+        accessibilityLabel="Saulado mascot waving hello"
+      />
+    </Animated.View>
+  )
+}
 
 /**
  * The dashboard — a port of `frontend/src/features/dashboard/DashboardPage.tsx`.
@@ -374,13 +445,26 @@ export default function DashboardScreen(): ReactElement {
         />
       }
     >
-      <View className="flex-row items-center justify-between">
-        <View className="flex-1 pr-4">
-          <View className="flex-row items-center gap-2">
-            <Image source={sauladoLogo} style={{ width: 28, height: 28 }} resizeMode="contain" />
-            <Text className="text-lg font-bold text-foreground tracking-tight">Saulado</Text>
-          </View>
-          <Text className="text-2xl font-bold tracking-tight text-foreground mt-2">
+      {/* Branding row */}
+      <View className="flex-row items-center gap-2">
+        <Image source={sauladoLogo} style={{ width: 24, height: 24 }} resizeMode="contain" />
+        <Text className="text-base font-bold text-foreground tracking-tight">Saulado</Text>
+      </View>
+
+      {/* Avatar-left, greeting-right */}
+      <View className="flex-row items-center gap-4">
+        {profileImage ? (
+          <Image
+            source={{ uri: profileImage }}
+            style={{ width: 96, height: 96, borderRadius: 48 }}
+            className="border border-border"
+          />
+        ) : (
+          <WavingAvatar />
+        )}
+
+        <View className="flex-1">
+          <Text className="text-2xl font-bold tracking-tight text-foreground">
             {nickname
               ? `Welcome, ${nickname}`
               : user
@@ -391,18 +475,6 @@ export default function DashboardScreen(): ReactElement {
             Build a set, highlight what matters, and study it in context.
           </Text>
         </View>
-
-        {profileImage ? (
-          <Image
-            source={{ uri: profileImage }}
-            style={{ width: 56, height: 56, borderRadius: 28 }}
-            className="border border-border"
-          />
-        ) : (
-          <View className="w-14 h-14 rounded-full bg-primary/10 items-center justify-center border border-primary/20">
-            <UserIcon color={primary} size={28} />
-          </View>
-        )}
       </View>
 
       <View className="gap-4">

@@ -1,5 +1,6 @@
 import request from 'supertest'
 import { afterAll, describe, expect, it } from 'vitest'
+import type { SessionSummary } from '@saulado/shared'
 import { createApp } from '../app.js'
 import { cleanupTestUsers, registerTestUser } from '../test/helpers.js'
 
@@ -33,6 +34,7 @@ interface AnswerBody {
 
 interface SessionBody {
   id: string
+  mode: string
   queue: { cardId: string; title: string }[]
   progress: { answered: number; total: number; correct: number }
 }
@@ -61,6 +63,52 @@ async function setup(
 
   expect(res.status).toBe(200)
   return { token, setId, session: (res.body as { session: SessionBody }).session }
+}
+
+async function seedSet(
+  token: string,
+  cards: { paragraph?: string; answers: { startOffset: number; endOffset: number }[] }[],
+): Promise<string> {
+  const setRes = await request(app)
+    .post('/api/sets')
+    .set('Authorization', auth(token))
+    .send({ title: 'Computer Architecture' })
+
+  expect(setRes.status).toBe(201)
+  const setId = (setRes.body as { set: { id: string } }).set.id
+
+  for (const card of cards) {
+    const res = await request(app)
+      .post(`/api/sets/${setId}/cards`)
+      .set('Authorization', auth(token))
+      .send({ paragraph: card.paragraph ?? PARAGRAPH, answers: card.answers })
+
+    expect(res.status).toBe(201)
+  }
+
+  return setId
+}
+
+async function startSession(
+  token: string,
+  arg?: string | Record<string, unknown>,
+): Promise<SessionBody> {
+  const body = typeof arg === 'string' ? { studySetId: arg } : (arg ?? {})
+  const res = await request(app)
+    .post('/api/study/sessions')
+    .set('Authorization', auth(token))
+    .send(body)
+
+  expect(res.status).toBe(200)
+  return (res.body as { session: SessionBody }).session
+}
+
+async function complete(token: string, sessionId: string): Promise<SessionSummary> {
+  const res = await request(app)
+    .post(`/api/study/sessions/${sessionId}/complete`)
+    .set('Authorization', auth(token))
+  expect(res.status).toBe(200)
+  return (res.body as { summary: SessionSummary }).summary
 }
 
 let keyCounter = 0
@@ -308,9 +356,9 @@ describe('session lifecycle', () => {
       .post(`/api/study/sessions/${session.id}/complete`)
       .set('Authorization', auth(token))
 
-    const summary = res.body as { summary: { toRevisit: { title: string }[] } }
+    const summary = res.body as { summary: { toRevisit: { label: string }[] } }
     expect(summary.summary.toRevisit).toHaveLength(1)
-    expect(summary.summary.toRevisit[0]?.title).toBe('CPU basics')
+    expect(summary.summary.toRevisit[0]?.label).toContain('CPU is the brain')
   })
 
   it('completes twice without erroring', async () => {
@@ -442,5 +490,96 @@ describe('GET /api/study/due', () => {
   it('requires authentication', async () => {
     const res = await request(app).get('/api/study/due')
     expect(res.status).toBe(401)
+  })
+})
+
+describe('mode-specific grading', () => {
+  it('does not requeue a card left blank in sequential mode', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ answers: [CPU] }, { answers: [CPU] }])
+    const session = await startSession(token, { studySetId: setId, mode: 'sequential' })
+    const card = session.queue[0]!
+
+    const res = await answer(token, session.id, card.cardId, [{ ordinal: 0, submitted: '' }])
+
+    expect((res.body as AnswerBody).requeued).toBe(false)
+  })
+
+  it('still requeues a wrong answer in sequential mode', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ answers: [CPU] }, { answers: [CPU] }])
+    const session = await startSession(token, { studySetId: setId, mode: 'sequential' })
+
+    const res = await answer(token, session.id, session.queue[0]!.cardId, [
+      { ordinal: 0, submitted: 'definitely wrong' },
+    ])
+
+    expect((res.body as AnswerBody).requeued).toBe(true)
+  })
+
+  it('lists a blank card as unanswered in the summary', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ answers: [CPU] }])
+    const session = await startSession(token, { studySetId: setId, mode: 'sequential' })
+
+    await answer(token, session.id, session.queue[0]!.cardId, [{ ordinal: 0, submitted: '' }])
+
+    const summary = await complete(token, session.id)
+
+    expect(summary.unanswered).toHaveLength(1)
+    expect(summary.unanswered[0].cardId).toBe(session.queue[0]!.cardId)
+  })
+
+  it('does not list a wrong-but-attempted card as unanswered', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ answers: [CPU] }])
+    const session = await startSession(token, { studySetId: setId, mode: 'sequential' })
+
+    // Two attempts: the requeue means one submission does not finish the card.
+    for (const key of ['wrong-a', 'wrong-b']) {
+      await answer(
+        token,
+        session.id,
+        session.queue[0]!.cardId,
+        [{ ordinal: 0, submitted: 'nonsense' }],
+        { idempotencyKey: `${key}-summary-01` },
+      )
+    }
+
+    const summary = await complete(token, session.id)
+
+    expect(summary.unanswered).toHaveLength(0)
+  })
+
+  it('records no review for a retake answer', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ answers: [CPU] }])
+    const first = await startSession(token, { studySetId: setId, mode: 'sequential' })
+
+    await answer(token, first.id, first.queue[0]!.cardId, [{ ordinal: 0, submitted: '' }])
+    await complete(token, first.id)
+
+    const retake = await startSession(token, { retakeOf: first.id })
+    await answer(token, retake.id, retake.queue[0]!.cardId, [{ ordinal: 0, submitted: 'CPU' }])
+    const summary = await complete(token, retake.id)
+
+    // A retake is practice-only: no review is recorded, so the session
+    // still reports unanswered: [] and the daily count is unchanged.
+    expect(summary.unanswered).toHaveLength(0)
+  })
+
+  it('offers no second retake', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ answers: [CPU] }])
+    const first = await startSession(token, { studySetId: setId, mode: 'sequential' })
+
+    await answer(token, first.id, first.queue[0]!.cardId, [{ ordinal: 0, submitted: '' }])
+    await complete(token, first.id)
+
+    const retake = await startSession(token, { retakeOf: first.id })
+    await answer(token, retake.id, retake.queue[0]!.cardId, [{ ordinal: 0, submitted: '' }])
+    const summary = await complete(token, retake.id)
+
+    expect(summary.unanswered).toHaveLength(0)
   })
 })

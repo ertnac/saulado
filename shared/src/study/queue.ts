@@ -84,7 +84,42 @@ export function interleaveNew<T>(
   return queue
 }
 
+/** Returns a float in `[0, 1)`. Injectable so a test can pin the order. */
+export type Rng = () => number
+
 /**
+ * Fisher-Yates, on a copy.
+ *
+ * Two reasons the shuffle is a real algorithm rather than a sort on a random
+ * key: an unbiased shuffle is one pass instead of a comparator that is asked to
+ * be inconsistent (which `Array.sort` is entitled to turn into any permutation,
+ * including a barely-shuffled one), and `rng` being a parameter is what lets the
+ * tests assert a specific order instead of asserting "not the input order" and
+ * flaking one run in `n!`.
+ *
+ * Randomising a queue does not make a resumed session reorder: the built queue
+ * is written to `study_session_cards.position` at session start, and every later
+ * read comes back from those rows rather than from a rebuild.
+ */
+export function shuffle<T>(items: readonly T[], rng: Rng = Math.random): T[] {
+  const result = [...items]
+
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1))
+    const a = result[i]
+    const b = result[j]
+    // Indices are in range by construction; the guard is for `noUncheckedIndexedAccess`.
+    if (a !== undefined && b !== undefined) {
+      result[i] = b
+      result[j] = a
+    }
+  }
+
+  return result
+}
+
+/**
+```,StartLine:84,TargetContent:
  * Where a card graded `again` goes back into the queue.
  *
  * Not the front — re-showing a card the user just failed tests short-term

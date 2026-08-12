@@ -33,7 +33,15 @@ studyRouter.post(
   validateBody(startSessionSchema),
   asyncHandler(async (req: Request, res: Response) => {
     const body = req.body as StartSessionBody
-    const session = await startSession(requireUserId(req), body.studySetId, new Date())
+    const session = await startSession(
+      requireUserId(req),
+      {
+        studySetId: body.studySetId,
+        mode: body.mode ?? 'spaced',
+        retakeOf: body.retakeOf,
+      },
+      new Date(),
+    )
 
     // 200, not 201. Starting a session is idempotent per open session — an
     // existing one is returned rather than duplicated — so "created" would be a

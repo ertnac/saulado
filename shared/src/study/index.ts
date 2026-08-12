@@ -6,9 +6,11 @@ export type {
   DueCountsResponse,
   SessionCard,
   SessionCardRef,
+  SessionMode,
   SessionProgress,
   SessionResponse,
   SessionSummary,
+  StartableMode,
   StartSessionRequest,
   StudySession,
   SubmitAnswerRequest,
@@ -39,7 +41,7 @@ export {
 
 export { countBlanks, fixedBlankWidth, MIN_BLANK_WIDTH, toSessionSegments } from './session-card.js'
 
-export type { QueueEntry } from './queue.js'
+export type { QueueEntry, Rng } from './queue.js'
 export {
   compareDue,
   interleaveNew,
@@ -48,4 +50,5 @@ export {
   REQUEUE_GAP,
   requeuePosition,
   shouldRequeue,
+  shuffle,
 } from './queue.js'

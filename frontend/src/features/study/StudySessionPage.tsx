@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import type { SessionSummary, SubmitAnswerRequest } from '@saulado/shared'
+import type { SessionSummary, SubmitAnswerRequest, StartableMode } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -9,6 +9,7 @@ import { ApiError } from '@/services/api'
 import { FeedbackPanel } from './FeedbackPanel'
 import { SessionSummaryView } from './SessionSummaryView'
 import { StudyCardView } from './StudyCardView'
+import { ModePicker } from './ModePicker'
 import { forgetSession, readResumableSession, rememberSession } from './resume'
 import { useCompleteSession, useSession, useStartSession, useSubmitAnswer } from './queries'
 import { useStudySession } from './useStudySession'
@@ -42,8 +43,9 @@ function useCardTimer(cardId: string | undefined): () => number | null {
 }
 
 export function StudySessionPage(): ReactElement {
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const studySetId = params.get('set')
+  const modeParam = params.get('mode') as StartableMode | null
 
   const session = useStudySession()
   const start = useStartSession()
@@ -56,41 +58,38 @@ export function StudySessionPage(): ReactElement {
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<Error | null>(null)
 
+  const [mode, setMode] = useState<StartableMode>(modeParam ?? 'spaced')
+  const [picking, setPicking] = useState(
+    studySetId !== null && modeParam === null && resumeId === null,
+  )
+
   const resumed = useSession(sessionId === null ? resumeId : null)
   const elapsed = useCardTimer(session.card?.cardId)
   const started = useRef(false)
 
   /**
    * Start a session and adopt it.
-   *
-   * `mutateAsync` with local state, rather than `mutate` with callbacks and
-   * `start.isPending` / `start.error`, because a `useMutation` result is not
-   * trustworthy for a mutation fired from a mount effect.
-   *
-   * `main.tsx` wraps the app in `StrictMode`, so in development every component
-   * mounts, unmounts and remounts. query-core's `MutationObserver` detaches
-   * itself from the in-flight mutation when its subscription is torn down — it
-   * has an `onUnsubscribe` that calls `removeObserver` and no `onSubscribe` to
-   * undo it — and the mutation only dispatches to attached observers. So the
-   * remounted page holds an observer wired to nothing: `onSuccess` never fires,
-   * `data` never lands, and the status is stuck on `pending` for good. A session
-   * created on the server, and a screen waiting for a card that cannot come.
-   *
-   * The promise `mutateAsync` returns belongs to the mutation rather than the
-   * observer, so it settles regardless. `useStartSession`'s own `onSuccess` is
-   * mutation-level too, so seeding the query cache still happens.
    */
-  const begin = (): void => {
+  const begin = (chosenMode?: StartableMode, retakeOf?: string): void => {
     started.current = true
     setStartError(null)
     setStarting(true)
 
+    const activeMode = chosenMode ?? mode
+    const body = retakeOf
+      ? { retakeOf }
+      : {
+          studySetId: studySetId ?? undefined,
+          ...(activeMode !== 'spaced' ? { mode: activeMode } : {}),
+        }
+
     start
-      .mutateAsync(studySetId ?? undefined)
+      .mutateAsync(body)
       .then((data) => {
         setSessionId(data.session.id)
         rememberSession(data.session.id)
         session.load(data.session)
+        setPicking(false)
       })
       .catch((error: unknown) => {
         setStartError(error instanceof Error ? error : new Error('Could not start this session.'))
@@ -102,16 +101,18 @@ export function StudySessionPage(): ReactElement {
 
   useEffect(() => {
     /**
-     * One start per mount, guarded by a ref rather than a dependency list.
-     *
-     * StrictMode double-invokes effects in development, and this one has a side
-     * effect on the server — an unguarded version would create two sessions and
-     * abandon the first, which is exactly the state `startSession` exists to
-     * avoid. Skipped entirely when there is a session id to resume.
+     * Auto-start session if:
+     * - Resuming a session (resumeId is handled by the other effect)
+     * - Studying all sets (no studySetId) -> starts spaced rep
+     * - A mode query parameter is explicitly provided
      */
     if (started.current || resumeId !== null) return
 
-    begin()
+    if (studySetId === null) {
+      begin('spaced')
+    } else if (modeParam !== null) {
+      begin(modeParam)
+    }
   })
 
   useEffect(() => {
@@ -132,7 +133,12 @@ export function StudySessionPage(): ReactElement {
     if (!resumed.isError || started.current) return
     forgetSession()
 
-    begin()
+    // Resuming failed, if we have a set and no mode we show the picker, otherwise start spaced rep
+    if (studySetId && modeParam === null) {
+      setPicking(true)
+    } else {
+      begin(modeParam ?? 'spaced')
+    }
   })
 
   const finish = (id: string): void => {
@@ -229,8 +235,37 @@ export function StudySessionPage(): ReactElement {
         onStudyAgain={() => {
           setSummary(null)
           setSessionId(null)
-          begin()
+          if (studySetId) {
+            setPicking(true)
+          } else {
+            begin(mode)
+          }
         }}
+        onRetake={() => {
+          setSummary(null)
+          setSessionId(null)
+          begin(undefined, summary.sessionId)
+        }}
+      />
+    )
+  }
+
+  if (picking) {
+    return (
+      <ModePicker
+        selected={mode}
+        onChange={setMode}
+        onStart={() => {
+          setParams(
+            (prev) => {
+              prev.set('mode', mode)
+              return prev
+            },
+            { replace: true },
+          )
+          begin(mode)
+        }}
+        pending={starting}
       />
     )
   }

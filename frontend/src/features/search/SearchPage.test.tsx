@@ -28,7 +28,7 @@ const cards = vi.mocked(cardsApi)
 function hit(overrides: Partial<SearchHit> = {}): SearchHit {
   return {
     cardId: 'card-1',
-    title: 'The CPU',
+    label: 'The CPU',
     studySetId: 'set-1',
     setTitle: 'Hardware',
     setArchived: false,

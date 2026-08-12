@@ -2,6 +2,7 @@ import type {
   AnswerResponse,
   DueCountsResponse,
   SessionResponse,
+  StartSessionRequest,
   SubmitAnswerRequest,
   SummaryResponse,
 } from '@saulado/shared'
@@ -85,11 +86,11 @@ export function useSession(sessionId: string | null): UseQueryResult<SessionResp
  * `study_sessions` row), and it must fire when the user says "Study", never
  * because a component mounted twice.
  */
-export function useStartSession(): UseMutationResult<SessionResponse, Error, string | undefined> {
+export function useStartSession(): UseMutationResult<SessionResponse, Error, StartSessionRequest> {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (studySetId: string | undefined) => api.startSession(studySetId),
+    mutationFn: (body: StartSessionRequest) => api.startSession(body),
     onSuccess: (data) => {
       // Seeded rather than invalidated: this response *is* the session, so a
       // refetch would ask the server for what we are already holding.

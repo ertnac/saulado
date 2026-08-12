@@ -25,7 +25,7 @@ const mocked = vi.mocked(api)
 function hit(overrides: Partial<SearchHit> = {}): SearchHit {
   return {
     cardId: 'card-1',
-    title: 'The CPU',
+    label: 'The CPU',
     studySetId: 'set-1',
     setTitle: 'Hardware',
     setArchived: false,
@@ -100,7 +100,7 @@ describe('CommandPalette', () => {
   })
 
   it('moves the highlight with the arrows while focus stays in the input', async () => {
-    mocked.search.mockResolvedValue(response([hit(), hit({ cardId: 'card-2', title: 'The GPU' })]))
+    mocked.search.mockResolvedValue(response([hit(), hit({ cardId: 'card-2', label: 'The GPU' })]))
     renderPalette()
 
     const input = screen.getByRole('combobox')
@@ -118,7 +118,7 @@ describe('CommandPalette', () => {
   })
 
   it('wraps from the first row to the last on ArrowUp', async () => {
-    mocked.search.mockResolvedValue(response([hit(), hit({ cardId: 'card-2', title: 'The GPU' })]))
+    mocked.search.mockResolvedValue(response([hit(), hit({ cardId: 'card-2', label: 'The GPU' })]))
     renderPalette()
 
     await userEvent.type(screen.getByRole('combobox'), 'pu')

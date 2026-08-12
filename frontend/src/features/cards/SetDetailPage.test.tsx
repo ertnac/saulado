@@ -87,6 +87,7 @@ beforeEach(() => {
   mockedStudy.getDueCounts.mockResolvedValue({
     counts: [{ studySetId: 'set-1', due: 3, newCards: 1 }],
     totalDue: 3,
+    totalNew: 1,
     scheduledCards: 8,
   })
 })
@@ -235,7 +236,12 @@ describe('the study affordance', () => {
   it('disables rather than hides the button when nothing is due', async () => {
     // Unlike the library badge: the user came to this page *to* study this set,
     // and a button that vanishes leaves them with no way in and no explanation.
-    mockedStudy.getDueCounts.mockResolvedValue({ counts: [], totalDue: 0, scheduledCards: 0 })
+    mockedStudy.getDueCounts.mockResolvedValue({
+      counts: [],
+      totalDue: 0,
+      totalNew: 0,
+      scheduledCards: 0,
+    })
     render(renderPage())
 
     const button = await screen.findByRole('button', { name: 'Study' })

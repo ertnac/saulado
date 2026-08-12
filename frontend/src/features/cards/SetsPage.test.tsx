@@ -29,12 +29,14 @@ function set(overrides: Partial<StudySet> = {}): StudySet {
   return {
     id: 'set-1',
     title: 'Hardware',
-    description: 'Computer basics',
+    parentId: null,
     color: 'blue',
     archivedAt: null,
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
     cardCount: 2,
+    subtreeCardCount: 2,
+    childCount: 0,
     ...overrides,
   }
 }
@@ -60,7 +62,12 @@ function renderPage(): ReactElement {
 beforeEach(() => {
   vi.resetAllMocks()
   mocked.listSets.mockResolvedValue(page([]))
-  mockedStudy.getDueCounts.mockResolvedValue({ counts: [], totalDue: 0, scheduledCards: 0 })
+  mockedStudy.getDueCounts.mockResolvedValue({
+    counts: [],
+    totalDue: 0,
+    totalNew: 0,
+    scheduledCards: 0,
+  })
 })
 
 describe('the list', () => {
@@ -182,6 +189,7 @@ describe('the study affordance', () => {
     mockedStudy.getDueCounts.mockResolvedValue({
       counts: [{ studySetId: 'set-1', due: 4, newCards: 2 }],
       totalDue: 4,
+      totalNew: 2,
       scheduledCards: 8,
     })
     render(renderPage())
@@ -201,6 +209,7 @@ describe('the study affordance', () => {
     mockedStudy.getDueCounts.mockResolvedValue({
       counts: [{ studySetId: 'set-1', due: 0, newCards: 5 }],
       totalDue: 0,
+      totalNew: 5,
       scheduledCards: 8,
     })
     render(renderPage())
@@ -226,6 +235,7 @@ describe('the study affordance', () => {
     mockedStudy.getDueCounts.mockResolvedValue({
       counts: [{ studySetId: 'set-1', due: 4, newCards: 0 }],
       totalDue: 4,
+      totalNew: 0,
       scheduledCards: 8,
     })
     render(renderPage())

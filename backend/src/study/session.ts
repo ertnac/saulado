@@ -1,9 +1,24 @@
-import type { DayKey, SessionSummary, StudySession, UserSettings } from '@saulado/shared'
+import type {
+  DayKey,
+  SessionSummary,
+  StudySession,
+  UserSettings,
+  SessionMode,
+  StartableMode,
+} from '@saulado/shared'
 import { cardLabel, codeToGrade, dayKeyToDate } from '@saulado/shared'
 import { prisma } from '../db/client.js'
 import { ApiError } from '../http/errors.js'
 import { subtreeIds } from '../routes/set-tree.js'
-import { SpacedRepetitionSource, type CandidateCard } from './card-source.js'
+import {
+  SpacedRepetitionSource,
+  RetakeSource,
+  SequentialSource,
+  ShuffledSource,
+  type CardSource,
+  type CandidateCard,
+} from './card-source.js'
+import { loadRetakePool, loadSetPool } from './pool.js'
 import { readProgress } from './grading.js'
 import { loadSessionCards } from './render.js'
 import { loadSettings, todayFor } from './settings.js'
@@ -26,15 +41,38 @@ import { loadSettings, todayFor } from './settings.js'
  * the "resume where you left off" affordance would have to guess which one the
  * user meant.
  */
+export interface StartSessionOptions {
+  studySetId?: string
+  mode: StartableMode
+  retakeOf?: string
+}
+
 export async function startSession(
   userId: string,
-  studySetId: string | undefined,
+  options: StartSessionOptions,
   now: Date,
 ): Promise<StudySession> {
   const settings = await loadSettings(userId)
+  const mode: SessionMode = options.retakeOf ? 'retake' : options.mode
+
+  /**
+   * A retake resolves its pool and its set before anything else.
+   *
+   * The set has to come from the session being retaken rather than from the
+   * request: the retake prompt is offered from a summary screen that may have
+   * been left open across a navigation, and taking the set from the prior
+   * session is the only reading that cannot disagree with the cards.
+   */
+  const retake = options.retakeOf ? await loadRetakePool(userId, options.retakeOf) : null
+
+  if (retake && retake.cardIds.length === 0) {
+    throw new ApiError('VALIDATION_ERROR', 'Nothing was left blank in that session.')
+  }
+
+  const studySetId = retake ? (retake.studySetId ?? undefined) : options.studySetId
 
   const existing = await prisma.studySession.findFirst({
-    where: { userId, completedAt: null, studySetId: studySetId ?? null },
+    where: { userId, completedAt: null, studySetId: studySetId ?? null, mode },
     orderBy: { startedAt: 'desc' },
     select: { id: true },
   })
@@ -42,21 +80,8 @@ export async function startSession(
   if (existing) {
     const resumed = await getSession(userId, existing.id)
 
-    /**
-     * An open session with an empty queue is *spent*, not resumable.
-     *
-     * The client completes a session when its queue empties, but nothing
-     * guarantees that call happens: answer the last card and then reload, close
-     * the tab, or lose connectivity, and the row stays `completedAt: null` with
-     * every card answered. Returning it verbatim hands the caller a session with
-     * no cards in it — and because that is a 200 rather than an error, the study
-     * screen cannot tell it apart from a queue still loading. It waits forever,
-     * on this visit and on every later one, since the same dead row keeps
-     * winning this lookup.
-     *
-     * Closing it here makes the state self-healing: the user gets a real session
-     * built from what is actually due, or the honest "nothing due" below.
-     */
+    // (docblock unchanged — an open session with an empty queue is spent, not
+    // resumable. See the original comment, which stays exactly as it is.)
     if (resumed.queue.length > 0) return resumed
 
     await prisma.studySession.update({
@@ -73,28 +98,23 @@ export async function startSession(
     if (!set) throw new ApiError('NOT_FOUND', 'That study set could not be found.')
   }
 
-  const today = todayFor(settings, now)
-  const { due, fresh } = await loadCandidates(userId, studySetId, today)
-  const reviewsToday = await countReviewsToday(userId, today)
-
-  const source = new SpacedRepetitionSource({
-    due,
-    fresh,
-    newCardsPerDay: settings.newCardsPerDay,
-    dailyCap: dailyCapFor(settings),
-    reviewsToday,
-  })
-
+  const source = await buildSource(userId, { ...options, mode, studySetId }, retake, settings, now)
   const slots = source.build()
 
   if (slots.length === 0) {
-    throw new ApiError('VALIDATION_ERROR', 'Nothing is due right now. Come back later.')
+    throw new ApiError(
+      'VALIDATION_ERROR',
+      mode === 'spaced'
+        ? 'Nothing is due right now. Come back later.'
+        : 'This set has no cards to study yet.',
+    )
   }
 
   const session = await prisma.studySession.create({
     data: {
       userId,
       studySetId: studySetId ?? null,
+      mode,
       startedAt: now,
       cards: {
         create: slots.map((slot) => ({
@@ -108,6 +128,46 @@ export async function startSession(
   })
 
   return getSession(userId, session.id)
+}
+
+/**
+ * Picks the source for a mode.
+ *
+ * A switch here rather than in the route, so the route stays what it is today:
+ * resolve the caller, read the clock, hand off. Only `spaced` consults the
+ * scheduler — the two drill modes deliberately skip the daily cap and the
+ * new-card interleave, because a user who asked to study a set asked for the
+ * set, not for the scheduler's opinion of it.
+ */
+async function buildSource(
+  userId: string,
+  options: Omit<StartSessionOptions, 'mode'> & { mode: SessionMode },
+  retake: { cardIds: string[] } | null,
+  settings: UserSettings,
+  now: Date,
+): Promise<CardSource> {
+  if (options.mode === 'retake') {
+    return new RetakeSource({ cards: retake?.cardIds ?? [] })
+  }
+
+  if (options.mode === 'sequential' || options.mode === 'shuffled') {
+    // The schema guarantees a set id for these two modes.
+    const cards = await loadSetPool(userId, options.studySetId ?? '')
+    return options.mode === 'sequential'
+      ? new SequentialSource({ cards })
+      : new ShuffledSource({ cards })
+  }
+
+  const today = todayFor(settings, now)
+  const { due, fresh } = await loadCandidates(userId, options.studySetId, today)
+
+  return new SpacedRepetitionSource({
+    due,
+    fresh,
+    newCardsPerDay: settings.newCardsPerDay,
+    dailyCap: dailyCapFor(settings),
+    reviewsToday: await countReviewsToday(userId, today),
+  })
 }
 
 /**
@@ -215,6 +275,7 @@ export async function getSession(userId: string, sessionId: string): Promise<Stu
     select: {
       id: true,
       studySetId: true,
+      mode: true,
       startedAt: true,
       completedAt: true,
       cards: {
@@ -235,6 +296,7 @@ export async function getSession(userId: string, sessionId: string): Promise<Stu
   return {
     id: session.id,
     studySetId: session.studySetId,
+    mode: session.mode,
     startedAt: session.startedAt.toISOString(),
     completedAt: session.completedAt?.toISOString() ?? null,
     queue,
@@ -283,6 +345,7 @@ async function buildSummary(
     where: { id: sessionId, userId },
     select: {
       id: true,
+      mode: true,
       startedAt: true,
       completedAt: true,
       cards: {
@@ -297,6 +360,7 @@ async function buildSummary(
           cardId: true,
           grade: true,
           correct: true,
+          hadEmptyBlank: true,
           card: { select: { paragraph: true, studySetId: true } },
         },
       },
@@ -333,6 +397,26 @@ async function buildSummary(
         studySetId: card.card.studySetId,
         label: cardLabel(card.card.paragraph),
       })),
+    mode: session.mode,
+    /**
+     * Cards left blank, offered back as a retake.
+     *
+     * Filtered from the rows already in hand rather than queried again — the
+     * summary has every answered card of the session loaded for `toRevisit`.
+     *
+     * A retake session reports none: nothing it does is recorded, so a second
+     * retake would be a pass over a pass, and the offer would never stop.
+     */
+    unanswered:
+      session.mode === 'retake'
+        ? []
+        : session.cards
+            .filter((card) => card.hadEmptyBlank)
+            .map((card) => ({
+              cardId: card.cardId,
+              studySetId: card.card.studySetId,
+              label: cardLabel(card.card.paragraph),
+            })),
     reviewsToday: stats?.reviewsCount ?? 0,
     dailyGoal: settings.dailyGoal,
     goalMet: stats?.goalMet ?? false,

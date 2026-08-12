@@ -47,7 +47,6 @@ describe('POST /api/sets', () => {
     expect(res.body).toMatchObject({
       set: {
         title: 'Cell Biology',
-        description: null,
         color: 'slate',
         archivedAt: null,
         cardCount: 0,
@@ -55,11 +54,11 @@ describe('POST /api/sets', () => {
     })
   })
 
-  it('accepts a description and colour', async () => {
+  it('accepts a colour', async () => {
     const { token } = await registerTestUser(app)
-    const set = await createSet(token, { description: 'Cortex and brainstem', color: 'violet' })
+    const set = await createSet(token, { color: 'violet' })
 
-    expect(set).toMatchObject({ description: 'Cortex and brainstem', color: 'violet' })
+    expect(set).toMatchObject({ color: 'violet' })
   })
 
   it('rejects an empty title', async () => {
@@ -126,7 +125,7 @@ describe('GET /api/sets/:id', () => {
 describe('PATCH /api/sets/:id', () => {
   it('updates individual fields', async () => {
     const { token } = await registerTestUser(app)
-    const set = await createSet(token, { description: 'first' })
+    const set = await createSet(token)
 
     const res = await request(app)
       .patch(`/api/sets/${set.id}`)
@@ -136,25 +135,8 @@ describe('PATCH /api/sets/:id', () => {
     expect(res.status).toBe(200)
     expect(res.body).toMatchObject({
       // Untouched fields survive a partial update.
-      set: { title: 'Renamed', color: 'teal', description: 'first' },
+      set: { title: 'Renamed', color: 'teal' },
     })
-  })
-
-  /**
-   * The `'description' in body` check rather than a truthiness test: without it a
-   * description could never be removed once written.
-   */
-  it('clears a description when sent explicitly as null', async () => {
-    const { token } = await registerTestUser(app)
-    const set = await createSet(token, { description: 'to be removed' })
-
-    const res = await request(app)
-      .patch(`/api/sets/${set.id}`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({ description: null })
-
-    expect(res.status).toBe(200)
-    expect((res.body as { set: { description: string | null } }).set.description).toBeNull()
   })
 
   it('archives and restores', async () => {

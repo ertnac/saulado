@@ -39,7 +39,6 @@ function card(overrides: Partial<SessionCard> = {}): SessionCard {
   return {
     cardId: 'card-1',
     studySetId: 'set-1',
-    title: 'The CPU',
     // "The ____ is the brain of the computer" — the answer is never in segments.
     segments: [
       { kind: 'text', text: 'The ' },
@@ -58,6 +57,7 @@ function session(overrides: Partial<StudySession> = {}): StudySession {
   return {
     id: 'session-1',
     studySetId: 'set-1',
+    mode: 'spaced',
     startedAt: '2026-08-08T09:00:00.000Z',
     completedAt: null,
     queue: [card()],
@@ -92,13 +92,15 @@ const SUMMARY: SummaryResponse = {
     accuracy: 1,
     durationMs: 240_000,
     toRevisit: [],
+    mode: 'spaced',
+    unanswered: [],
     reviewsToday: 1,
     dailyGoal: 20,
     goalMet: false,
   },
 }
 
-function renderPage(path = '/study?set=set-1'): ReactElement {
+function renderPage(path = '/study?set=set-1&mode=spaced'): ReactElement {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
@@ -125,14 +127,14 @@ describe('presenting a card', () => {
   it('renders the paragraph with an input where the blank is', async () => {
     render(renderPage())
 
-    expect(await screen.findByRole('heading', { name: 'The CPU' })).toBeInTheDocument()
+    expect(await screen.findByRole('textbox', { name: 'Blank 1 of 1' })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Blank 1 of 1' })).toBeInTheDocument()
     expect(screen.getByText(/is the brain of the computer/)).toBeInTheDocument()
   })
 
   it('does not put the answer anywhere in the DOM before submission', async () => {
     const { container } = render(renderPage())
-    await screen.findByRole('heading', { name: 'The CPU' })
+    await screen.findByRole('textbox', { name: 'Blank 1 of 1' })
 
     // Not `queryByText` — an answer leaked into a `value`, a `data-` attribute or
     // a hidden input would pass that and still be readable in devtools.
@@ -150,16 +152,16 @@ describe('presenting a card', () => {
 
   it('starts a session for the set in the query string', async () => {
     render(renderPage())
-    await screen.findByRole('heading', { name: 'The CPU' })
+    await screen.findByRole('textbox', { name: 'Blank 1 of 1' })
 
-    expect(mocked.startSession).toHaveBeenCalledWith('set-1')
+    expect(mocked.startSession).toHaveBeenCalledWith({ studySetId: 'set-1' })
   })
 
   it('starts an all-sets session when no set is given', async () => {
     render(renderPage('/study'))
-    await screen.findByRole('heading', { name: 'The CPU' })
+    await screen.findByRole('textbox', { name: 'Blank 1 of 1' })
 
-    expect(mocked.startSession).toHaveBeenCalledWith(undefined)
+    expect(mocked.startSession).toHaveBeenCalledWith({ studySetId: undefined })
   })
 })
 
@@ -301,7 +303,17 @@ describe('answering', () => {
 
 describe('walking the queue', () => {
   const TWO = session({
-    queue: [card(), card({ cardId: 'card-2', title: 'The GPU' })],
+    queue: [
+      card(),
+      card({
+        cardId: 'card-2',
+        segments: [
+          { kind: 'text', text: 'The GPU ' },
+          { kind: 'blank', ordinal: 0, answerLength: 5 },
+          { kind: 'text', text: ' is graphic' },
+        ],
+      }),
+    ],
     progress: { answered: 0, total: 2, correct: 0 },
   })
 
@@ -317,7 +329,7 @@ describe('walking the queue', () => {
     await user.click(screen.getByRole('button', { name: 'Check answer' }))
     await user.click(await screen.findByRole('button', { name: 'Next card' }))
 
-    expect(await screen.findByRole('heading', { name: 'The GPU' })).toBeInTheDocument()
+    expect(await screen.findByText(/is graphic/)).toBeInTheDocument()
     // A refetch here would swap the queue under the user mid-session.
     expect(mocked.getSession).not.toHaveBeenCalled()
   })
@@ -333,7 +345,7 @@ describe('walking the queue', () => {
     await user.type(await screen.findByRole('textbox', { name: 'Blank 1 of 1' }), 'CPU')
     await user.click(screen.getByRole('button', { name: 'Check answer' }))
     await user.click(await screen.findByRole('button', { name: 'Next card' }))
-    await screen.findByRole('heading', { name: 'The GPU' })
+    await screen.findByText(/is graphic/)
 
     expect(screen.getByRole('textbox', { name: 'Blank 1 of 1' })).toHaveValue('')
   })
@@ -349,7 +361,7 @@ describe('walking the queue', () => {
     await user.type(await screen.findByRole('textbox', { name: 'Blank 1 of 1' }), 'CPU')
     await user.click(screen.getByRole('button', { name: 'Check answer' }))
     await user.click(await screen.findByRole('button', { name: 'Next card' }))
-    await screen.findByRole('heading', { name: 'The GPU' })
+    await screen.findByText(/is graphic/)
     await user.type(screen.getByRole('textbox', { name: 'Blank 1 of 1' }), 'GPU')
     await user.click(screen.getByRole('button', { name: 'Check answer' }))
 
@@ -383,7 +395,7 @@ describe('walking the queue', () => {
     expect(screen.getByText(/Coming back later in this session/)).toBeInTheDocument()
 
     await user.click(next)
-    expect(await screen.findByRole('heading', { name: 'The CPU' })).toBeInTheDocument()
+    expect(await screen.findByRole('textbox', { name: 'Blank 1 of 1' })).toBeInTheDocument()
     expect(mocked.completeSession).not.toHaveBeenCalled()
   })
 
@@ -405,7 +417,7 @@ describe('walking the queue', () => {
     const user = userEvent.setup()
 
     render(renderPage())
-    await screen.findByRole('heading', { name: 'The CPU' })
+    await screen.findByRole('textbox', { name: 'Blank 1 of 1' })
     await user.click(screen.getByRole('button', { name: 'End session' }))
 
     expect(await screen.findByRole('heading', { name: 'Session complete' })).toBeInTheDocument()
@@ -425,7 +437,7 @@ describe('interruption recovery', () => {
 
     render(renderPage())
 
-    expect(await screen.findByRole('heading', { name: 'The CPU' })).toBeInTheDocument()
+    expect(await screen.findByRole('textbox', { name: 'Blank 1 of 1' })).toBeInTheDocument()
     expect(mocked.getSession).toHaveBeenCalledWith('session-9')
     expect(mocked.startSession).not.toHaveBeenCalled()
     // Progress comes back with it — a client-held counter would have died.
@@ -441,7 +453,7 @@ describe('interruption recovery', () => {
 
     render(renderPage())
 
-    expect(await screen.findByRole('heading', { name: 'The CPU' })).toBeInTheDocument()
+    expect(await screen.findByRole('textbox', { name: 'Blank 1 of 1' })).toBeInTheDocument()
     expect(mocked.startSession).toHaveBeenCalled()
     expect(localStorage.getItem('saulado-study-session')).toContain('session-1')
   })
@@ -453,7 +465,7 @@ describe('interruption recovery', () => {
     )
 
     render(renderPage())
-    await screen.findByRole('heading', { name: 'The CPU' })
+    await screen.findByRole('textbox', { name: 'Blank 1 of 1' })
 
     expect(mocked.getSession).not.toHaveBeenCalled()
     expect(mocked.startSession).toHaveBeenCalled()
@@ -516,7 +528,7 @@ describe('under StrictMode, as the app actually runs', () => {
   it('loads the queue even though StrictMode remounts the page', async () => {
     render(<StrictMode>{renderPage()}</StrictMode>)
 
-    expect(await screen.findByRole('heading', { name: 'The CPU' })).toBeInTheDocument()
+    expect(await screen.findByRole('textbox', { name: 'Blank 1 of 1' })).toBeInTheDocument()
     // And only one session was created, which is what the guard is for.
     expect(mocked.startSession).toHaveBeenCalledTimes(1)
   })
@@ -571,6 +583,98 @@ describe('a session that arrives with nothing in it', () => {
     await screen.findByText('This session is finished')
     await userEvent.click(screen.getByRole('button', { name: 'Study again' }))
 
-    expect(await screen.findByRole('heading', { name: 'The CPU' })).toBeInTheDocument()
+    expect(await screen.findByRole('textbox', { name: 'Blank 1 of 1' })).toBeInTheDocument()
+  })
+})
+
+describe('study modes selector', () => {
+  it('renders a selector for spaced, sequential, and shuffled modes when studySetId is present', async () => {
+    mocked.startSession.mockResolvedValue({ session: session() })
+    render(renderPage('/study?set=set-1'))
+
+    // It should render the selector option buttons
+    expect(await screen.findByRole('button', { name: /Spaced Repetition/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Sequential/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Shuffled/i })).toBeInTheDocument()
+  })
+
+  it('hides the selector and starts spaced directly when no studySetId is present', async () => {
+    mocked.startSession.mockResolvedValue({ session: session() })
+    render(renderPage('/study')) // no ?set= query param
+
+    // Should bypass selector and render the card view directly
+    expect(await screen.findByRole('textbox', { name: 'Blank 1 of 1' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Sequential/i })).not.toBeInTheDocument()
+  })
+
+  it('starts sequential mode when selected and clicking study', async () => {
+    const user = userEvent.setup()
+    mocked.startSession.mockResolvedValue({ session: session({ mode: 'sequential' }) })
+
+    render(renderPage('/study?set=set-1'))
+
+    const sequentialBtn = await screen.findByRole('button', { name: /Sequential/i })
+    await user.click(sequentialBtn)
+    await user.click(screen.getByRole('button', { name: 'Start session' }))
+
+    expect(mocked.startSession).toHaveBeenCalledWith({ studySetId: 'set-1', mode: 'sequential' })
+    expect(await screen.findByRole('textbox', { name: 'Blank 1 of 1' })).toBeInTheDocument()
+  })
+
+  it('offers a retake session when the summary has unanswered cards', async () => {
+    const user = userEvent.setup()
+
+    // 1. First session ends with unanswered cards
+    const summaryWithUnanswered: SummaryResponse = {
+      summary: {
+        sessionId: 'session-1',
+        startedAt: '2026-08-08T09:00:00.000Z',
+        completedAt: '2026-08-08T09:04:00.000Z',
+        cardsSeen: 1,
+        correctCards: 0,
+        accuracy: 0,
+        durationMs: 240_000,
+        toRevisit: [],
+        mode: 'spaced',
+        unanswered: [{ cardId: 'card-1', studySetId: 'set-1', label: 'CPU basics' }],
+        reviewsToday: 1,
+        dailyGoal: 20,
+        goalMet: false,
+      },
+    }
+
+    mocked.startSession.mockResolvedValueOnce({ session: session() })
+    mocked.submitAnswer.mockResolvedValueOnce(
+      graded({
+        results: [
+          { ordinal: 0, submitted: 'wrong', correct: false, matchType: 'wrong', canonical: 'CPU' },
+        ],
+        grade: 'again',
+        correct: false,
+        intervalDays: 1,
+      }),
+    )
+    mocked.completeSession.mockResolvedValueOnce(summaryWithUnanswered)
+    // Retake session mock
+    mocked.startSession.mockResolvedValueOnce({
+      session: session({ id: 'session-2', mode: 'retake' }),
+    })
+
+    render(renderPage())
+
+    // Submit wrong answer
+    await user.type(await screen.findByRole('textbox', { name: 'Blank 1 of 1' }), 'wrong')
+    await user.click(screen.getByRole('button', { name: 'Check answer' }))
+    await user.click(await screen.findByRole('button', { name: 'Finish session' }))
+
+    // Now on summary screen, check for retake button
+    const retakeBtn = await screen.findByRole('button', { name: /Retake blanks/i })
+    expect(retakeBtn).toBeInTheDocument()
+
+    // Start retake
+    await user.click(retakeBtn)
+
+    expect(mocked.startSession).toHaveBeenCalledWith({ retakeOf: 'session-1' })
+    expect(await screen.findByRole('textbox', { name: 'Blank 1 of 1' })).toBeInTheDocument()
   })
 })

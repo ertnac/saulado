@@ -2,12 +2,18 @@ import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import type { SessionSummary, SubmitAnswerRequest } from '@saulado/shared'
+import type {
+  SessionSummary,
+  SubmitAnswerRequest,
+  StartableMode,
+  StartSessionRequest,
+} from '@saulado/shared'
 
 import { Button } from '../../components/button'
 import { FeedbackPanel } from '../../components/feedback-panel'
 import { SessionSummaryView } from '../../components/session-summary'
 import { StudyCard } from '../../components/study-card'
+import { ModePicker } from '../../components/mode-picker'
 import { AlertIcon, CheckIcon } from '../../components/icons'
 import { forgetSession, readResumableSession, rememberSession } from '../../lib/study-resume'
 import { completeSession, getSession, startSession, submitAnswer } from '../../services/study'
@@ -85,12 +91,14 @@ function Notice({
 }
 
 export default function StudyScreen(): ReactElement {
-  const { set } = useLocalSearchParams<{ set?: string }>()
+  const { set, mode: initialMode } = useLocalSearchParams<{ set?: string; mode?: StartableMode }>()
   const studySetId = set ?? null
   const router = useRouter()
 
   const session = useStudySession()
-  const start = useMutation({ mutationFn: (id: string | undefined) => startSession(id) })
+  const start = useMutation({
+    mutationFn: (body: StartSessionRequest) => startSession(body),
+  })
   const submit = useMutation({
     // No retry. A retried submission is a second review booked for a card the
     // user answered once — the idempotency key makes a *deliberate* retry safe,
@@ -115,6 +123,9 @@ export default function StudyScreen(): ReactElement {
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<Error | null>(null)
 
+  const [mode, setMode] = useState<StartableMode>(initialMode ?? 'spaced')
+  const [picking, setPicking] = useState(false)
+
   const resumed = useQuery({
     queryKey: ['study', 'session', resumeId],
     queryFn: () => getSession(resumeId ?? ''),
@@ -131,28 +142,35 @@ export default function StudyScreen(): ReactElement {
     void readResumableSession().then(setResumeId)
   }, [])
 
+  useEffect(() => {
+    if (resumeId !== undefined) {
+      setPicking(studySetId !== null && !initialMode && resumeId === null)
+    }
+  }, [resumeId, studySetId, initialMode])
+
   /**
    * Start a session and adopt it.
-   *
-   * `mutateAsync` with local state, rather than `mutate` with callbacks and
-   * `start.isPending` / `start.error`: query-core's `MutationObserver` detaches
-   * from the in-flight mutation when its subscription is torn down, so a screen
-   * that remounts while a start is in flight would hold an observer wired to
-   * nothing — a session created on the server, and a screen waiting for a card
-   * that cannot come. The promise `mutateAsync` returns belongs to the mutation
-   * rather than the observer, so it settles regardless.
    */
-  const begin = (): void => {
+  const begin = (chosenMode?: StartableMode, retakeOf?: string): void => {
     started.current = true
     setStartError(null)
     setStarting(true)
 
+    const activeMode = chosenMode ?? mode
+    const body: StartSessionRequest = retakeOf
+      ? { retakeOf }
+      : {
+          studySetId: studySetId ?? undefined,
+          ...(activeMode !== 'spaced' ? { mode: activeMode } : {}),
+        }
+
     start
-      .mutateAsync(studySetId ?? undefined)
+      .mutateAsync(body)
       .then((data) => {
         setSessionId(data.session.id)
         void rememberSession(data.session.id)
         session.load(data.session)
+        setPicking(false)
       })
       .catch((error: unknown) => {
         setStartError(error instanceof Error ? error : new Error('Could not start this session.'))
@@ -164,14 +182,18 @@ export default function StudyScreen(): ReactElement {
 
   useEffect(() => {
     /**
-     * One start per mount, guarded by a ref rather than a dependency list. This
-     * has a side effect on the server — an unguarded version would create two
-     * sessions and abandon the first. Skipped while the pointer is still being
-     * read (`undefined`) and when there is one to resume.
+     * Auto-start session if:
+     * - Resume pointer is already read and is null (no resume)
+     * - We have not started yet
+     * - Either we are studying all sets (studySetId === null) or mode query param is explicitly provided
      */
-    if (started.current || resumeId !== null) return
+    if (started.current || resumeId === undefined || resumeId !== null) return
 
-    begin()
+    if (studySetId === null) {
+      begin('spaced')
+    } else if (initialMode) {
+      begin(initialMode)
+    }
   })
 
   useEffect(() => {
@@ -192,7 +214,12 @@ export default function StudyScreen(): ReactElement {
     if (!resumed.isError || started.current) return
     void forgetSession()
 
-    begin()
+    // Resuming failed, if we have a set and no mode we show the picker, otherwise start spaced rep
+    if (studySetId && !initialMode) {
+      setPicking(true)
+    } else {
+      begin(initialMode ?? 'spaced')
+    }
   })
 
   const finish = (id: string): void => {
@@ -259,6 +286,19 @@ export default function StudyScreen(): ReactElement {
     </ScrollView>
   )
 
+  if (picking) {
+    return shell(
+      <ModePicker
+        selected={mode}
+        onChange={setMode}
+        onStart={() => {
+          begin(mode)
+        }}
+        pending={starting}
+      />,
+    )
+  }
+
   if (summary) {
     return shell(
       <SessionSummaryView
@@ -268,7 +308,16 @@ export default function StudyScreen(): ReactElement {
         onStudyAgain={() => {
           setSummary(null)
           setSessionId(null)
-          begin()
+          if (studySetId) {
+            setPicking(true)
+          } else {
+            begin(mode)
+          }
+        }}
+        onRetake={() => {
+          setSummary(null)
+          setSessionId(null)
+          begin(undefined, summary.sessionId)
         }}
       />,
     )

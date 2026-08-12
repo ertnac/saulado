@@ -11,10 +11,33 @@ import { z } from 'zod'
  * the submitted text (see `study/grading.ts`).
  */
 
-export const startSessionSchema = z.object({
-  /** Omit to study across every set. */
-  studySetId: z.string().uuid('Not a valid set id.').optional(),
-})
+export const startSessionSchema = z
+  .object({
+    /** Omit to study across every set. Required for `sequential` and `shuffled`. */
+    studySetId: z.string().uuid('Not a valid set id.').optional(),
+    /** Defaults to the scheduler's own session. */
+    mode: z.enum(['spaced', 'sequential', 'shuffled']).optional(),
+    /**
+     * Start a retake over this session's unanswered cards.
+     *
+     * `retake` is deliberately absent from `mode`: a client that could name it
+     * could start a session over any pool that records nothing, which is a free
+     * way to study without the scheduler ever hearing about it.
+     */
+    retakeOf: z.string().uuid('Not a valid session id.').optional(),
+  })
+  .refine((body) => !(body.retakeOf && body.mode), {
+    message: 'A retake takes its mode from the session it is retaking.',
+    path: ['mode'],
+  })
+  .refine(
+    (body) =>
+      body.retakeOf || body.mode === undefined || body.mode === 'spaced' || !!body.studySetId,
+    {
+      message: 'Memorization and Review need a set to study.',
+      path: ['studySetId'],
+    },
+  )
 
 const blankSubmission = z.object({
   ordinal: z.number().int('Not a valid blank.').min(0),

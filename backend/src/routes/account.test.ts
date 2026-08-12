@@ -569,7 +569,7 @@ describe('GET /api/account/export', () => {
     expect(res.headers['cache-control']).toContain('no-store')
 
     const body = res.body as DataExport
-    expect(body.formatVersion).toBe(1)
+    expect(body.formatVersion).toBe(2)
     expect(body.account.email).toBe(user.email)
     expect(body.sets).toHaveLength(1)
     expect(body.sets[0]?.cards).toHaveLength(1)

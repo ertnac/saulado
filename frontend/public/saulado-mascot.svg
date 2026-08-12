@@ -1,218 +1,128 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="128" viewBox="0 0 1024 128">
-  <title>Saulado mascot — 8-frame wave sprite sheet</title>
-  <desc>
-    Eight 128x128 frames laid out left to right, drawn from avatar.png: the
-    chibi study buddy in a cream hoodie with sage trim and an amber sparkle.
-
-    The hand stays raised in every frame and the wave is a rotation about the
-    shoulder, so any single frame is a usable still. That matters twice: frame 1
-    is what reduced-motion parks on, and it is also where the animation lands
-    when it stops. A pose that only reads mid-swing would leave the mascot
-    frozen looking broken.
-
-    The swing runs 0 to 19 degrees and back rather than symmetrically either
-    side of centre. Swinging inward would carry the hand across the face, and
-    the outward half is the half a wave is actually made of. Every frame is
-    clipped to its own 128px box so no overswing bleeds into its neighbour and
-    shows up as a stray hand.
-
-    Stepped through with background-position; see .saulado-mascot in index.css.
-  </desc>
-
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 200" width="160" height="200" role="img" aria-label="Saulado mascot — a friendly chibi study buddy">
+  <title>Saulado mascot</title>
   <defs>
-    <clipPath id="av-cell"><rect width="128" height="128" /></clipPath>
-
-    <path id="av-star" d="M0-14C1.5-5 5-1.5 14 0 5 1.5 1.5 5 0 14-1.5 5-5 1.5-14 0-5-1.5-1.5-5 0-14Z" fill="#f7b03d" stroke="#ee9a1e" stroke-width="2" />
-
-    <!-- Torso. Drawn before the head so the collar tucks under the chin.
-         Everything cream carries a warm outline: the mascot sits on the page
-         background with nothing behind it, and unoutlined cream on a light
-         theme is a silhouette that disappears. -->
-    <g id="av-body">
-      <path d="M43 62h14v23H43z" fill="#f3c6a5" />
-      <path d="M50 84c-11 0-18 4-26 10C15 100 10 111 9 128h82c-1-17-6-28-15-34-8-6-15-10-26-10Z" fill="#f5efdd" stroke="#e0d8bf" stroke-width="2.4" />
-      <path d="M36 84c3 8 25 8 28 0" fill="none" stroke="#7fa184" stroke-width="9" stroke-linecap="round" />
-      <path d="M31 87c-6 3-11 8-13 14 6-4 13-6 20-7z" fill="#9dbea3" />
-      <path d="M69 87c6 3 11 8 13 14-6-4-13-6-20-7z" fill="#9dbea3" />
-      <g stroke="#9dbea3" stroke-width="3" stroke-linecap="round" fill="none">
-        <path d="M43 95v18" />
-        <path d="M57 95v18" />
-      </g>
-    </g>
-
-    <!-- Head, minus the eyes: those swap for the blink. -->
-    <g id="av-head">
-      <!-- Hair mass, then tufts. The mass alone renders as a bob; the triangles
-           are what put an anime silhouette on it, so they are load-bearing
-           rather than detail. Swept rather than vertical — straight-up spikes
-           read as a crown. -->
-      <g fill="#3d4a2c">
-        <circle cx="34" cy="32" r="14" />
-        <circle cx="50" cy="26" r="16" />
-        <circle cx="66" cy="32" r="14" />
-        <circle cx="26" cy="43" r="10" />
-        <circle cx="74" cy="43" r="10" />
-        <path d="M38 22 25 8l20 9z" />
-        <path d="M50 18 47 5l14 11z" />
-        <path d="M62 21 78 11l-9 14z" />
-        <path d="M27 35 15 29l12-3z" />
-        <path d="M73 35 85 29l-12-3z" />
-      </g>
-
-      <!-- Ears after the mass, before the face: behind the hair they vanish. -->
-      <ellipse cx="26" cy="51" rx="4.5" ry="6" fill="#f3c6a5" />
-      <ellipse cx="74" cy="51" rx="4.5" ry="6" fill="#f3c6a5" />
-
-      <path d="M27 44C27 29 37 21 50 21s23 8 23 23c0 16-10 28-23 28S27 60 27 44Z" fill="#fbe0c8" />
-
-      <!-- Fringe: lobes for volume, triangles for the pointed tips that sit
-           over the forehead in the reference. -->
-      <g fill="#3d4a2c">
-        <circle cx="31" cy="35" r="9" />
-        <circle cx="42" cy="30" r="10" />
-        <circle cx="58" cy="30" r="10" />
-        <circle cx="69" cy="35" r="9" />
-        <path d="M31 32l5 12 5-12z" />
-        <path d="M45 30l4 13 6-13z" />
-        <path d="M59 31l5 12 5-12z" />
-      </g>
-      <g fill="none" stroke="#5c6d40" stroke-width="2.4" stroke-linecap="round" opacity=".75">
-        <path d="M37 24c-4 3-6 6-7 10" />
-        <path d="M56 21c3 2 5 5 6 9" />
-      </g>
-
-      <g fill="none" stroke="#2e3a22" stroke-width="2.6" stroke-linecap="round">
-        <path d="M33 45c3-2 7-2 10 0" />
-        <path d="M57 45c3-2 7-2 10 0" />
-      </g>
-      <ellipse cx="31" cy="61" rx="5.5" ry="3" fill="#eda183" opacity=".65" />
-      <ellipse cx="69" cy="61" rx="5.5" ry="3" fill="#eda183" opacity=".65" />
-      <path d="M46 62h8c0 4-2 7-4 7s-4-3-4-7Z" fill="#8c3f3a" />
-      <path d="M48 66c1-.6 3-.6 4 0-.7 1.6-1.4 2.4-2 2.4s-1.3-.8-2-2.4Z" fill="#e08a86" />
-    </g>
-
-    <g id="av-eyes">
-      <ellipse cx="39" cy="54" rx="7" ry="8.5" fill="#fff" />
-      <ellipse cx="61" cy="54" rx="7" ry="8.5" fill="#fff" />
-      <ellipse cx="39" cy="55" rx="5.8" ry="7.2" fill="#3c8b5b" />
-      <ellipse cx="61" cy="55" rx="5.8" ry="7.2" fill="#3c8b5b" />
-      <ellipse cx="39" cy="56" rx="3" ry="4" fill="#1f4f34" />
-      <ellipse cx="61" cy="56" rx="3" ry="4" fill="#1f4f34" />
-      <circle cx="36.6" cy="51" r="2.1" fill="#fff" />
-      <circle cx="58.6" cy="51" r="2.1" fill="#fff" />
-      <g fill="none" stroke="#2e3a22" stroke-width="2.8" stroke-linecap="round">
-        <path d="M32.5 50c2-4 11-4 13.5 0" />
-        <path d="M54.5 50c2-4 11-4 13.5 0" />
-      </g>
-    </g>
-
-    <g id="av-eyes-shut" fill="none" stroke="#2e3a22" stroke-width="3" stroke-linecap="round">
-      <path d="M33 57c2.5-6 10.5-6 13 0" />
-      <path d="M55 57c2.5-6 10.5-6 13 0" />
-    </g>
-
-    <!-- The waving arm, drawn so (80 106) is the shoulder joint every frame
-         rotates about. The sleeve is outlined for the same reason the torso is,
-         and it has to be: an unoutlined cream sleeve against the cream torso is
-         an invisible lever, which leaves a hand floating with nothing visibly
-         swinging it. -->
-    <g id="av-arm">
-      <!-- Tapered: 17px at the shoulder, 13px at the wrist. One uniform stroke
-           made the whole arm a capsule the same width as the palm, which is what
-           read as a mitten rather than a limb. -->
-      <path d="M79 110C82 98 85 88 88 79" fill="none" stroke="#e6dcc2" stroke-width="21" stroke-linecap="round" />
-      <path d="M79 110C82 98 85 88 88 79" fill="none" stroke="#f5efdd" stroke-width="17" stroke-linecap="round" />
-      <use href="#av-star" transform="translate(82 100) scale(0.34)" />
-      <path d="M87.5 80l1.5-6" fill="none" stroke="#7fa184" stroke-width="16" />
-      <g fill="#fbe0c8" stroke="#dda87f" stroke-width="1.5" stroke-linejoin="round">
-        <path d="M84 66l1-6" stroke-width="13" stroke="#fbe0c8" stroke-linecap="round" fill="none" />
-        <path d="M79 52h20v8a10 10 0 0 1-20 0Z" />
-        <rect x="79.5" y="38" width="5" height="17" rx="2.5" />
-        <rect x="85.5" y="33" width="5" height="22" rx="2.5" />
-        <rect x="91.5" y="34" width="5" height="21" rx="2.5" />
-        <rect x="97" y="39" width="5" height="16" rx="2.5" />
-        <rect x="71" y="50" width="6" height="14" rx="3" transform="rotate(-22 74 57)" />
-      </g>
-    </g>
-
-    <!-- Amber speed marks, pulsing with the swing: what sells the arm as
-         moving rather than posed. -->
-    <g id="av-mark" fill="none" stroke="#f7b03d" stroke-width="3" stroke-linecap="round">
-      <path d="M15 31l-6-6" />
-      <path d="M11 42H3" />
-      <path d="M15 52l-7 4" />
-    </g>
+    <radialGradient id="mg-face" cx="50%" cy="45%" r="52%">
+      <stop offset="0%" stop-color="#ffe8d0"/>
+      <stop offset="100%" stop-color="#f5cca8"/>
+    </radialGradient>
+    <radialGradient id="mg-body" cx="50%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#f7f2e4"/>
+      <stop offset="100%" stop-color="#ede3c6"/>
+    </radialGradient>
+    <radialGradient id="mg-hair" cx="50%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#4a5a35"/>
+      <stop offset="100%" stop-color="#2e3a22"/>
+    </radialGradient>
+    <radialGradient id="mg-shadow-grad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="rgba(0,0,0,0.13)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+    </radialGradient>
+    <path id="mg-star" d="M0-10 C1.1-3.7 3.7-1.1 10 0 3.7 1.1 1.1 3.7 0 10 -1.1 3.7-3.7 1.1-10 0-3.7-1.1-1.1-3.7 0-10Z" fill="#f7b03d" stroke="#ee9a1e" stroke-width="1.2"/>
   </defs>
+  <style>
+    #mg-root{animation:mg-float 3.2s ease-in-out infinite;transform-origin:80px 100px}
+    #mg-shadow-el{animation:mg-shadow-pulse 3.2s ease-in-out infinite;transform-origin:80px 196px}
+    #mg-arm-wave{animation:mg-wave 0.6s ease-in-out infinite alternate;transform-origin:116px 148px}
+    #mg-head-group{animation:mg-head-sway 3.2s ease-in-out infinite;transform-origin:80px 95px}
+    #mg-eyes-open{animation:mg-blink-open 4.5s ease-in-out infinite}
+    #mg-eyes-shut{animation:mg-blink-shut 4.5s ease-in-out infinite}
+    #mg-ear-left{animation:mg-ear-l 3.2s ease-in-out infinite;transform-origin:43px 108px}
+    #mg-ear-right{animation:mg-ear-r 3.2s ease-in-out infinite;transform-origin:117px 108px}
+    #mg-sparkle{animation:mg-sparkle-pulse 1.2s ease-in-out infinite alternate;transform-origin:130px 90px}
+    #mg-marks{animation:mg-marks-fade 0.6s ease-in-out infinite alternate}
+    @keyframes mg-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+    @keyframes mg-shadow-pulse{0%,100%{transform:scaleX(1) scaleY(1);opacity:1}50%{transform:scaleX(.7) scaleY(.7);opacity:.45}}
+    @keyframes mg-wave{from{transform:rotate(-16deg)}to{transform:rotate(16deg)}}
+    @keyframes mg-head-sway{0%,100%{transform:rotate(0deg)}25%{transform:rotate(-2.5deg)}75%{transform:rotate(2deg)}}
+    @keyframes mg-blink-open{0%,88%,96%,100%{opacity:1}90%,94%{opacity:0}}
+    @keyframes mg-blink-shut{0%,88%,96%,100%{opacity:0}90%,94%{opacity:1}}
+    @keyframes mg-ear-l{0%,100%{transform:rotate(0deg)}30%{transform:rotate(-8deg)}70%{transform:rotate(4deg)}}
+    @keyframes mg-ear-r{0%,100%{transform:rotate(0deg)}30%{transform:rotate(8deg)}70%{transform:rotate(-4deg)}}
+    @keyframes mg-sparkle-pulse{from{transform:scale(.8) rotate(0deg);opacity:.7}to{transform:scale(1.3) rotate(18deg);opacity:1}}
+    @keyframes mg-marks-fade{from{opacity:.2}to{opacity:.85}}
+    @media(prefers-reduced-motion:reduce){
+      #mg-root,#mg-shadow-el,#mg-arm-wave,#mg-head-group,
+      #mg-eyes-open,#mg-eyes-shut,#mg-ear-left,#mg-ear-right,
+      #mg-sparkle,#mg-marks{animation:none}
+      #mg-eyes-open{opacity:1}#mg-eyes-shut{opacity:0}
+    }
+  </style>
 
-  <!--
-    Each frame is clipped to its own cell, and the figure is inset inside that
-    clip by a second group. The two cannot be one transform: `clip-path` resolves
-    in the coordinate space the element's own transform establishes, so folding
-    the inset into the cell group would shrink the clip rect along with the art
-    and let the far end of the swing bleed into the next frame.
-  -->
-  <g clip-path="url(#av-cell)">
-    <g transform="translate(10 15) scale(0.88)">
-      <use href="#av-body" />
-      <g transform="rotate(0 50 84)"><use href="#av-head" /><use href="#av-eyes" /></g>
-      <use href="#av-arm" transform="rotate(0 79 110)" />
-      <use href="#av-mark" transform="translate(10 42) scale(1) translate(-10 -42)" />
+  <ellipse id="mg-shadow-el" cx="80" cy="196" rx="38" ry="7" fill="url(#mg-shadow-grad)"/>
+
+  <g id="mg-root">
+    <!-- Left resting arm -->
+    <rect x="30" y="142" width="18" height="36" rx="9" fill="url(#mg-body)" stroke="#ddd5b2" stroke-width="2"/>
+    <ellipse cx="39" cy="180" rx="10" ry="8" fill="#f5cca8" stroke="#ddb98a" stroke-width="1.5"/>
+
+    <!-- Body hoodie -->
+    <rect x="38" y="138" width="84" height="55" rx="28" fill="url(#mg-body)" stroke="#ddd5b2" stroke-width="2.2"/>
+    <path d="M65 138 Q80 148 95 138" fill="none" stroke="#8dae8e" stroke-width="7" stroke-linecap="round"/>
+    <rect x="62" y="162" width="36" height="22" rx="11" fill="none" stroke="#ccc4a6" stroke-width="1.8"/>
+
+    <!-- Waving arm -->
+    <g id="mg-arm-wave">
+      <rect x="113" y="138" width="18" height="38" rx="9" fill="url(#mg-body)" stroke="#ddd5b2" stroke-width="2"/>
+      <rect x="113" y="164" width="18" height="10" rx="5" fill="#8dae8e"/>
+      <ellipse cx="122" cy="178" rx="11" ry="9" fill="#f5cca8" stroke="#ddb98a" stroke-width="1.5"/>
+      <ellipse cx="115" cy="173" rx="5" ry="4.5" fill="#f5cca8" stroke="#ddb98a" stroke-width="1.2"/>
+      <ellipse cx="122" cy="169" rx="5" ry="4.5" fill="#f5cca8" stroke="#ddb98a" stroke-width="1.2"/>
+      <ellipse cx="129" cy="173" rx="5" ry="4.5" fill="#f5cca8" stroke="#ddb98a" stroke-width="1.2"/>
     </g>
-  </g>
-  <g clip-path="url(#av-cell)" transform="translate(128 0)">
-    <g transform="translate(10 15) scale(0.88)">
-      <use href="#av-body" />
-      <g transform="rotate(-1 50 84)"><use href="#av-head" /><use href="#av-eyes" /></g>
-      <use href="#av-arm" transform="rotate(6 79 110)" />
-      <use href="#av-mark" transform="translate(10 42) scale(1.12) translate(-10 -42)" />
+
+    <!-- Head group -->
+    <g id="mg-head-group">
+      <ellipse cx="80" cy="82" rx="40" ry="38" fill="url(#mg-hair)"/>
+      <ellipse cx="56" cy="56" rx="15" ry="18" fill="url(#mg-hair)" transform="rotate(-18 56 56)"/>
+      <ellipse cx="80" cy="48" rx="13" ry="20" fill="url(#mg-hair)"/>
+      <ellipse cx="104" cy="56" rx="15" ry="18" fill="url(#mg-hair)" transform="rotate(18 104 56)"/>
+
+      <ellipse id="mg-ear-left"  cx="43"  cy="98" rx="9" ry="11" fill="#f5cca8" stroke="#ddb98a" stroke-width="1.8"/>
+      <ellipse id="mg-ear-right" cx="117" cy="98" rx="9" ry="11" fill="#f5cca8" stroke="#ddb98a" stroke-width="1.8"/>
+      <ellipse cx="43"  cy="100" rx="5" ry="6.5" fill="#eda183" opacity=".55"/>
+      <ellipse cx="117" cy="100" rx="5" ry="6.5" fill="#eda183" opacity=".55"/>
+
+      <ellipse cx="80" cy="96" rx="36" ry="37" fill="url(#mg-face)"/>
+
+      <ellipse cx="58"  cy="76" rx="13" ry="13" fill="url(#mg-hair)"/>
+      <ellipse cx="80"  cy="70" rx="13" ry="11" fill="url(#mg-hair)"/>
+      <ellipse cx="102" cy="76" rx="13" ry="13" fill="url(#mg-hair)"/>
+      <path d="M55 84 Q58 95 64 90" fill="url(#mg-hair)"/>
+      <path d="M105 84 Q102 95 96 90" fill="url(#mg-hair)"/>
+
+      <g id="mg-eyes-open">
+        <ellipse cx="67" cy="95" rx="10" ry="11" fill="#fff"/>
+        <ellipse cx="93" cy="95" rx="10" ry="11" fill="#fff"/>
+        <ellipse cx="67" cy="97" rx="8" ry="9" fill="#4fa870"/>
+        <ellipse cx="93" cy="97" rx="8" ry="9" fill="#4fa870"/>
+        <ellipse cx="67" cy="98" rx="4.5" ry="5.5" fill="#1f4f34"/>
+        <ellipse cx="93" cy="98" rx="4.5" ry="5.5" fill="#1f4f34"/>
+        <circle cx="63.5" cy="93" r="2.8" fill="#fff" opacity=".9"/>
+        <circle cx="89.5" cy="93" r="2.8" fill="#fff" opacity=".9"/>
+        <path d="M57 90 Q67 83 77 90" fill="none" stroke="#2e3a22" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M83 90 Q93 83 103 90" fill="none" stroke="#2e3a22" stroke-width="2.6" stroke-linecap="round"/>
+      </g>
+
+      <g id="mg-eyes-shut" opacity="0">
+        <path d="M57 95 Q67 106 77 95" fill="none" stroke="#2e3a22" stroke-width="3" stroke-linecap="round"/>
+        <path d="M83 95 Q93 106 103 95" fill="none" stroke="#2e3a22" stroke-width="3" stroke-linecap="round"/>
+      </g>
+
+      <ellipse cx="54"  cy="108" rx="9" ry="5.5" fill="#eda183" opacity=".5"/>
+      <ellipse cx="106" cy="108" rx="9" ry="5.5" fill="#eda183" opacity=".5"/>
+
+      <path d="M70 114 Q80 122 90 114" fill="none" stroke="#7a3330" stroke-width="2.8" stroke-linecap="round"/>
+      <ellipse cx="80" cy="117" rx="5" ry="3.5" fill="#c96f6a" opacity=".75"/>
     </g>
-  </g>
-  <g clip-path="url(#av-cell)" transform="translate(256 0)">
-    <g transform="translate(10 15) scale(0.88)">
-      <use href="#av-body" />
-      <g transform="rotate(-2 50 84)"><use href="#av-head" /><use href="#av-eyes-shut" /></g>
-      <use href="#av-arm" transform="rotate(12 79 110)" />
-      <use href="#av-mark" transform="translate(10 42) scale(1.24) translate(-10 -42)" />
+
+    <g id="mg-sparkle">
+      <use href="#mg-star" transform="translate(133 84) scale(1.1)"/>
     </g>
-  </g>
-  <g clip-path="url(#av-cell)" transform="translate(384 0)">
-    <g transform="translate(10 15) scale(0.88)">
-      <use href="#av-body" />
-      <g transform="rotate(-3 50 84)"><use href="#av-head" /><use href="#av-eyes-shut" /></g>
-      <use href="#av-arm" transform="rotate(17 79 110)" />
-      <use href="#av-mark" transform="translate(10 42) scale(1.34) translate(-10 -42)" />
-    </g>
-  </g>
-  <g clip-path="url(#av-cell)" transform="translate(512 0)">
-    <g transform="translate(10 15) scale(0.88)">
-      <use href="#av-body" />
-      <g transform="rotate(-3.5 50 84)"><use href="#av-head" /><use href="#av-eyes" /></g>
-      <use href="#av-arm" transform="rotate(19 79 110)" />
-      <use href="#av-mark" transform="translate(10 42) scale(1.38) translate(-10 -42)" />
-    </g>
-  </g>
-  <g clip-path="url(#av-cell)" transform="translate(640 0)">
-    <g transform="translate(10 15) scale(0.88)">
-      <use href="#av-body" />
-      <g transform="rotate(-2.5 50 84)"><use href="#av-head" /><use href="#av-eyes" /></g>
-      <use href="#av-arm" transform="rotate(14 79 110)" />
-      <use href="#av-mark" transform="translate(10 42) scale(1.2) translate(-10 -42)" />
-    </g>
-  </g>
-  <g clip-path="url(#av-cell)" transform="translate(768 0)">
-    <g transform="translate(10 15) scale(0.88)">
-      <use href="#av-body" />
-      <g transform="rotate(-1.5 50 84)"><use href="#av-head" /><use href="#av-eyes" /></g>
-      <use href="#av-arm" transform="rotate(9 79 110)" />
-      <use href="#av-mark" transform="translate(10 42) scale(1.06) translate(-10 -42)" />
-    </g>
-  </g>
-  <g clip-path="url(#av-cell)" transform="translate(896 0)">
-    <g transform="translate(10 15) scale(0.88)">
-      <use href="#av-body" />
-      <g transform="rotate(-0.5 50 84)"><use href="#av-head" /><use href="#av-eyes" /></g>
-      <use href="#av-arm" transform="rotate(4 79 110)" />
-      <use href="#av-mark" transform="translate(10 42) scale(1.02) translate(-10 -42)" />
+
+    <g id="mg-marks" fill="none" stroke="#f7b03d" stroke-width="2.8" stroke-linecap="round">
+      <line x1="104" y1="118" x2="96" y2="112"/>
+      <line x1="100" y1="126" x2="90" y2="124"/>
+      <line x1="104" y1="134" x2="95" y2="136"/>
     </g>
   </g>
 </svg>

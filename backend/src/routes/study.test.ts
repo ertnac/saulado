@@ -28,6 +28,7 @@ afterAll(async () => {
 interface SessionBody {
   id: string
   studySetId: string | null
+  mode: string
   queue: {
     cardId: string
     blankCount: number
@@ -82,11 +83,15 @@ async function seedSet(
   return setId
 }
 
-async function startSession(token: string, studySetId?: string): Promise<SessionBody> {
+async function startSession(
+  token: string,
+  arg?: string | Record<string, unknown>,
+): Promise<SessionBody> {
+  const body = typeof arg === 'string' ? { studySetId: arg } : (arg ?? {})
   const res = await request(app)
     .post('/api/study/sessions')
     .set('Authorization', auth(token))
-    .send(studySetId ? { studySetId } : {})
+    .send(body)
 
   expect(res.status).toBe(200)
   return (res.body as { session: SessionBody }).session
@@ -293,5 +298,129 @@ describe('GET /api/study/due', () => {
 
     expect(res.status).toBe(200)
     expect((res.body as { counts: unknown[] }).counts).toEqual([])
+  })
+})
+
+describe('study modes', () => {
+  async function startIn(
+    token: string,
+    body: Record<string, unknown>,
+  ): Promise<{ status: number; session?: SessionBody }> {
+    const res = await request(app)
+      .post('/api/study/sessions')
+      .set('Authorization', auth(token))
+      .send(body)
+
+    return { status: res.status, session: (res.body as { session?: SessionBody }).session }
+  }
+
+  it('serves every card in the set in sequential mode, not just the due ones', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [
+      { paragraph: `${PARAGRAPH} one`, answers: [CPU] },
+      { paragraph: `${PARAGRAPH} two`, answers: [CPU] },
+      { paragraph: `${PARAGRAPH} three`, answers: [CPU] },
+    ])
+
+    const { status, session } = await startIn(token, { studySetId: setId, mode: 'sequential' })
+
+    expect(status).toBe(200)
+    expect(session?.queue).toHaveLength(3)
+    expect(session?.mode).toBe('sequential')
+    // Creation order — the set was seeded one, two, three.
+    expect(visibleText(session?.queue[0])).toContain('one')
+    expect(visibleText(session?.queue[2])).toContain('three')
+  })
+
+  it('serves the same cards in shuffled mode', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ answers: [CPU] }, { answers: [CPU] }, { answers: [CPU] }])
+
+    const { status, session } = await startIn(token, { studySetId: setId, mode: 'shuffled' })
+
+    expect(status).toBe(200)
+    expect(session?.queue).toHaveLength(3)
+    expect(session?.mode).toBe('shuffled')
+  })
+
+  it('rejects sequential mode without a set', async () => {
+    const { token } = await registerTestUser(app)
+
+    const { status } = await startIn(token, { mode: 'sequential' })
+
+    expect(status).toBe(400)
+  })
+
+  it('rejects a set with no highlighted cards', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ paragraph: 'No highlights here', answers: [] }])
+
+    const { status } = await startIn(token, { studySetId: setId, mode: 'sequential' })
+
+    expect(status).toBe(400)
+  })
+
+  it('does not resume a session started in a different mode', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ answers: [CPU] }, { answers: [CPU] }])
+
+    const first = await startIn(token, { studySetId: setId, mode: 'sequential' })
+    const second = await startIn(token, { studySetId: setId, mode: 'shuffled' })
+
+    expect(second.session?.id).not.toBe(first.session?.id)
+    expect(second.session?.mode).toBe('shuffled')
+  })
+
+  it('resumes a session started in the same mode', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ answers: [CPU] }, { answers: [CPU] }])
+
+    const first = await startIn(token, { studySetId: setId, mode: 'sequential' })
+    const second = await startIn(token, { studySetId: setId, mode: 'sequential' })
+
+    expect(second.session?.id).toBe(first.session?.id)
+  })
+
+  it('defaults to spaced when no mode is sent', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ answers: [CPU] }])
+
+    const { session } = await startIn(token, { studySetId: setId })
+
+    expect(session?.mode).toBe('spaced')
+  })
+
+  it('404s a retake of someone else’s session', async () => {
+    const owner = await registerTestUser(app)
+    const stranger = await registerTestUser(app)
+    const setId = await seedSet(owner.token, [{ answers: [CPU] }])
+    const theirs = await startIn(owner.token, { studySetId: setId, mode: 'sequential' })
+
+    const { status } = await startIn(stranger.token, { retakeOf: theirs.session?.id })
+
+    expect(status).toBe(404)
+  })
+
+  it('400s a retake with nothing left blank', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ answers: [CPU] }])
+    const started = await startIn(token, { studySetId: setId, mode: 'sequential' })
+
+    const { status } = await startIn(token, { retakeOf: started.session?.id })
+
+    expect(status).toBe(400)
+  })
+
+  it('rejects a retake combined with an explicit mode', async () => {
+    const { token } = await registerTestUser(app)
+    const setId = await seedSet(token, [{ answers: [CPU] }])
+    const started = await startIn(token, { studySetId: setId, mode: 'sequential' })
+
+    const { status } = await startIn(token, {
+      retakeOf: started.session?.id,
+      mode: 'shuffled',
+    })
+
+    expect(status).toBe(400)
   })
 })

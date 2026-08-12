@@ -123,7 +123,7 @@ export default function SettingsScreen(): ReactElement {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-5 p-5 pb-10"
+      contentContainerClassName="gap-5 p-5 pb-28"
       keyboardShouldPersistTaps="handled"
     >
       <View className="gap-1">

@@ -2,6 +2,7 @@ import type {
   AnswerResponse,
   DueCountsResponse,
   SessionResponse,
+  StartSessionRequest,
   SubmitAnswerRequest,
   SummaryResponse,
 } from '@saulado/shared'
@@ -16,10 +17,10 @@ import { authorizedRequest } from './api'
  * reports what the user typed and the server decides what it was worth.
  */
 
-export function startSession(studySetId?: string): Promise<SessionResponse> {
+export function startSession(body: StartSessionRequest): Promise<SessionResponse> {
   return authorizedRequest<SessionResponse>('/api/study/sessions', {
     method: 'POST',
-    body: studySetId ? { studySetId } : {},
+    body,
   })
 }
 

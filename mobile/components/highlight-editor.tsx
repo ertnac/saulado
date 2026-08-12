@@ -157,6 +157,7 @@ function ModeTab({
       accessibilityRole="tab"
       accessibilityLabel={label}
       accessibilityState={{ selected: active, disabled }}
+      hitSlop={8}
       className={`h-9 justify-center rounded-full px-4 ${active ? 'bg-primary' : ''} ${
         disabled ? 'opacity-50' : ''
       }`}

@@ -2,7 +2,13 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, type ReactElement } from 'react'
+import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated'
 import '../global.css'
+
+configureReanimatedLogger({
+  level: ReanimatedLogLevel.warn,
+  strict: false,
+})
 import { createQueryClient } from '../lib/query-client'
 import { useAuthStore } from '../stores/auth'
 import { useTheme, useTokenColor } from '../stores/theme'

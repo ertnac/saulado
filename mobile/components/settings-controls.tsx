@@ -213,6 +213,7 @@ export function TimezoneSetting({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Use ${detected}`}
+          hitSlop={8}
           onPress={() => {
             onCommit(detected)
           }}
@@ -262,6 +263,7 @@ export function ChoiceSetting<T extends string>({
               accessibilityRole="radio"
               accessibilityState={{ checked: selected }}
               accessibilityLabel={labels[option]}
+              hitSlop={8}
               onPress={() => {
                 onChange(option)
               }}

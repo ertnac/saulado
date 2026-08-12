@@ -177,6 +177,9 @@ export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDra
     setDraftText(normalized)
     setAnswers(renumber(next.answers ?? []))
     setOrphaned([])
+    // Always return to the write surface after adding a card.
+    // You cannot highlight something that hasn't been written yet.
+    setMode('compose')
   }, [])
 
   return {

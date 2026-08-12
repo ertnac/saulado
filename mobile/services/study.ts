@@ -4,6 +4,7 @@ import type {
   SessionResponse,
   SubmitAnswerRequest,
   SummaryResponse,
+  StartSessionRequest,
 } from '@saulado/shared'
 
 import { authorizedRequest } from './api'
@@ -17,10 +18,10 @@ import { authorizedRequest } from './api'
  * is where that difference already lives.
  */
 
-export function startSession(studySetId?: string): Promise<SessionResponse> {
+export function startSession(body: StartSessionRequest = {}): Promise<SessionResponse> {
   return authorizedRequest<SessionResponse>('/api/study/sessions', {
     method: 'POST',
-    body: studySetId ? { studySetId } : {},
+    body,
   })
 }
 

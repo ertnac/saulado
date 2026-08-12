@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardFigure, CardLabel } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChevronRightIcon, PlusIcon, SparkIcon } from '@/components/ui/icons'
-import { MascotSprite } from '@/components/ui/brand'
+import { OnboardingModal } from '@/features/onboarding/OnboardingModal'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { GoalRing } from '@/components/charts/GoalRing'
 import { Sparkline } from '@/components/charts/Sparkline'
@@ -355,18 +355,9 @@ export function DashboardPage(): ReactElement {
 
   return (
     <div className="space-y-8">
-      {/*
-        The mascot beside the welcome, not above it: side by side the eye lands
-        on the greeting and the figure together as one block, where stacking
-        would push the hero — the page's only real CTA — a mascot's height down
-        the screen (saulado-ux §4).
-
-        Hidden below `sm`. At 320px it would take a third of the width from the
-        greeting it is decorating, and it carries no information to lose.
-      */}
+      <OnboardingModal />
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4 min-w-0 flex-1">
-          <MascotSprite className="hidden text-[1rem] sm:block" />
           <PageHeader
             title={
               nickname

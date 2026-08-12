@@ -1,5 +1,5 @@
-import type { Grade } from '@saulado/shared'
-import { compareDue, interleaveNew, shouldRequeue, type QueueEntry } from '@saulado/shared'
+import type { Grade, SessionMode, Rng } from '@saulado/shared'
+import { compareDue, interleaveNew, shouldRequeue, shuffle, type QueueEntry } from '@saulado/shared'
 
 /**
  * The card-source seam (plan §2.4).
@@ -42,15 +42,23 @@ export interface GradeVerdict {
   /**
    * Write the new SM-2 state to `card_schedules`.
    *
-   * False for cramming: a 2am panic session should not tell the scheduler the
-   * user has learned anything durable.
+   * False for sequential drill, and for a card that was not actually due —
+   * studying ahead should not be able to reset a schedule the user has earned.
    */
   reschedule: boolean
+  /**
+   * Write a `Review` row and roll up daily stats.
+   *
+   * False only for `retake`, which is an explicitly practice-only pass: the
+   * blank the user is finishing was already graded and counted when they left
+   * it blank, and counting the finish too would let one card book two reviews.
+   */
+  record: boolean
 }
 
 export interface CardSource {
   /** Identifies the source in the session row and in logs. */
-  readonly kind: string
+  readonly kind: SessionMode
   /** The full queue, in presentation order. Called once, at session start. */
   build(): QueueSlot[]
   /** The next unserved card, or `null`. Drives `next()`/`size()` in tests. */
@@ -82,7 +90,7 @@ export interface SpacedRepetitionOptions {
 }
 
 export class SpacedRepetitionSource implements CardSource {
-  readonly kind = 'spaced-repetition'
+  readonly kind = 'spaced' as const
 
   private queue: QueueSlot[] | null = null
   private cursor = 0
@@ -158,6 +166,212 @@ export class SpacedRepetitionSource implements CardSource {
    * though the queue mattered here when it does not.
    */
   static verdict(grade: Grade, attempts: number): GradeVerdict {
-    return { requeue: shouldRequeue(grade, attempts), reschedule: true }
+    return { requeue: shouldRequeue(grade, attempts), reschedule: true, record: true }
+  }
+}
+
+/**
+ * A card from a whole-set pool.
+ *
+ * Distinct from {@link CandidateCard}: the two new modes do not rank by due date
+ * or lapses at all, so carrying `dueAt`/`lapses` here would be four fields of
+ * scheduling state that nothing in these sources reads.
+ */
+export interface PoolCard {
+  cardId: string
+  studySetId: string
+  createdAt: Date
+}
+
+/** Creation order, tie-broken on id so the same pool always builds the same queue. */
+function byCreation(a: PoolCard, b: PoolCard): number {
+  const delta = a.createdAt.getTime() - b.createdAt.getTime()
+  if (delta !== 0) return delta
+  return a.cardId < b.cardId ? -1 : a.cardId > b.cardId ? 1 : 0
+}
+
+/** Walks a fixed list of card ids. Shared by all three whole-set sources. */
+abstract class FixedQueueSource implements CardSource {
+  abstract readonly kind: SessionMode
+
+  protected queue: QueueSlot[] | null = null
+  private cursor = 0
+
+  abstract build(): QueueSlot[]
+
+  next(): QueueSlot | null {
+    const queue = this.build()
+    return this.cursor < queue.length ? (queue[this.cursor++] ?? null) : null
+  }
+
+  size(): number {
+    return Math.max(0, this.build().length - this.cursor)
+  }
+
+  total(): number {
+    return this.build().length
+  }
+
+  abstract onGraded(cardId: string, grade: Grade, attempts: number): GradeVerdict
+
+  /**
+   * `isNew` is false for every card in a whole-set pool.
+   *
+   * The flag drives a "first time seeing this" badge, and a drill over an entire
+   * set says nothing about whether the user has met a given card — it did not
+   * consult `card_schedules` to build the queue.
+   */
+  protected toSlots(cardIds: readonly string[]): QueueSlot[] {
+    return cardIds.map((cardId, position) => ({ cardId, position, isNew: false }))
+  }
+}
+
+/**
+ * Every card in the set, in the order they were written.
+ *
+ * The point is learning a set the way its author laid it out — chapter order,
+ * argument order, chronology. That is also its weakness, which is what
+ * {@link ShuffledSource} is for: sequence becomes a cue, and a card recalled
+ * because it follows the last one was not really recalled.
+ */
+export class SequentialSource extends FixedQueueSource {
+  readonly kind = 'sequential' as const
+
+  constructor(private readonly options: { cards: readonly PoolCard[] }) {
+    super()
+  }
+
+  build(): QueueSlot[] {
+    this.queue ??= this.toSlots([...this.options.cards].sort(byCreation).map((c) => c.cardId))
+    return this.queue
+  }
+
+  onGraded(_cardId: string, grade: Grade, attempts: number): GradeVerdict {
+    return verdictFor('sequential', {
+      grade,
+      attempts,
+      hadEmptyBlank: false,
+      isDue: false,
+      correct: grade !== 'again',
+    })
+  }
+}
+
+/**
+ * Every card in the set, randomised.
+ *
+ * Sorted before shuffling so an all-zero test `rng` has something deterministic
+ * to permute — the sort costs nothing and makes the ordering tests pinnable.
+ */
+export class ShuffledSource extends FixedQueueSource {
+  readonly kind = 'shuffled' as const
+
+  constructor(private readonly options: { cards: readonly PoolCard[]; rng?: Rng }) {
+    super()
+  }
+
+  build(): QueueSlot[] {
+    this.queue ??= this.toSlots(
+      shuffle(
+        [...this.options.cards].sort(byCreation).map((c) => c.cardId),
+        this.options.rng,
+      ),
+    )
+    return this.queue
+  }
+
+  onGraded(_cardId: string, grade: Grade, attempts: number): GradeVerdict {
+    return verdictFor('shuffled', {
+      grade,
+      attempts,
+      hadEmptyBlank: false,
+      isDue: false,
+      correct: grade !== 'again',
+    })
+  }
+}
+
+/**
+ * The cards a prior session left blank, in that session's presentation order.
+ *
+ * Handed ids rather than rows because the ordering decision was already made —
+ * re-sorting here would present the retake in a different order than the pass
+ * it is finishing, for no gain.
+ */
+export class RetakeSource extends FixedQueueSource {
+  readonly kind = 'retake' as const
+
+  constructor(private readonly options: { cards: readonly string[] }) {
+    super()
+  }
+
+  build(): QueueSlot[] {
+    this.queue ??= this.toSlots(this.options.cards)
+    return this.queue
+  }
+
+  onGraded(_cardId: string, grade: Grade, attempts: number): GradeVerdict {
+    return verdictFor('retake', {
+      grade,
+      attempts,
+      hadEmptyBlank: false,
+      isDue: false,
+      correct: grade !== 'again',
+    })
+  }
+}
+
+/** Everything a mode needs to decide what a graded answer means. */
+export interface GradeInput {
+  grade: Grade
+  /** Attempts *including* this one. */
+  attempts: number
+  /** At least one blank was submitted empty. */
+  hadEmptyBlank: boolean
+  /** The card's schedule was due on or before today — false for a card with no schedule row. */
+  isDue: boolean
+  correct: boolean
+}
+
+/**
+ * What a grade means, per mode.
+ *
+ * A lookup table rather than a chain of `if (mode === …)` through the grading
+ * transaction. Grading holds a session row and a grade, not a built queue, so it
+ * cannot ask a source instance — and constructing one around empty card lists
+ * just to reach `onGraded` would read as though the queue mattered here.
+ *
+ * The rules, and why:
+ *
+ * - **A blank never requeues** in the two new modes. It goes to the retake list
+ *   instead, which is the whole feature: an unanswered card is a different thing
+ *   from a wrong one and gets a different offer.
+ * - **Sequential never reschedules.** Walking a set in order means the sequence
+ *   is carrying part of the recall, so the result is not honest evidence about
+ *   any single card.
+ * - **Shuffled reschedules a *due* card either way, and a not-due card only when
+ *   it was answered correctly.** Studying ahead should be able to earn a longer
+ *   interval and must never be able to reset one — otherwise drilling a set the
+ *   day before an exam would drop every card in it back to a one-day interval.
+ * - **Retake decides nothing at all.** The blank was already graded and counted
+ *   when the user left it blank.
+ */
+export function verdictFor(mode: SessionMode, input: GradeInput): GradeVerdict {
+  const { grade, attempts, hadEmptyBlank, isDue, correct } = input
+  const requeue = !hadEmptyBlank && shouldRequeue(grade, attempts)
+
+  switch (mode) {
+    case 'spaced':
+      return { requeue: shouldRequeue(grade, attempts), reschedule: true, record: true }
+    case 'sequential':
+      return { requeue, reschedule: false, record: true }
+    case 'shuffled':
+      return { requeue, reschedule: isDue || correct, record: true }
+    case 'retake':
+      return { requeue: false, reschedule: false, record: false }
+    default: {
+      const exhaustive: never = mode
+      throw new Error(`Unknown study mode: ${String(exhaustive)}`)
+    }
   }
 }

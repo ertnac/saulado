@@ -13,7 +13,7 @@ import {
 } from '@saulado/shared'
 import { prisma } from '../db/client.js'
 import { ApiError } from '../http/errors.js'
-import { SpacedRepetitionSource } from './card-source.js'
+import { verdictFor } from './card-source.js'
 import { loadSettings } from './settings.js'
 
 /**
@@ -50,7 +50,7 @@ export async function submitAnswer(context: GradeContext): Promise<AnswerRespons
   return prisma.$transaction(async (tx) => {
     const session = await tx.studySession.findFirst({
       where: { id: context.sessionId, userId: context.userId },
-      select: { id: true, completedAt: true },
+      select: { id: true, completedAt: true, mode: true },
     })
 
     // 404 rather than 403 for someone else's session, as everywhere else — a 403
@@ -98,10 +98,21 @@ export async function submitAnswer(context: GradeContext): Promise<AnswerRespons
       settings.typoTolerance,
     )
 
+    const hadEmptyBlank =
+      context.body.revealed !== true && results.some((result) => result.submitted.trim() === '')
+
     const schedule = await tx.cardSchedule.findUnique({
       where: { userId_cardId: { userId: context.userId, cardId: card.id } },
-      select: { easeFactor: true, intervalDays: true, repetitions: true, lapses: true },
+      select: {
+        easeFactor: true,
+        intervalDays: true,
+        repetitions: true,
+        lapses: true,
+        dueAt: true,
+      },
     })
+
+    const isDue = schedule ? schedule.dueAt <= today : false
 
     const outcome = calculateNextReview(
       grade,
@@ -135,38 +146,50 @@ export async function submitAnswer(context: GradeContext): Promise<AnswerRespons
       lastReviewedAt: context.now,
     }
 
-    await tx.cardSchedule.upsert({
-      where: { userId_cardId: { userId: context.userId, cardId: card.id } },
-      create: { userId: context.userId, cardId: card.id, ...scheduleData },
-      update: scheduleData,
-    })
-
-    await tx.review.create({
-      data: {
-        userId: context.userId,
-        cardId: card.id,
-        grade: gradeToCode(grade),
-        blankResults: results as unknown as Prisma.InputJsonValue,
-        durationMs: context.body.durationMs ?? null,
-        reviewedAt: context.now,
-      },
-    })
-
-    await upsertDailyStats(tx, {
-      userId: context.userId,
-      day: today,
-      correct,
-      dailyGoal: settings.dailyGoal,
-    })
-
     const attempts = slot.attempts + 1
-    const verdict = SpacedRepetitionSource.verdict(grade, attempts)
+    const verdict = verdictFor(session.mode, {
+      grade,
+      attempts,
+      hadEmptyBlank,
+      isDue,
+      correct,
+    })
+
+    if (verdict.reschedule) {
+      await tx.cardSchedule.upsert({
+        where: { userId_cardId: { userId: context.userId, cardId: card.id } },
+        create: { userId: context.userId, cardId: card.id, ...scheduleData },
+        update: scheduleData,
+      })
+    }
+
+    if (verdict.record) {
+      await tx.review.create({
+        data: {
+          userId: context.userId,
+          cardId: card.id,
+          grade: gradeToCode(grade),
+          blankResults: results as unknown as Prisma.InputJsonValue,
+          durationMs: context.body.durationMs ?? null,
+          reviewedAt: context.now,
+        },
+      })
+
+      await upsertDailyStats(tx, {
+        userId: context.userId,
+        day: today,
+        correct,
+        dailyGoal: settings.dailyGoal,
+      })
+    }
+
     const queueLength = await tx.studySessionCard.count({ where: { sessionId: session.id } })
 
     await tx.studySessionCard.update({
       where: { id: slot.id },
       data: {
         attempts,
+        hadEmptyBlank,
         ...(verdict.requeue
           ? { position: requeuePosition(slot.position, queueLength) }
           : { answeredAt: context.now, grade: gradeToCode(grade), correct }),
@@ -177,7 +200,11 @@ export async function submitAnswer(context: GradeContext): Promise<AnswerRespons
       results,
       grade,
       correct,
-      dueAt: dueKey,
+      dueAt: verdict.reschedule
+        ? dueKey
+        : schedule
+          ? dayKeyInZone(schedule.dueAt, settings.timezone)
+          : dueKey,
       intervalDays: outcome.interval,
       // Only the review that *crosses* the threshold reports it, so the notice
       // appears once rather than on every later failure of the same card.
