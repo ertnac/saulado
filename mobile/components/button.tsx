@@ -1,5 +1,8 @@
 import type { ReactElement, ReactNode } from 'react'
 import { ActivityIndicator, Pressable, Text } from 'react-native'
+import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated'
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 import { useTokenColor, type Token } from '../stores/theme'
 
 type Variant = 'default' | 'outline' | 'ghost' | 'danger'
@@ -71,9 +74,21 @@ export function Button({
   // resolved colour rather than a class — same reason as the SVG icons.
   const spinnerColor = useTokenColor(v.spinner)
 
+  const scale = useSharedValue(1)
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }))
+
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={onPress}
+      onPressIn={() => {
+        scale.value = withTiming(0.96, { duration: 100 })
+      }}
+      onPressOut={() => {
+        scale.value = withTiming(1, { duration: 100 })
+      }}
+      style={animatedStyle}
       disabled={blocked}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -91,7 +106,7 @@ export function Button({
       */}
       {loading && <ActivityIndicator size="small" color={spinnerColor} />}
       <Text className={`font-medium ${v.text} ${s.text}`}>{label}</Text>
-    </Pressable>
+    </AnimatedPressable>
   )
 }
 

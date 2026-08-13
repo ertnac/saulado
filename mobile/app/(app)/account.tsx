@@ -42,6 +42,7 @@ import { useTokenColor } from '../../stores/theme'
  */
 export default function AccountScreen(): ReactElement {
   const user = useAuthStore((s) => s.user)
+  const logout = useAuthStore((s) => s.logout)
   const email = user?.email ?? ''
 
   return (
@@ -50,7 +51,16 @@ export default function AccountScreen(): ReactElement {
       contentContainerClassName="gap-5 p-5 pb-32"
       keyboardShouldPersistTaps="handled"
     >
-      <Text className="text-sm text-muted-foreground">{`Signed in as ${email}.`}</Text>
+      <View className="flex-row items-center justify-between">
+        <Text className="text-sm text-muted-foreground">{`Signed in as ${email}.`}</Text>
+        <Button
+          label="Log out"
+          variant="outline"
+          onPress={() => {
+            void logout()
+          }}
+        />
+      </View>
 
       <ProfileSection />
       <ChangeEmailSection currentEmail={email} />

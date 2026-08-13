@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { Router } from 'express'
 import type { Request, Response } from 'express'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
 import type { AuthResponse, MessageResponse } from '@saulado/shared'
 import {
   clearRefreshCookie,
@@ -36,11 +37,15 @@ import {
   loginSchema,
   registerSchema,
   resetPasswordSchema,
+  googleLoginSchema,
   type ForgotPasswordBody,
   type LoginBody,
   type RegisterBody,
   type ResetPasswordBody,
+  type GoogleLoginBody,
 } from './auth.schemas.js'
+
+const googleJWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'))
 
 export const authRouter: Router = Router()
 
@@ -163,6 +168,60 @@ authRouter.post(
 
     const session = await issueSession(user.id, req.get('user-agent'))
     res.status(200).json(authPayload(req, res, user, settings, session))
+  }),
+)
+
+// ── Google Login ────────────────────────────────────────────────────────────
+
+authRouter.post(
+  '/login/google',
+  loginLimiter,
+  validateBody(googleLoginSchema),
+  asyncHandler(async (req, res) => {
+    const { idToken } = req.body as GoogleLoginBody
+
+    try {
+      const { payload } = await jwtVerify(idToken, googleJWKS, {
+        issuer: ['https://accounts.google.com', 'accounts.google.com'],
+      })
+
+      if (!payload.email) {
+        sendError(res, 'INVALID_CREDENTIALS', 'Google account has no email address.')
+        return
+      }
+
+      const email = (payload.email as string).toLowerCase()
+      const googleId = payload.sub as string
+
+      let user = await prisma.user.findUnique({
+        where: { email },
+        include: { settings: true },
+      })
+
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            email,
+            googleId,
+            emailVerifiedAt: payload.email_verified ? new Date() : null,
+            settings: { create: {} },
+          },
+          include: { settings: true },
+        })
+      } else if (!user.googleId) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { googleId },
+          include: { settings: true },
+        })
+      }
+
+      const session = await issueSession(user.id, req.get('user-agent'))
+      res.status(200).json(authPayload(req, res, user, user.settings!, session))
+    } catch (err) {
+      console.error('[auth] Google JWT verification failed', err)
+      sendError(res, 'INVALID_CREDENTIALS', 'Invalid Google token.')
+    }
   }),
 )
 

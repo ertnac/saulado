@@ -40,7 +40,7 @@ function DuePanel({ due }: { due: number }): ReactElement {
   return (
     // The one accent-toned panel on the page, and the one filled CTA. The tint
     // is what makes "you have work waiting" legible before a word is read.
-    <Card tone="accent" className="p-5 sm:p-6">
+    <Card tone="accent" className="p-6 sm:p-8">
       <CardLabel>Due today</CardLabel>
       <CardFigure>{due}</CardFigure>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -63,7 +63,7 @@ function DuePanel({ due }: { due: number }): ReactElement {
  */
 function ReadyToLearn({ newCards }: { newCards: number }): ReactElement {
   return (
-    <Card className="p-5 sm:p-6">
+    <Card className="p-6 sm:p-8">
       <CardLabel>New cards</CardLabel>
       <CardFigure>{newCards}</CardFigure>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -87,7 +87,7 @@ function ReadyToLearn({ newCards }: { newCards: number }): ReactElement {
  */
 function CaughtUp(): ReactElement {
   return (
-    <Card className="flex items-start gap-4 p-5 sm:p-6">
+    <Card className="flex items-start gap-4 p-6 sm:p-8">
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-success/15 text-xl text-success">
         <SparkIcon />
       </span>
@@ -103,7 +103,7 @@ function CaughtUp(): ReactElement {
 
 function ExampleCard(): ReactElement {
   return (
-    <Card className="p-5 sm:p-6">
+    <Card className="p-6 sm:p-8">
       <CardLabel>What a card looks like</CardLabel>
 
       <p className="mt-3 text-base leading-relaxed">
@@ -156,7 +156,7 @@ function GettingStarted({ onCreate }: { onCreate: () => void }): ReactElement {
     <>
       <ExampleCard />
 
-      <Card tone="dashed" className="p-5 sm:p-6">
+      <Card tone="dashed" className="p-6 sm:p-8">
         <p className="text-sm text-muted-foreground">
           A set holds cards on one subject. Each card is a paragraph of your own notes with the
           words worth recalling blanked out.
@@ -217,7 +217,7 @@ function RecentSetRow({ set }: { set: RecentSet }): ReactElement {
     <li>
       <Link
         to={`/sets/${set.id}`}
-        className="flex min-h-[44px] items-center justify-between gap-3 rounded-md bg-surface px-4 py-3 shadow-soft transition-shadow duration-150 hover:shadow-lift"
+        className="flex min-h-[44px] items-center justify-between gap-3 rounded-md bg-surface px-5 py-4 shadow-soft transition-shadow duration-150 hover:shadow-lift"
       >
         <span className="min-w-0 truncate font-medium">{set.title}</span>
         <span className="flex shrink-0 items-center gap-2 text-sm tabular-nums text-muted-foreground">
@@ -269,7 +269,7 @@ function RecentSets({ sets, onCreate }: { sets: RecentSet[]; onCreate: () => voi
 
 function TodaySection({ data }: { data: DashboardResponse }): ReactElement {
   return (
-    <section aria-labelledby="progress-heading" className="space-y-4">
+    <section aria-labelledby="progress-heading" className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <h2 id="progress-heading" className="text-lg font-semibold tracking-tight">
           Your progress
@@ -286,7 +286,7 @@ function TodaySection({ data }: { data: DashboardResponse }): ReactElement {
       <div className="grid gap-4 sm:grid-cols-2">
         <StreakCard streak={data.streak} />
 
-        <Card className="p-5">
+        <Card className="p-6">
           <CardLabel>Today</CardLabel>
           <div className="mt-3">
             <GoalRing value={data.today.reviews} goal={data.today.goal} met={data.today.goalMet} />
@@ -294,7 +294,7 @@ function TodaySection({ data }: { data: DashboardResponse }): ReactElement {
         </Card>
       </div>
 
-      <Card className="p-5">
+      <Card className="p-6">
         <CardLabel>Last 7 days</CardLabel>
         <div className="mt-3">
           <Sparkline days={data.sparkline} label="Reviews in the last 7 days" />
@@ -379,7 +379,7 @@ export function DashboardPage(): ReactElement {
         )}
       </div>
 
-      <section aria-labelledby="study-heading" className="space-y-4">
+      <section aria-labelledby="study-heading" className="space-y-6">
         {/*
           No count badge beside this heading, though the pattern is used
           elsewhere: the hero directly below already shows the figure, and the

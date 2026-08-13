@@ -1,10 +1,11 @@
-import type { ButtonHTMLAttributes, ReactElement } from 'react'
+import type { ReactElement } from 'react'
+import { motion, type HTMLMotionProps } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
 type Variant = 'default' | 'accent' | 'outline' | 'soft' | 'ghost' | 'danger'
 type Size = 'sm' | 'md' | 'lg' | 'icon'
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends HTMLMotionProps<'button'> {
   variant?: Variant
   size?: Size
 }
@@ -60,7 +61,7 @@ export function buttonClass({
     // Fully pill-shaped, which is the reference's most recognisable habit and
     // the reason the rest of the radius scale can stay conservative.
     'inline-flex items-center justify-center gap-2 rounded-full font-medium',
-    'transition-[background-color,box-shadow,filter,transform] duration-150 active:translate-y-px',
+    'transition-[background-color,box-shadow,filter,transform] duration-150',
     'disabled:pointer-events-none disabled:opacity-50',
     variants[variant],
     sizes[size],
@@ -75,5 +76,13 @@ export function Button({
   type = 'button',
   ...props
 }: ButtonProps): ReactElement {
-  return <button type={type} className={buttonClass({ variant, size, className })} {...props} />
+  return (
+    <motion.button
+      type={type}
+      className={buttonClass({ variant, size, className })}
+      whileTap={{ scale: 0.96 }}
+      transition={{ duration: 0.1 }}
+      {...props}
+    />
+  )
 }

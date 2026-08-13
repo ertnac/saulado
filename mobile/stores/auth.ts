@@ -33,6 +33,7 @@ interface AuthState {
 
   register: (email: string, password: string) => Promise<void>
   login: (email: string, password: string) => Promise<void>
+  googleLogin: (idToken: string) => Promise<void>
   logout: () => Promise<void>
   restore: () => Promise<void>
   applySession: (session: AuthResponse | null) => void
@@ -76,6 +77,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   login: async (email, password) => {
     get().applySession(await authApi.login({ email, password }))
+  },
+
+  googleLogin: async (idToken) => {
+    get().applySession(await authApi.googleLogin(idToken))
   },
 
   /**

@@ -30,7 +30,8 @@ model HealthCheck {
 model User {
   id              String    @id @default(uuid()) @db.Uuid
   email           String    @unique @db.Citext
-  passwordHash    String    @map("password_hash")
+  passwordHash    String?   @map("password_hash")
+  googleId        String?   @unique @map("google_id")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
   emailVerifiedAt DateTime? @map("email_verified_at")

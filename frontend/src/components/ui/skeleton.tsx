@@ -16,7 +16,10 @@ import { cn } from '@/lib/utils'
 export function Skeleton({ className }: { className?: string }): ReactElement {
   return (
     <div
-      className={cn('animate-pulse rounded-md bg-surface-muted', className)}
+      className={cn(
+        'animate-shimmer rounded-md bg-[linear-gradient(110deg,hsl(var(--surface-muted)),45%,hsl(var(--surface)),55%,hsl(var(--surface-muted)))] bg-[length:200%_100%]',
+        className,
+      )}
       aria-hidden="true"
     />
   )

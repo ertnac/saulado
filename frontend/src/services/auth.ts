@@ -25,6 +25,10 @@ export function login(body: LoginRequest): Promise<AuthResponse> {
   return request<AuthResponse>('/api/auth/login', { method: 'POST', body })
 }
 
+export function googleLogin(idToken: string): Promise<AuthResponse> {
+  return request<AuthResponse>('/api/auth/login/google', { method: 'POST', body: { idToken } })
+}
+
 export function forgotPassword(body: ForgotPasswordRequest): Promise<MessageResponse> {
   return request<MessageResponse>('/api/auth/forgot-password', { method: 'POST', body })
 }

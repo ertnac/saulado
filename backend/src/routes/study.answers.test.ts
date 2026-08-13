@@ -527,7 +527,7 @@ describe('mode-specific grading', () => {
     const summary = await complete(token, session.id)
 
     expect(summary.unanswered).toHaveLength(1)
-    expect(summary.unanswered[0].cardId).toBe(session.queue[0]!.cardId)
+    expect(summary.unanswered[0]?.cardId).toBe(session.queue[0]?.cardId)
   })
 
   it('does not list a wrong-but-attempted card as unanswered', async () => {

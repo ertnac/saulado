@@ -1,5 +1,6 @@
 import { forwardRef, type ReactElement } from 'react'
 import type { BlankResult } from '@saulado/shared'
+import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
 /**
@@ -61,7 +62,10 @@ export const BlankSlot = forwardRef<HTMLInputElement, BlankSlotProps>(function B
     const showCanonical = result.matchType !== 'exact'
 
     return (
-      <span
+      <motion.span
+        initial={{ opacity: 0.5, y: -2 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
         style={{ width }}
         className={cn(
           'mx-0.5 inline-flex h-11 items-center overflow-hidden rounded-md border px-2 align-middle',
@@ -84,7 +88,7 @@ export const BlankSlot = forwardRef<HTMLInputElement, BlankSlotProps>(function B
               : ', correct'
             : `, incorrect — the answer was ${result.canonical}`}
         </span>
-      </span>
+      </motion.span>
     )
   }
 

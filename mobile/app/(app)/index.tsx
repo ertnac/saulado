@@ -261,7 +261,7 @@ function TodaySection({
   const left = Math.max(0, goal - reviews)
 
   return (
-    <View className="gap-4">
+    <View className="gap-6">
       <View className="flex-row items-center justify-between gap-4">
         <Text className="text-lg font-semibold tracking-tight text-foreground">Your progress</Text>
         <TextLink className="text-sm font-medium text-muted-foreground" onPress={onProgress}>
@@ -324,7 +324,7 @@ function RecentSets({
   }
 
   return (
-    <View className="gap-3">
+    <View className="gap-4">
       <Text className="text-lg font-semibold tracking-tight text-foreground">Your sets</Text>
 
       <View className="gap-2">
@@ -356,7 +356,7 @@ function SetRow({
       accessibilityRole="button"
       accessibilityLabel={`${set.title}. ${detail}`}
       onPress={onPress}
-      className="min-h-14 flex-row items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 active:opacity-70"
+      className="min-h-14 flex-row items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4 active:opacity-70"
     >
       <Text numberOfLines={1} className="min-w-0 flex-1 font-medium text-foreground">
         {set.title}
@@ -434,7 +434,7 @@ export default function DashboardScreen(): ReactElement {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-8 p-5 pb-32"
+      contentContainerClassName="gap-8 p-6 pb-32"
       refreshControl={
         <RefreshControl
           refreshing={dashboard.isRefetching}
@@ -477,7 +477,7 @@ export default function DashboardScreen(): ReactElement {
         </View>
       </View>
 
-      <View className="gap-4">
+      <View className="gap-6">
         {/*
           No count beside this heading, though the pattern is used elsewhere: the
           hero directly below already shows the figure, and the same number twice

@@ -1,5 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router'
-import { useState, type ReactElement } from 'react'
+import { useState, useEffect, type ReactElement } from 'react'
+import * as WebBrowser from 'expo-web-browser'
+import * as Google from 'expo-auth-session/providers/google'
 import { Text, View } from 'react-native'
 import { AuthLayout } from '../../components/auth-layout'
 import { Button, TextLink } from '../../components/button'
@@ -7,11 +9,14 @@ import { Field, FormAlert, FormStack } from '../../components/form'
 import { useFormErrors } from '../../hooks/useFormErrors'
 import { useAuthStore } from '../../stores/auth'
 
+WebBrowser.maybeCompleteAuthSession()
+
 /**
  * Ported from `frontend/src/features/auth/LoginPage.tsx`.
  */
 export default function LoginScreen(): ReactElement {
   const login = useAuthStore((s) => s.login)
+  const googleLogin = useAuthStore((s) => s.googleLogin)
   const { errors, setFromError, clear } = useFormErrors()
 
   /**
@@ -24,6 +29,26 @@ export default function LoginScreen(): ReactElement {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+    redirectUri: 'https://auth.expo.io/@ertnac/saulado',
+    // Add androidClientId for production later if needed
+  })
+
+  useEffect(() => {
+    if (response?.type === 'success' && response.params?.id_token) {
+      setSubmitting(true)
+      googleLogin(response.params.id_token)
+        .then(() => {
+          router.replace(from !== undefined && from !== '' ? { pathname: from } : '/')
+        })
+        .catch((err) => {
+          setFromError(err)
+          setSubmitting(false)
+        })
+    }
+  }, [response])
 
   async function onSubmit(): Promise<void> {
     clear()
@@ -63,6 +88,23 @@ export default function LoginScreen(): ReactElement {
     >
       {notice !== undefined && notice !== '' && <FormAlert message={notice} variant="success" />}
       {errors.general !== null && <FormAlert message={errors.general} />}
+
+      <View className="mb-6">
+        <Button
+          variant="outline"
+          disabled={!request || submitting}
+          onPress={() => {
+            void promptAsync()
+          }}
+          label="Sign in with Google"
+        />
+      </View>
+
+      <View className="flex-row items-center mb-6">
+        <View className="flex-1 h-px bg-border" />
+        <Text className="px-4 text-xs uppercase text-muted-foreground">Or continue with email</Text>
+        <View className="flex-1 h-px bg-border" />
+      </View>
 
       <FormStack>
         <Field

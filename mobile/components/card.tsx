@@ -34,7 +34,7 @@ export function Card({
   tone?: Tone
   className?: string
 }): ReactElement {
-  return <View className={`rounded-xl border p-5 ${TONES[tone]} ${className}`}>{children}</View>
+  return <View className={`rounded-2xl border p-6 ${TONES[tone]} ${className}`}>{children}</View>
 }
 
 /**

@@ -279,7 +279,7 @@ export default function StudyScreen(): ReactElement {
   const shell = (children: ReactElement): ReactElement => (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-5 p-5 pb-10"
+      contentContainerClassName="gap-6 p-6 pb-12"
       keyboardShouldPersistTaps="handled"
     >
       {children}
@@ -415,7 +415,7 @@ export default function StudyScreen(): ReactElement {
     >
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-5 p-5 pb-8"
+        contentContainerClassName="gap-6 p-6 pb-10"
         keyboardShouldPersistTaps="handled"
       >
         <View className="gap-2">

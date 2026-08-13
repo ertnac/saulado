@@ -342,11 +342,11 @@ export function StudySessionPage(): ReactElement {
     return (
       <div className="space-y-4" aria-busy="true">
         <Skeleton className="h-6 w-40" />
-        <Card className="p-6">
+        <Card className="p-8">
           <Skeleton className="h-6 w-52" />
-          <Skeleton className="mt-4 h-5 w-full" />
-          <Skeleton className="mt-2 h-5 w-full" />
-          <Skeleton className="mt-2 h-5 w-3/4" />
+          <Skeleton className="mt-6 h-5 w-full" />
+          <Skeleton className="mt-3 h-5 w-full" />
+          <Skeleton className="mt-3 h-5 w-3/4" />
         </Card>
       </div>
     )

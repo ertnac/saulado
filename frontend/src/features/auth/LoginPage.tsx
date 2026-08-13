@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactElement } from 'react'
+import { useState, useEffect, useRef, type FormEvent, type ReactElement } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { FormField } from '@/components/ui/form-field'
@@ -6,11 +6,34 @@ import { useFormErrors } from '@/hooks/useFormErrors'
 import { useAuthStore } from '@/stores/auth'
 import { AuthLayout, FormAlert } from './AuthLayout'
 
+interface GoogleCredentialResponse {
+  credential: string
+}
+
+interface GoogleAccounts {
+  id: {
+    initialize(config: {
+      client_id: string
+      callback: (res: GoogleCredentialResponse) => void
+    }): void
+    renderButton(parent: HTMLElement, options: Record<string, unknown>): void
+  }
+}
+
+declare global {
+  interface Window {
+    google?: { accounts: GoogleAccounts }
+  }
+}
+
 export function LoginPage(): ReactElement {
   const login = useAuthStore((s) => s.login)
+  const googleLogin = useAuthStore((s) => s.googleLogin)
   const navigate = useNavigate()
   const location = useLocation()
   const { errors, setFromError, clear } = useFormErrors()
+  const googleBtnRef = useRef<HTMLDivElement>(null)
+  const isGoogleInitialized = useRef(false)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -21,6 +44,39 @@ export function LoginPage(): ReactElement {
    * to the dashboard instead would silently discard the link they clicked.
    */
   const from = (location.state as { from?: string } | null)?.from ?? '/'
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const initGoogle = () => {
+      if (window.google && googleBtnRef.current) {
+        if (!isGoogleInitialized.current) {
+          window.google.accounts.id.initialize({
+            client_id: String(import.meta.env.VITE_GOOGLE_CLIENT_ID),
+            callback: (response: GoogleCredentialResponse) => {
+              clear()
+              googleLogin(response.credential)
+                .then(() => {
+                  void navigate(from, { replace: true })
+                })
+                .catch((err) => {
+                  setFromError(err)
+                })
+            },
+          })
+          isGoogleInitialized.current = true
+        }
+
+        window.google.accounts.id.renderButton(googleBtnRef.current, {
+          theme: 'outline',
+          size: 'large',
+          width: 320,
+        })
+      } else {
+        setTimeout(initGoogle, 100)
+      }
+    }
+    initGoogle()
+  }, [googleLogin, navigate, from, clear, setFromError])
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
@@ -53,6 +109,17 @@ export function LoginPage(): ReactElement {
       }
     >
       {errors.general && <FormAlert message={errors.general} />}
+
+      <div className="flex justify-center mb-6" ref={googleBtnRef}></div>
+
+      <div className="relative mb-6">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">Or continue with email</span>
+        </div>
+      </div>
 
       <form
         onSubmit={(e) => {

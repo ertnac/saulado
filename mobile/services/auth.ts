@@ -41,6 +41,15 @@ export async function login(body: LoginRequest): Promise<AuthResponse> {
   return session
 }
 
+export async function googleLogin(idToken: string): Promise<AuthResponse> {
+  const session = await request<AuthResponse>('/api/auth/login/google', {
+    method: 'POST',
+    body: { idToken },
+  })
+  await adoptSession(session)
+  return session
+}
+
 export function forgotPassword(body: ForgotPasswordRequest): Promise<MessageResponse> {
   return request<MessageResponse>('/api/auth/forgot-password', { method: 'POST', body })
 }

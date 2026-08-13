@@ -1,5 +1,6 @@
 import { useEffect, useState, type ComponentType, type ReactElement } from 'react'
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import {
@@ -157,6 +158,7 @@ export function AppShell(): ReactElement {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const palette = useSearchShortcut()
+  const location = useLocation()
 
   return (
     <div className="min-h-screen md:pl-20">
@@ -229,7 +231,14 @@ export function AppShell(): ReactElement {
 
       {/* Bottom padding clears the mobile nav bar, which is fixed over the page. */}
       <main id="main" className="mx-auto w-full max-w-5xl px-4 pb-28 pt-4 md:pb-16 md:pt-6">
-        <Outlet />
+        <motion.div
+          key={location.pathname}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <Outlet />
+        </motion.div>
       </main>
 
       <CommandPalette open={palette.open} onClose={palette.onClose} />

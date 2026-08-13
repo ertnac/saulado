@@ -66,3 +66,8 @@ export type RegisterBody = z.infer<typeof registerSchema>
 export type LoginBody = z.infer<typeof loginSchema>
 export type ForgotPasswordBody = z.infer<typeof forgotPasswordSchema>
 export type ResetPasswordBody = z.infer<typeof resetPasswordSchema>
+
+export const googleLoginSchema = z.object({
+  idToken: z.string().min(1, 'ID Token is required.'),
+})
+export type GoogleLoginBody = z.infer<typeof googleLoginSchema>
