@@ -101,6 +101,7 @@ const config: ExpoConfig = {
   plugins: [
     'expo-secure-store',
     'expo-router',
+    '@react-native-google-signin/google-signin',
     [
       'expo-camera',
       {

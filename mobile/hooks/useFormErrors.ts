@@ -63,9 +63,10 @@ export function useFormErrors(): {
      * the same first thing to check — whether this device can see that host at
      * all.
      */
+    console.error('[useFormErrors] Non-ApiError caught:', error)
     setErrors({
       fields: {},
-      general: 'Could not reach the server. Check your connection and try again.',
+      general: `Debug Error: ${error instanceof Error ? error.message : JSON.stringify(error)}`,
     })
   }, [])
 

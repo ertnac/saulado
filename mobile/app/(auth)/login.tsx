@@ -1,7 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import { useState, useEffect, type ReactElement } from 'react'
-import * as WebBrowser from 'expo-web-browser'
-import * as Google from 'expo-auth-session/providers/google'
+import {
+  GoogleSignin,
+  statusCodes,
+  isErrorWithCode,
+} from '@react-native-google-signin/google-signin'
 import { Text, View } from 'react-native'
 import { AuthLayout } from '../../components/auth-layout'
 import { Button, TextLink } from '../../components/button'
@@ -9,7 +12,9 @@ import { Field, FormAlert, FormStack } from '../../components/form'
 import { useFormErrors } from '../../hooks/useFormErrors'
 import { useAuthStore } from '../../stores/auth'
 
-WebBrowser.maybeCompleteAuthSession()
+GoogleSignin.configure({
+  webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+})
 
 /**
  * Ported from `frontend/src/features/auth/LoginPage.tsx`.
@@ -30,25 +35,40 @@ export default function LoginScreen(): ReactElement {
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-    redirectUri: 'https://auth.expo.io/@ertnac/saulado',
-    // Add androidClientId for production later if needed
-  })
-
   useEffect(() => {
-    if (response?.type === 'success' && response.params?.id_token) {
-      setSubmitting(true)
-      googleLogin(response.params.id_token)
-        .then(() => {
-          router.replace(from !== undefined && from !== '' ? { pathname: from } : '/')
-        })
-        .catch((err) => {
-          setFromError(err)
-          setSubmitting(false)
-        })
+    console.log('[DEBUG] GOOGLE CLIENT ID:', process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID)
+  }, [])
+
+  async function handleGoogleSignIn() {
+    setSubmitting(true)
+    try {
+      await GoogleSignin.hasPlayServices()
+      const userInfo = await GoogleSignin.signIn()
+
+      if (userInfo.data?.idToken) {
+        await googleLogin(userInfo.data.idToken)
+        router.replace(from !== undefined && from !== '' ? { pathname: from } : '/')
+      } else {
+        throw new Error('No ID token received from Google')
+      }
+    } catch (error) {
+      if (isErrorWithCode(error)) {
+        if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+          // User cancelled the login flow
+        } else if (error.code === statusCodes.IN_PROGRESS) {
+          // Operation already in progress
+        } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+          setFromError(new Error('Play Services not available or outdated'))
+        } else {
+          setFromError(error)
+        }
+      } else {
+        setFromError(error)
+      }
+    } finally {
+      setSubmitting(false)
     }
-  }, [response])
+  }
 
   async function onSubmit(): Promise<void> {
     clear()
@@ -92,9 +112,9 @@ export default function LoginScreen(): ReactElement {
       <View className="mb-6">
         <Button
           variant="outline"
-          disabled={!request || submitting}
+          disabled={submitting}
           onPress={() => {
-            void promptAsync()
+            void handleGoogleSignIn()
           }}
           label="Sign in with Google"
         />
