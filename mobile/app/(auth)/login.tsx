@@ -43,6 +43,9 @@ export default function LoginScreen(): ReactElement {
     setSubmitting(true)
     try {
       await GoogleSignin.hasPlayServices()
+      if (GoogleSignin.hasPreviousSignIn()) {
+        await GoogleSignin.signOut()
+      }
       const userInfo = await GoogleSignin.signIn()
 
       if (userInfo.data?.idToken) {

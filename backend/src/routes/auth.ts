@@ -180,48 +180,52 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const { idToken } = req.body as GoogleLoginBody
 
+    let payload: Awaited<ReturnType<typeof jwtVerify>>['payload']
     try {
-      const { payload } = await jwtVerify(idToken, googleJWKS, {
+      const verified = await jwtVerify(idToken, googleJWKS, {
         issuer: ['https://accounts.google.com', 'accounts.google.com'],
+        clockTolerance: '5m',
       })
-
-      if (!payload.email) {
-        sendError(res, 'INVALID_CREDENTIALS', 'Google account has no email address.')
-        return
-      }
-
-      const email = (payload.email as string).toLowerCase()
-      const googleId = payload.sub as string
-
-      let user = await prisma.user.findUnique({
-        where: { email },
-        include: { settings: true },
-      })
-
-      if (!user) {
-        user = await prisma.user.create({
-          data: {
-            email,
-            googleId,
-            emailVerifiedAt: payload.email_verified ? new Date() : null,
-            settings: { create: {} },
-          },
-          include: { settings: true },
-        })
-      } else if (!user.googleId) {
-        user = await prisma.user.update({
-          where: { id: user.id },
-          data: { googleId },
-          include: { settings: true },
-        })
-      }
-
-      const session = await issueSession(user.id, req.get('user-agent'))
-      res.status(200).json(authPayload(req, res, user, user.settings!, session))
+      payload = verified.payload
     } catch (err) {
       console.error('[auth] Google JWT verification failed', err)
       sendError(res, 'INVALID_CREDENTIALS', 'Invalid Google token.')
+      return
     }
+
+    if (!payload.email) {
+      sendError(res, 'INVALID_CREDENTIALS', 'Google account has no email address.')
+      return
+    }
+
+    const email = (payload.email as string).toLowerCase()
+    const googleId = payload.sub as string
+
+    let user = await prisma.user.findUnique({
+      where: { email },
+      include: { settings: true },
+    })
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email,
+          googleId,
+          emailVerifiedAt: payload.email_verified ? new Date() : null,
+          settings: { create: {} },
+        },
+        include: { settings: true },
+      })
+    } else if (!user.googleId) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { googleId },
+        include: { settings: true },
+      })
+    }
+
+    const session = await issueSession(user.id, req.get('user-agent'))
+    res.status(200).json(authPayload(req, res, user, user.settings!, session))
   }),
 )
 

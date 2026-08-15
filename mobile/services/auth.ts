@@ -8,6 +8,7 @@ import type {
   ResetPasswordRequest,
   UserSettings,
 } from '@saulado/shared'
+import { GoogleSignin } from '@react-native-google-signin/google-signin'
 import {
   adoptSession,
   authorizedRequest,
@@ -76,6 +77,14 @@ export function fetchMe(): Promise<{ user: PublicUser; settings: UserSettings }>
  */
 export async function logout(): Promise<void> {
   const refreshToken = await loadRefreshToken()
+
+  try {
+    if (GoogleSignin.hasPreviousSignIn()) {
+      await GoogleSignin.signOut()
+    }
+  } catch {
+    // Swallowed on purpose: Google sign out failure should not block app logout
+  }
 
   try {
     await request<MessageResponse>('/api/auth/logout', {
