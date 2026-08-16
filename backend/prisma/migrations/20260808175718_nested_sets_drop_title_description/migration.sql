@@ -1,2 +1,2 @@
 -- DropIndex
-DROP INDEX "idx_cards_search";
+DROP INDEX IF EXISTS "idx_cards_search";
