@@ -15,7 +15,10 @@
  * Point this at the machine's LAN address (`http://192.168.x.x:3000`) or at the
  * deployed API.
  */
-const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/$/, '')
+const API_BASE = (process.env.EXPO_PUBLIC_API_URL || 'https://saulado-api.onrender.com').replace(
+  /\/$/,
+  '',
+)
 
 /**
  * Thrown when the base URL is missing.

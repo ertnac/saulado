@@ -28,7 +28,9 @@ export default function RegisterScreen(): ReactElement {
 
   useEffect(() => {
     GoogleSignin.configure({
-      webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+      webClientId:
+        process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+        '330543096063-tppmsqj37prrk2hsjnhlrn078ucl1jqd.apps.googleusercontent.com',
     })
   }, [])
 
