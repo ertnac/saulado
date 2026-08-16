@@ -160,6 +160,8 @@ describe('exporting data', () => {
       typoTolerance: true,
       blankWidthMode: 'fixed',
       timezone: 'UTC',
+      nickname: 'Learner',
+      profileImage: null,
     },
     sets: [],
     reviews: [],

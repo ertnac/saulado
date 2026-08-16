@@ -56,12 +56,14 @@ function set(overrides: Partial<StudySet> = {}): StudySet {
   return {
     id: 'set-1',
     title: 'Hardware',
-    description: 'Computer basics',
+    parentId: null,
     color: 'blue',
     archivedAt: null,
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
     cardCount: 2,
+    subtreeCardCount: 2,
+    childCount: 0,
     ...overrides,
   }
 }
@@ -70,7 +72,6 @@ function summary(overrides: Partial<StudyCardSummary> = {}): StudyCardSummary {
   return {
     id: 'card-1',
     studySetId: 'set-1',
-    title: 'The CPU',
     paragraph: 'The CPU is the brain of the computer',
     tags: ['computing'],
     answerCount: 1,
@@ -84,7 +85,6 @@ function card(overrides: Partial<StudyCard> = {}): StudyCard {
   return {
     id: 'card-1',
     studySetId: 'set-1',
-    title: 'The CPU',
     paragraph: 'The CPU is the brain of the computer',
     answers: [
       { id: 'a1', ordinal: 0, startOffset: 4, endOffset: 7, answerText: 'CPU', altAnswers: [] },
@@ -98,7 +98,7 @@ function card(overrides: Partial<StudyCard> = {}): StudyCard {
 
 /** Seeds an infinite list the way react-query stores one — pages, not a flat array. */
 function seedSets(client: QueryClient, archived: boolean, ...pages: StudySet[][]): void {
-  client.setQueryData<InfiniteData<SetsResponse>>(setKeys.list(archived), {
+  client.setQueryData<InfiniteData<SetsResponse>>(setKeys.list({ archived, parent: null }), {
     pages: pages.map((items, index) => ({
       items,
       nextCursor: index < pages.length - 1 ? `cursor-${String(index)}` : null,
@@ -123,7 +123,9 @@ function seedCards(
 }
 
 function cachedSets(client: QueryClient, archived: boolean): StudySet[] {
-  return flattenPages(client.getQueryData<InfiniteData<SetsResponse>>(setKeys.list(archived)))
+  return flattenPages(
+    client.getQueryData<InfiniteData<SetsResponse>>(setKeys.list({ archived, parent: null })),
+  )
 }
 
 function cachedCards(client: QueryClient, setId: string, tags: string[] = []): StudyCardSummary[] {
@@ -165,22 +167,20 @@ describe('useUpdateSet', () => {
     })
   })
 
-  it('clears a description when sent null, rather than treating it as absent', async () => {
-    // `?? set.description` would read null as "no change" and the description
-    // would be impossible to remove.
+  it('changes the color when updated', async () => {
     const client = makeClient()
     seedSets(client, false, [set()])
     mocked.updateSet.mockReturnValue(new Promise<SetResponse>(() => undefined))
 
     const { result } = renderHook(() => useUpdateSet(), { wrapper: wrapper(client) })
-    result.current.mutate({ id: 'set-1', body: { description: null } })
+    result.current.mutate({ id: 'set-1', body: { color: 'green' } })
 
     await waitFor(() => {
-      expect(cachedSets(client, false)[0]?.description).toBeNull()
+      expect(cachedSets(client, false)[0]?.color).toBe('green')
     })
   })
 
-  it('leaves the description alone when the field is absent', async () => {
+  it('leaves the color alone when the field is absent', async () => {
     const client = makeClient()
     seedSets(client, false, [set()])
     mocked.updateSet.mockReturnValue(new Promise<SetResponse>(() => undefined))
@@ -189,7 +189,7 @@ describe('useUpdateSet', () => {
     result.current.mutate({ id: 'set-1', body: { title: 'Renamed' } })
 
     await waitFor(() => {
-      expect(cachedSets(client, false)[0]?.description).toBe('Computer basics')
+      expect(cachedSets(client, false)[0]?.color).toBe('blue')
     })
   })
 
@@ -307,7 +307,7 @@ describe('useCreateCard', () => {
     mocked.createCard.mockResolvedValue({ card: card({ id: 'card-9' }) })
 
     const { result } = renderHook(() => useCreateCard('set-1'), { wrapper: wrapper(client) })
-    result.current.mutate({ title: 'The CPU', paragraph: 'text', answers: [] })
+    result.current.mutate({ paragraph: 'The CPU is the brain of the computer', answers: [] })
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true)
@@ -321,7 +321,7 @@ describe('useCreateCard', () => {
     mocked.createCard.mockResolvedValue({ card: card({ id: 'card-9' }) })
 
     const { result } = renderHook(() => useCreateCard('set-1'), { wrapper: wrapper(client) })
-    result.current.mutate({ title: 'The CPU', paragraph: 'text', answers: [] })
+    result.current.mutate({ paragraph: 'The CPU is the brain of the computer', answers: [] })
 
     await waitFor(() => {
       expect(cachedSets(client, false)[0]?.cardCount).toBe(3)
@@ -337,7 +337,7 @@ describe('useCreateCard', () => {
     mocked.createCard.mockReturnValue(new Promise<CardResponse>(() => undefined))
 
     const { result } = renderHook(() => useCreateCard('set-1'), { wrapper: wrapper(client) })
-    result.current.mutate({ title: 'New', paragraph: 'text', answers: [] })
+    result.current.mutate({ paragraph: 'New paragraph', answers: [] })
 
     await waitFor(() => {
       expect(result.current.isPending).toBe(true)
@@ -347,16 +347,16 @@ describe('useCreateCard', () => {
 })
 
 describe('useUpdateCard', () => {
-  it('shows the new title in the list before the server answers', async () => {
+  it('shows the new paragraph in the list before the server answers', async () => {
     const client = makeClient()
     seedCards(client, 'set-1', [], [summary()])
     mocked.updateCard.mockReturnValue(new Promise<CardResponse>(() => undefined))
 
     const { result } = renderHook(() => useUpdateCard('card-1'), { wrapper: wrapper(client) })
-    result.current.mutate({ title: 'The processor' })
+    result.current.mutate({ paragraph: 'The processor' })
 
     await waitFor(() => {
-      expect(cachedCards(client, 'set-1')[0]?.title).toBe('The processor')
+      expect(cachedCards(client, 'set-1')[0]?.paragraph).toBe('The processor')
     })
   })
 
@@ -383,10 +383,10 @@ describe('useUpdateCard', () => {
     // `AnswerInput` carries no `answerText` — the server slices it. Patching the
     // detail cache from the request would leave the answers textless.
     const client = makeClient()
-    mocked.updateCard.mockResolvedValue({ card: card({ title: 'Renamed' }) })
+    mocked.updateCard.mockResolvedValue({ card: card({ paragraph: 'Renamed' }) })
 
     const { result } = renderHook(() => useUpdateCard('card-1'), { wrapper: wrapper(client) })
-    result.current.mutate({ title: 'Renamed' })
+    result.current.mutate({ paragraph: 'Renamed' })
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true)
@@ -407,12 +407,12 @@ describe('useUpdateCard', () => {
     mocked.updateCard.mockRejectedValue(new Error('offline'))
 
     const { result } = renderHook(() => useUpdateCard('card-1'), { wrapper: wrapper(client) })
-    result.current.mutate({ title: 'The processor' })
+    result.current.mutate({ paragraph: 'The processor' })
 
     await waitFor(() => {
       expect(result.current.isError).toBe(true)
     })
-    expect(cachedCards(client, 'set-1')[0]?.title).toBe('The CPU')
+    expect(cachedCards(client, 'set-1')[0]?.paragraph).toBe('The CPU is the brain of the computer')
   })
 })
 

@@ -30,6 +30,8 @@ function session(overrides: Partial<AuthResponse> = {}): AuthResponse {
       typoTolerance: false,
       blankWidthMode: 'fixed',
       timezone: 'UTC',
+      nickname: 'Learner',
+      profileImage: null,
     },
     accessToken: 'access-token',
     expiresIn: 900,

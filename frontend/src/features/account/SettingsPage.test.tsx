@@ -39,6 +39,8 @@ function settings(overrides: Partial<UserSettings> = {}): UserSettings {
     blankWidthMode: 'fixed',
     timezone: 'UTC',
     notificationsEnabled: false,
+    nickname: 'Learner',
+    profileImage: null,
     ...overrides,
   }
 }

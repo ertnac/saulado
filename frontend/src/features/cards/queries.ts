@@ -172,7 +172,7 @@ export function useSets(options: { archived?: boolean; parent?: string | null } 
       }),
     // `undefined` rather than `null`: react-query treats `undefined` as "no more
     // pages" and `hasNextPage` stays true for any other value, including null.
-    getNextPageParam: (last: SetsResponse) => last.nextCursor ?? undefined,
+    getNextPageParam: (last: SetsResponse) => last?.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
   })
 }
@@ -347,7 +347,7 @@ export function useCards(setId: string | undefined, tags: readonly string[] = []
         // `undefined` keeps the request identical to an unfiltered one.
         tag: tags.length > 0 ? [...tags] : undefined,
       }),
-    getNextPageParam: (last: CardsResponse) => last.nextCursor ?? undefined,
+    getNextPageParam: (last: CardsResponse) => last?.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
     enabled: setId !== undefined && setId.length > 0,
   })
@@ -520,5 +520,5 @@ export function useDeleteCard(setId: string) {
 export function flattenPages<T>(
   data: InfiniteData<{ items: T[]; nextCursor: string | null }> | undefined,
 ): T[] {
-  return data?.pages.flatMap((page) => page.items) ?? []
+  return data?.pages.flatMap((page) => page?.items ?? []) ?? []
 }

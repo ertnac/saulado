@@ -28,12 +28,14 @@ function set(overrides: Partial<StudySet> = {}): StudySet {
   return {
     id: 'set-1',
     title: 'Hardware',
-    description: 'Computer basics',
+    parentId: null,
     color: 'blue',
     archivedAt: null,
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
     cardCount: 1,
+    subtreeCardCount: 1,
+    childCount: 0,
     ...overrides,
   }
 }
@@ -42,7 +44,6 @@ function summary(overrides: Partial<StudyCardSummary> = {}): StudyCardSummary {
   return {
     id: 'card-1',
     studySetId: 'set-1',
-    title: 'The CPU',
     paragraph: 'The CPU is the brain of the computer',
     tags: ['computing'],
     answerCount: 1,
@@ -82,6 +83,7 @@ function renderPage(): ReactElement {
 beforeEach(() => {
   vi.resetAllMocks()
   mocked.getSet.mockResolvedValue({ set: set() })
+  mocked.listSets.mockResolvedValue({ items: [], nextCursor: null })
   mocked.listCards.mockResolvedValue(cardsPage([summary()]))
   mocked.listTags.mockResolvedValue(TAGS)
   mockedStudy.getDueCounts.mockResolvedValue({

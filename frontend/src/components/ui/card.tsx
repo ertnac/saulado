@@ -22,7 +22,7 @@ interface CardProps extends HTMLAttributes<HTMLElement> {
    * The element to render. A card inside a `<ul>` has to be an `<li>` — a `<div>`
    * between a list and its items makes the list announce as empty.
    */
-  as?: 'div' | 'li' | 'section' | 'article'
+  as?: 'div' | 'li' | 'section' | 'article' | 'button'
 }
 
 const tones: Record<Tone, string> = {
