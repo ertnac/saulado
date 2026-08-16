@@ -157,7 +157,10 @@ authRouter.post(
       return
     }
 
-    if (!(await verifyPassword(password, user.passwordHash))) {
+    if (!user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
+      if (!user.passwordHash) {
+        await burnPasswordTiming(password)
+      }
       sendError(res, 'INVALID_CREDENTIALS', INVALID_CREDENTIALS)
       return
     }

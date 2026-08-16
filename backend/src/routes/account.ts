@@ -96,7 +96,7 @@ async function reauthenticate(req: Request, currentPassword: string): Promise<Re
   const user = await prisma.user.findUnique({ where: { id: requireUserId(req) } })
   if (!user) return { ok: false, missing: true }
 
-  if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+  if (!user.passwordHash || !(await verifyPassword(currentPassword, user.passwordHash))) {
     return { ok: false, missing: false }
   }
 
