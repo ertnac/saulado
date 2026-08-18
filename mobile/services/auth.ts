@@ -8,7 +8,7 @@ import type {
   ResetPasswordRequest,
   UserSettings,
 } from '@saulado/shared'
-import { GoogleSignin } from '@react-native-google-signin/google-signin'
+import { GoogleSignin } from '../lib/google-signin'
 import {
   adoptSession,
   authorizedRequest,

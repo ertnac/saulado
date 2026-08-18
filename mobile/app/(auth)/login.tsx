@@ -1,22 +1,12 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import { useState, useEffect, type ReactElement } from 'react'
-import {
-  GoogleSignin,
-  statusCodes,
-  isErrorWithCode,
-} from '@react-native-google-signin/google-signin'
+import { GoogleSignin, statusCodes, isErrorWithCode } from '../../lib/google-signin'
 import { Text, View } from 'react-native'
 import { AuthLayout } from '../../components/auth-layout'
 import { Button, TextLink } from '../../components/button'
 import { Field, FormAlert, FormStack } from '../../components/form'
 import { useFormErrors } from '../../hooks/useFormErrors'
 import { useAuthStore } from '../../stores/auth'
-
-GoogleSignin.configure({
-  webClientId:
-    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
-    '330543096063-tppmsqj37prrk2hsjnhlrn078ucl1jqd.apps.googleusercontent.com',
-})
 
 /**
  * Ported from `frontend/src/features/auth/LoginPage.tsx`.
@@ -38,7 +28,11 @@ export default function LoginScreen(): ReactElement {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    console.log('[DEBUG] GOOGLE CLIENT ID:', process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID)
+    GoogleSignin.configure({
+      webClientId:
+        process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+        '330543096063-tppmsqj37prrk2hsjnhlrn078ucl1jqd.apps.googleusercontent.com',
+    })
   }, [])
 
   async function handleGoogleSignIn() {

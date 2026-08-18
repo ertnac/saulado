@@ -1,8 +1,9 @@
-import type { ReactElement } from 'react'
+import { useState, type ReactElement } from 'react'
 import { Pressable, Text, TextInput, View } from 'react-native'
 import {
   ANSWERS_MAX_PER_CARD,
   codePointLength,
+  codeUnitToCodePoint,
   PARAGRAPH_MAX_CODE_POINTS,
   type DraftAnswer,
 } from '@saulado/shared'
@@ -37,12 +38,10 @@ export function HighlightEditor({
   draft: CardDraftState & CardDraftActions
 }): ReactElement {
   const {
-    mode,
     paragraph,
     draftText,
     answers,
     orphaned,
-    setMode,
     setDraftText,
     commitParagraph,
     addHighlight,
@@ -54,33 +53,62 @@ export function HighlightEditor({
   const length = codePointLength(draftText)
   const overLimit = length > PARAGRAPH_MAX_CODE_POINTS
 
+  const [activeSelection, setActiveSelection] = useState<{
+    start: number
+    end: number
+    text: string
+    rawSelection: string
+  } | null>(null)
+
+  const handleSelectionChange = (e: {
+    nativeEvent: { selection: { start: number; end: number } }
+  }): void => {
+    const { start, end } = e.nativeEvent.selection
+    if (start !== end) {
+      const sStart = Math.min(start, end)
+      const sEnd = Math.max(start, end)
+      const raw = draftText.slice(sStart, sEnd)
+      const trimmed = raw.trim()
+      if (trimmed.length > 0) {
+        setActiveSelection({
+          start: sStart,
+          end: sEnd,
+          text: trimmed,
+          rawSelection: raw,
+        })
+      }
+    }
+  }
+
+  const handleTextChange = (text: string): void => {
+    setDraftText(text)
+    if (activeSelection !== null && !text.includes(activeSelection.text)) {
+      setActiveSelection(null)
+    }
+  }
+
+  const handleMakeBlankFromSelection = (): void => {
+    if (activeSelection === null) return
+
+    const { start, rawSelection, text } = activeSelection
+    const leadingSpaces = rawSelection.length - rawSelection.trimStart().length
+    const actualStart = start + leadingSpaces
+    const actualEnd = actualStart + text.length
+
+    // Commit paragraph first so normalized text is up to date
+    commitParagraph()
+
+    const startOffset = codeUnitToCodePoint(draftText, actualStart)
+    const endOffset = codeUnitToCodePoint(draftText, actualEnd)
+
+    addHighlight({ startOffset, endOffset })
+    setActiveSelection(null)
+  }
+
   return (
     <View className="gap-4">
       <View className="flex-row items-center justify-between gap-3">
-        <View
-          accessibilityRole="tablist"
-          accessibilityLabel="Editor mode"
-          className="flex-row gap-1 rounded-full bg-surface-muted p-1"
-        >
-          <ModeTab
-            label="Write"
-            active={mode === 'compose'}
-            onPress={() => {
-              setMode('compose')
-            }}
-          />
-          <ModeTab
-            label="Highlight"
-            active={mode === 'highlight'}
-            // Nothing to highlight in an empty or over-long paragraph, and
-            // committing one would only produce an empty surface.
-            disabled={draftText.trim().length === 0 || overLimit}
-            onPress={() => {
-              commitParagraph()
-              setMode('highlight')
-            }}
-          />
-        </View>
+        <Text className="text-lg font-bold text-foreground">Card Content</Text>
 
         <Text
           className={`text-xs ${overLimit ? 'font-medium text-warning' : 'text-muted-foreground'}`}
@@ -89,37 +117,92 @@ export function HighlightEditor({
         </Text>
       </View>
 
-      {mode === 'compose' ? (
-        <View className="gap-2">
-          <TextInput
-            value={draftText}
-            onChangeText={setDraftText}
-            // Committing on blur means a user who taps straight to Save still gets
-            // their text normalized and their answers re-anchored.
-            onBlur={commitParagraph}
-            accessibilityLabel="Paragraph"
-            multiline
-            textAlignVertical="top"
-            placeholder="Paste or write the paragraph you want to study, then switch to Highlight."
-            placeholderTextColor={placeholder}
-            style={{ fontSize: 17, lineHeight: 28 }}
-            className={`min-h-40 rounded-md border bg-surface p-4 text-foreground ${
-              overLimit ? 'border-warning' : 'border-border'
-            }`}
-          />
-          <Text className="text-xs text-muted-foreground">
-            {answers.length > 0
-              ? 'Your existing blanks follow their words as you edit. If you delete a highlighted word, you will be told.'
-              : 'Write it the way you want to read it back — the context is what makes recall work.'}
-          </Text>
+      {/* Custom Context Menu Floating Bar */}
+      {activeSelection !== null && (
+        <View className="flex-row items-center justify-between rounded-2xl bg-foreground p-2 shadow-xl shadow-black/30">
+          <Pressable
+            onPress={handleMakeBlankFromSelection}
+            className="flex-row items-center gap-2 rounded-xl bg-primary px-4 py-2.5 active:opacity-90"
+          >
+            <Text className="text-sm font-black text-primary-foreground">✨ Make a Question</Text>
+          </Pressable>
+          <View className="mx-2.5 flex-1 overflow-hidden">
+            <Text numberOfLines={1} className="text-xs font-medium text-background/80">
+              "{activeSelection.text}"
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => {
+              setActiveSelection(null)
+            }}
+            hitSlop={8}
+            className="h-8 w-8 items-center justify-center rounded-full bg-surface-muted/20 active:opacity-70"
+          >
+            <Text className="text-xs font-bold text-background">✕</Text>
+          </Pressable>
         </View>
-      ) : (
-        <HighlightSurface
-          paragraph={paragraph}
-          answers={answers}
-          onAddHighlight={addHighlight}
-          onRemoveHighlight={removeHighlight}
+      )}
+
+      <View className="gap-2">
+        <TextInput
+          value={draftText}
+          onChangeText={handleTextChange}
+          onBlur={commitParagraph}
+          onSelectionChange={handleSelectionChange}
+          contextMenuHidden={true}
+          accessibilityLabel="Paragraph"
+          multiline
+          textAlignVertical="top"
+          placeholder="Type or paste your notes here..."
+          placeholderTextColor={placeholder}
+          style={{ fontSize: 17, lineHeight: 28 }}
+          className={`min-h-32 rounded-xl border bg-surface p-4 text-foreground ${
+            overLimit ? 'border-warning' : 'border-border'
+          }`}
         />
+        <Text className="text-xs text-muted-foreground">
+          Select words above to click "✨ Make a Question", or tap words below to create blanks.
+        </Text>
+      </View>
+
+      {/* Active Blanks Badges */}
+      {answers.length > 0 && (
+        <View className="gap-2">
+          <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Question Blanks ({answers.length}/{ANSWERS_MAX_PER_CARD})
+          </Text>
+          <View className="flex-row flex-wrap gap-2">
+            {answers.map((ans) => (
+              <Pressable
+                key={ans.ordinal}
+                onPress={() => {
+                  removeHighlight(ans.ordinal)
+                }}
+                className="flex-row items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 active:bg-primary/20"
+              >
+                <View className="h-4 w-4 items-center justify-center rounded-full bg-primary">
+                  <Text className="text-[10px] font-black text-primary-foreground">
+                    {ans.ordinal + 1}
+                  </Text>
+                </View>
+                <Text className="text-xs font-bold text-foreground">{ans.answerText}</Text>
+                <Text className="text-xs text-muted-foreground">✕</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {draftText.trim().length > 0 && !overLimit && (
+        <View className="gap-2 mt-2">
+          <Text className="text-sm font-bold text-foreground">Tap word to toggle blank</Text>
+          <HighlightSurface
+            paragraph={paragraph.trim().length > 0 ? paragraph : draftText}
+            answers={answers}
+            onAddHighlight={addHighlight}
+            onRemoveHighlight={removeHighlight}
+          />
+        </View>
       )}
 
       <OrphanedNotice orphaned={orphaned} onDismiss={dismissOrphans} />
@@ -136,38 +219,6 @@ export function HighlightEditor({
         <ClozePreview paragraph={paragraph} answers={answers} />
       </View>
     </View>
-  )
-}
-
-function ModeTab({
-  label,
-  active,
-  disabled = false,
-  onPress,
-}: {
-  label: string
-  active: boolean
-  disabled?: boolean
-  onPress: () => void
-}): ReactElement {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="tab"
-      accessibilityLabel={label}
-      accessibilityState={{ selected: active, disabled }}
-      hitSlop={8}
-      className={`h-9 justify-center rounded-full px-4 ${active ? 'bg-primary' : ''} ${
-        disabled ? 'opacity-50' : ''
-      }`}
-    >
-      <Text
-        className={`text-sm font-medium ${active ? 'text-primary-foreground' : 'text-foreground'}`}
-      >
-        {label}
-      </Text>
-    </Pressable>
   )
 }
 

@@ -89,7 +89,6 @@ function Composer({
     mode: seed !== undefined && seed.answers.length > 0 ? 'highlight' : 'compose',
   })
   const [tags] = useState<string[]>(card?.tags ?? restored?.tags ?? [])
-  const [added, setAdded] = useState(0)
 
   const { errors, setFromError, clear } = useFormErrors()
   const create = useCreateCard(setId)
@@ -122,6 +121,11 @@ function Composer({
     !editing && !pending && imported === undefined,
   )
 
+  const handleClose = (): void => {
+    clearDraft(scope)
+    onClose()
+  }
+
   const submit = async (): Promise<void> => {
     clear()
     // `paragraph` and `answers` always travel together: the offsets index into
@@ -148,9 +152,8 @@ function Composer({
         return
       }
 
-      // Emptied rather than collapsed.
       draft.reset({ paragraph: '' })
-      setAdded((count) => count + 1)
+      onClose()
     } catch (error) {
       setFromError(error)
     } finally {
@@ -163,7 +166,7 @@ function Composer({
   return (
     <View
       accessibilityLabel={editing ? 'Edit card' : 'New card'}
-      className="gap-5 rounded-xl border border-border bg-surface p-5"
+      className="gap-5 bg-surface pb-10"
     >
       {imported !== undefined && (
         <Text className="text-sm font-medium text-muted-foreground">
@@ -193,10 +196,10 @@ function Composer({
 
         {imported === undefined ? (
           <Button
-            label={editing ? 'Cancel' : 'Done'}
+            label={editing ? 'Cancel' : 'Cancel'}
             variant="ghost"
             disabled={pending}
-            onPress={onClose}
+            onPress={handleClose}
           />
         ) : (
           <>
@@ -222,17 +225,6 @@ function Composer({
           </Text>
         )}
       </View>
-
-      {/*
-        The only feedback that a save landed, since the composer does not move.
-        Polite rather than assertive: it is a confirmation, not something to act
-        on, and it fires while the user is typing the next card.
-      */}
-      {added > 0 && (
-        <Text accessibilityLiveRegion="polite" className="text-sm text-muted-foreground">
-          {`${String(added)} ${added === 1 ? 'card' : 'cards'} added. Write another, or press Done.`}
-        </Text>
-      )}
     </View>
   )
 }

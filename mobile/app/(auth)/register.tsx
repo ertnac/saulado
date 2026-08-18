@@ -1,11 +1,7 @@
 import { PASSWORD_MIN_LENGTH, checkPassword } from '@saulado/shared'
 import { router } from 'expo-router'
 import { useState, useEffect, type ReactElement } from 'react'
-import {
-  GoogleSignin,
-  statusCodes,
-  isErrorWithCode,
-} from '@react-native-google-signin/google-signin'
+import { GoogleSignin, statusCodes, isErrorWithCode } from '../../lib/google-signin'
 import { Text, View } from 'react-native'
 import { AuthLayout } from '../../components/auth-layout'
 import { Button, TextLink } from '../../components/button'

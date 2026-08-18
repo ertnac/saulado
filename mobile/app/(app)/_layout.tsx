@@ -1,5 +1,4 @@
-import { Redirect, useRouter, useUnstableGlobalHref } from 'expo-router'
-import { Tabs } from 'expo-router/js-tabs'
+import { Redirect, useRouter, usePathname, Tabs } from 'expo-router'
 import type { ReactElement } from 'react'
 import { ActivityIndicator, Pressable, View } from 'react-native'
 import { ChevronLeftIcon, SettingsIcon } from '../../components/icons'
@@ -11,9 +10,6 @@ import { useTokenColor } from '../../stores/theme'
 /**
  * The `ProtectedRoute` guard plus the app's own chrome, ported from
  * `frontend/src/components/ProtectedRoute.tsx` and `components/layout/AppShell.tsx`.
- *
- * `Tabs` comes from `expo-router/js-tabs`: the same component re-exported from the
- * package root is deprecated in SDK 57.
  *
  * The bar itself is `components/tab-bar.tsx` rather than React Navigation's, so
  * the scan action can sit apart at the left edge; the order and the icons live
@@ -74,7 +70,7 @@ function SettingsButton(): ReactElement {
 
 export default function AppLayout(): ReactElement {
   const status = useAuthStore((s) => s.status)
-  const href = useUnstableGlobalHref()
+  const pathname = usePathname()
   const router = useRouter()
 
   const primary = useTokenColor('--primary')
@@ -101,12 +97,11 @@ export default function AppLayout(): ReactElement {
   /**
    * `from` carries the destination through the login round-trip. Expo Router has
    * no counterpart to React Router's `state`, so it travels as a search param;
-   * `useUnstableGlobalHref()` is the whole current href including its own params,
-   * which is what makes a deep link to `/sets/abc` survive being interrupted by
-   * the sign-in form instead of silently becoming the dashboard.
+   * `pathname` is the current route destination, which is what makes a deep link
+   * survive being interrupted by the sign-in form.
    */
   if (status === 'anonymous') {
-    return <Redirect href={{ pathname: '/login', params: { from: href } }} />
+    return <Redirect href={{ pathname: '/login', params: { from: pathname } }} />
   }
 
   return (

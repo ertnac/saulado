@@ -241,6 +241,60 @@ export function useRenameSet() {
   })
 }
 
+export function useDeleteSet() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => api.deleteSet(id),
+
+    onMutate: async (id: string) => {
+      await client.cancelQueries({ queryKey: setKeys.all })
+      const previous = client.getQueriesData({ queryKey: setKeys.all })
+
+      patchPages<StudySet>(client, setKeys.lists(), (items) =>
+        items.filter((item) => item.id !== id),
+      )
+
+      return { previous }
+    },
+
+    onError: (_error, _variables, context) => {
+      for (const [key, data] of context?.previous ?? []) client.setQueryData(key, data)
+    },
+
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: setKeys.all })
+    },
+  })
+}
+
+export function useArchiveSet() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, archive }: { id: string; archive: boolean }) =>
+      api.updateSet(id, { archived: archive }),
+
+    onMutate: async ({ id, archive }) => {
+      await client.cancelQueries({ queryKey: setKeys.all })
+      const previous = client.getQueriesData({ queryKey: setKeys.all })
+
+      const archivedAt = archive ? new Date().toISOString() : null
+      patchSet(client, id, (set) => ({ ...set, archivedAt }))
+
+      return { previous }
+    },
+
+    onError: (_error, _variables, context) => {
+      for (const [key, data] of context?.previous ?? []) client.setQueryData(key, data)
+    },
+
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: setKeys.all })
+    },
+  })
+}
+
 // ── Card queries ────────────────────────────────────────────────────────────
 
 export function useCards(setId: string | undefined, tags: readonly string[] = []) {

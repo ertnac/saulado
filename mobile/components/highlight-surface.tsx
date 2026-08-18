@@ -1,5 +1,5 @@
-import { useState, type ReactElement } from 'react'
-import { Text, View } from 'react-native'
+import { useState, useRef, type ReactElement } from 'react'
+import { Text, View, PanResponder, type LayoutRectangle } from 'react-native'
 import { ANSWERS_MAX_PER_CARD, rangesOverlap, type AnswerRange } from '@saulado/shared'
 import { spanBetween, toPieces, tokenize, type WordToken } from '../lib/highlight-offsets'
 import { useTokenColor } from '../stores/theme'
@@ -69,22 +69,15 @@ export function HighlightSurface({
   noun = 'blank',
   max = ANSWERS_MAX_PER_CARD,
 }: HighlightSurfaceProps): ReactElement {
-  const [anchor, setAnchor] = useState<WordToken | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const warning = useTokenColor('--warning')
 
-  function pressWord(token: WordToken): void {
-    if (anchor === null) {
-      setAnchor(token)
-      setMessage(null)
-      return
-    }
+  // Track layouts and tokens of words for drag selection
+  const wordLayouts = useRef<Record<number, LayoutRectangle>>({})
+  const wordTokens = useRef<Record<number, WordToken>>({})
+  const dragRangeRef = useRef<{ start: WordToken; current: WordToken } | null>(null)
 
-    setAnchor(null)
-    const range = spanBetween(anchor, token)
-
-    // Overlaps are named, never a silent no-op — the user otherwise reads the
-    // surface as broken (saulado-ux §3). Copy is the web's verbatim.
+  function handleAddHighlight(range: Pick<AnswerRange, 'startOffset' | 'endOffset'>): void {
     const collisions = answers.filter((answer) => rangesOverlap(range, answer))
     if (collisions.length > 0) {
       const names = collisions.map((answer) => String(answer.ordinal + 1)).join(', ')
@@ -96,7 +89,6 @@ export function HighlightSurface({
       return
     }
 
-    // Checked here rather than left to `addHighlight`, which caps silently.
     if (answers.length >= max) {
       setMessage(`You have reached the limit of ${String(max)} ${noun}s.`)
       return
@@ -106,14 +98,75 @@ export function HighlightSurface({
     setMessage(null)
   }
 
+  // PanResponder to handle drag across words
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent
+        const word = findWordAt(locationX, locationY)
+        if (word) {
+          dragRangeRef.current = { start: word, current: word }
+        }
+      },
+      onPanResponderMove: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent
+        const word = findWordAt(locationX, locationY)
+        if (word && dragRangeRef.current) {
+          dragRangeRef.current.current = word
+        }
+      },
+      onPanResponderRelease: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent
+        const endWord = findWordAt(locationX, locationY)
+        const prev = dragRangeRef.current
+        dragRangeRef.current = null
+
+        if (prev) {
+          const finalEnd = endWord || prev.current
+          // If it's a single word tap, just toggle it
+          if (prev.start.start === finalEnd.start) {
+            const range = { startOffset: prev.start.start, endOffset: prev.start.end }
+            // Check if tapped on existing blank to remove it
+            const hit = answers.find((a) => rangesOverlap(range, a))
+            if (hit) {
+              onRemoveHighlight(hit.ordinal)
+              setMessage(null)
+            } else {
+              handleAddHighlight(range)
+            }
+          } else {
+            // Multi-word drag
+            const range = spanBetween(prev.start, finalEnd)
+            handleAddHighlight(range)
+          }
+        }
+      },
+    }),
+  ).current
+
+  function findWordAt(x: number, y: number): WordToken | null {
+    for (const [key, layout] of Object.entries(wordLayouts.current)) {
+      if (
+        x >= layout.x &&
+        x <= layout.x + layout.width &&
+        y >= layout.y &&
+        y <= layout.y + layout.height
+      ) {
+        return wordTokens.current[Number(key)] || null
+      }
+    }
+    return null
+  }
+
   return (
     <View className="gap-3">
-      {/* No wrapper label: React Native has no `group` role, and a `View` label
-          is only announced when the view is `accessible`, which would collapse
-          every word into one unreachable target. The visible hint below carries
-          the same instruction and is announced as ordinary text. */}
-      <View className="rounded-md border border-border bg-surface p-4">
-        <Text style={{ fontSize: FONT_SIZE, lineHeight: LINE_HEIGHT }} className="text-foreground">
+      <View
+        className="rounded-md border border-border bg-surface p-4"
+        {...panResponder.panHandlers}
+      >
+        <View className="flex-row flex-wrap">
           {toPieces(paragraph, answers).map((piece) => {
             // Bound to a `const` before the branch: TypeScript drops a narrowing
             // on a parameter once it is read inside a closure, and the remove
@@ -126,8 +179,10 @@ export function HighlightSurface({
                   key={piece.start}
                   text={piece.text}
                   offset={piece.start}
-                  anchor={anchor}
-                  onPressWord={pressWord}
+                  onWordLayout={(token, layout) => {
+                    wordLayouts.current[token.start] = layout
+                    wordTokens.current[token.start] = token
+                  }}
                 />
               )
             }
@@ -140,59 +195,42 @@ export function HighlightSurface({
                 noun={noun}
                 onPress={() => {
                   onRemoveHighlight(ordinal)
-                  // The removed blank may be the one the anchor was measured
-                  // against; dropping it avoids a span across a gap the user can
-                  // no longer see.
-                  setAnchor(null)
                   setMessage(null)
                 }}
               />
             )
           })}
-        </Text>
+        </View>
       </View>
 
-      {/* Icon as well as colour: a rejection whose colour is invisible still has
-          to read as a rejection (saulado-ux §1.3). */}
-      <View accessibilityLiveRegion="polite" className="min-h-5">
-        {message !== null && (
-          <View className="flex-row items-start gap-1.5">
-            <AlertIcon color={warning} size={16} />
-            <Text className="flex-1 text-sm text-warning">{message}</Text>
-          </View>
-        )}
-      </View>
+      {message !== null && (
+        <View
+          accessibilityLiveRegion="polite"
+          className="flex-row items-start gap-1.5 rounded-lg bg-warning/10 p-2.5"
+        >
+          <AlertIcon color={warning} size={16} />
+          <Text className="flex-1 text-xs font-semibold text-warning">{message}</Text>
+        </View>
+      )}
 
       <Text className="text-xs text-muted-foreground">
-        {anchor === null
-          ? `Tap the first word of a phrase, then the last. Tap a ${noun} to remove it.`
-          : `Now tap the last word of the phrase — or "${anchor.text}" again for a single word.`}
+        {`Tap a word to create a blank. Drag across words to group them. Tap a ${noun} to remove it.`}
       </Text>
     </View>
   )
 }
 
-/**
- * A run of unhighlighted paragraph, split into tappable words.
- *
- * Whitespace tokens render as plain text: they carry the spacing the paragraph
- * needs and are not blankable on their own, so making them press targets would
- * only let the user arm an anchor on a space.
- */
 function PlainRun({
   text,
   offset,
-  anchor,
-  onPressWord,
+  onWordLayout,
 }: {
   text: string
-  /** Where this run starts in the paragraph — token offsets are relative to the run. */
   offset: number
-  anchor: WordToken | null
-  onPressWord: (token: WordToken) => void
+  onWordLayout: (token: WordToken, layout: LayoutRectangle) => void
 }): ReactElement {
   return (
-    <Text>
+    <>
       {tokenize(text).map((token) => {
         const absolute: WordToken = {
           ...token,
@@ -200,28 +238,31 @@ function PlainRun({
           end: token.end + offset,
         }
 
-        if (!token.isWord) return <Text key={absolute.start}>{token.text}</Text>
+        if (!token.isWord) {
+          // Render spaces/newlines
+          return token.text === '\n' ? (
+            <View key={absolute.start} style={{ width: '100%', height: 8 }} />
+          ) : (
+            <View key={absolute.start} style={{ width: 4 }} />
+          )
+        }
 
-        const armed = anchor !== null && anchor.start === absolute.start
         return (
-          <Text
+          <View
             key={absolute.start}
-            onPress={() => {
-              onPressWord(absolute)
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={
-              armed
-                ? `${token.text}, selected. Tap another word to finish the blank.`
-                : `${token.text}. Tap to start a blank.`
-            }
-            className={armed ? 'font-semibold text-accent-strong underline' : ''}
+            onLayout={(e) => onWordLayout(absolute, e.nativeEvent.layout)}
+            className="mb-1"
           >
-            {token.text}
-          </Text>
+            <Text
+              style={{ fontSize: FONT_SIZE, lineHeight: LINE_HEIGHT }}
+              className="text-foreground"
+            >
+              {token.text}
+            </Text>
+          </View>
         )
       })}
-    </Text>
+    </>
   )
 }
 
@@ -247,21 +288,24 @@ function HighlightMark({
   const label = String(ordinal + 1)
 
   return (
-    <Text
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${noun === 'blank' ? 'Blank' : 'Question'} ${label}: ${text}. Tap to remove.`}
-      className="rounded bg-highlight font-medium text-highlight-foreground"
-    >
-      {text}
+    <View className="mb-1">
       <Text
-        accessibilityElementsHidden
-        importantForAccessibility="no"
-        style={{ fontSize: 11, lineHeight: LINE_HEIGHT }}
-        className="font-semibold opacity-70"
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${noun === 'blank' ? 'Blank' : 'Question'} ${label}: ${text}. Tap to remove.`}
+        style={{ fontSize: FONT_SIZE, lineHeight: LINE_HEIGHT }}
+        className="rounded bg-highlight px-1 font-medium text-highlight-foreground"
       >
-        {label}
+        {text}
+        <Text
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+          style={{ fontSize: 11, lineHeight: LINE_HEIGHT }}
+          className="font-semibold opacity-70"
+        >
+          {label}
+        </Text>
       </Text>
-    </Text>
+    </View>
   )
 }

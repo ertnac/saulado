@@ -166,7 +166,6 @@ function PageButton({
 export default function SetsScreen(): ReactElement {
   const router = useRouter()
   const [sheetOpen, setSheetOpen] = useState(false)
-  const onPrimary = useTokenColor('--primary-foreground')
   const muted = useTokenColor('--muted-foreground')
   const listRef = useRef<ScrollView>(null)
 
@@ -273,28 +272,75 @@ export default function SetsScreen(): ReactElement {
         {!searchable && (
           <>
             <View className="gap-1 mt-1">
-              <Text className="text-2xl font-bold text-foreground">Your sets</Text>
-              <Text className="text-sm text-muted-foreground">
-                A set groups cards on one subject. Open one to add cards, or nest a sub-set inside
-                it.
+              <Text className="text-3xl font-extrabold text-foreground tracking-tight">
+                Subjects
+              </Text>
+              <Text className="text-sm font-medium text-muted-foreground">
+                8 Subjects · 320 Cards Total
               </Text>
             </View>
 
-            {/* Quick Learn — the prominent CTA that opens the set picker sheet */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Quick Learn — pick a set to study"
-              onPress={() => setSheetOpen(true)}
-              className="flex-row items-center justify-center gap-2 rounded-full bg-primary px-6 py-3.5 active:opacity-85 shadow shadow-black/5"
-            >
-              <ZapIcon color={onPrimary} size={20} />
-              <Text className="text-base font-semibold text-primary-foreground">Quick Learn</Text>
-            </Pressable>
+            {/* Filter Pills */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5 px-5">
+              <View className="flex-row gap-2 py-2">
+                <Chip label="All Subjects" selected={true} onPress={() => {}} />
+                <Chip label="Due for Review" selected={false} onPress={() => {}} />
+                <Chip label="Midterms" selected={false} onPress={() => {}} />
+                <Chip label="Biology" selected={false} onPress={() => {}} />
+              </View>
+            </ScrollView>
 
-            <SetList
-              parent={null}
-              emptyText="No sets yet. Start with one paragraph of your notes — highlight the words worth recalling and Saulado keeps the sentence around them."
-            />
+            {/* Hero Priority Deck */}
+            <View className="mt-2 gap-3">
+              <Text className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                Priority Study
+              </Text>
+              <View className="overflow-hidden rounded-[32px] bg-primary">
+                <View className="p-6 pb-5">
+                  <View className="mb-4 flex-row items-start justify-between">
+                    <View className="rounded-full bg-white/20 px-3 py-1">
+                      <Text className="text-xs font-bold text-white">12 Due Today</Text>
+                    </View>
+                    <View className="h-10 w-10 items-center justify-center rounded-full bg-white/10">
+                      <ZapIcon color="white" size={20} />
+                    </View>
+                  </View>
+                  <Text className="mb-1 text-2xl font-extrabold text-white">
+                    Anatomy & Physiology
+                  </Text>
+                  <Text className="mb-6 text-sm font-medium text-white/80">
+                    Chapter 4: The Nervous System
+                  </Text>
+
+                  <View className="flex-row items-center gap-4">
+                    <View className="flex-1 gap-2">
+                      <View className="h-1.5 w-full overflow-hidden rounded-full bg-black/20">
+                        <View className="h-full w-2/3 bg-white" />
+                      </View>
+                      <Text className="text-xs font-semibold text-white/90">66% Mastered</Text>
+                    </View>
+
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => setSheetOpen(true)}
+                      className="items-center justify-center rounded-full bg-white px-5 py-2.5 active:opacity-90"
+                    >
+                      <Text className="text-sm font-bold text-primary">Study Now</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View className="mt-4 gap-3">
+              <Text className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                All Subjects
+              </Text>
+              <SetList
+                parent={null}
+                emptyText="No sets yet. Tap below to create your first subject."
+              />
+            </View>
           </>
         )}
 

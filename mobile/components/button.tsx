@@ -1,8 +1,5 @@
 import type { ReactElement, ReactNode } from 'react'
 import { ActivityIndicator, Pressable, Text } from 'react-native'
-import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated'
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 import { useTokenColor, type Token } from '../stores/theme'
 
 type Variant = 'default' | 'outline' | 'ghost' | 'danger'
@@ -74,28 +71,16 @@ export function Button({
   // resolved colour rather than a class — same reason as the SVG icons.
   const spinnerColor = useTokenColor(v.spinner)
 
-  const scale = useSharedValue(1)
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }))
-
   return (
-    <AnimatedPressable
+    <Pressable
       onPress={onPress}
-      onPressIn={() => {
-        scale.value = withTiming(0.96, { duration: 100 })
-      }}
-      onPressOut={() => {
-        scale.value = withTiming(1, { duration: 100 })
-      }}
-      style={animatedStyle}
       disabled={blocked}
       accessibilityRole="button"
       accessibilityLabel={label}
       // Announces the blocked state rather than only drawing it — an opacity
       // change is invisible to a screen reader.
       accessibilityState={{ disabled: blocked, busy: loading }}
-      className={`flex-row items-center justify-center gap-2 rounded-full ${v.view} ${s.view} ${
+      className={`flex-row items-center justify-center gap-2 rounded-full active:opacity-85 ${v.view} ${s.view} ${
         blocked ? 'opacity-50' : ''
       } ${className}`}
     >
@@ -106,7 +91,7 @@ export function Button({
       */}
       {loading && <ActivityIndicator size="small" color={spinnerColor} />}
       <Text className={`font-medium ${v.text} ${s.text}`}>{label}</Text>
-    </AnimatedPressable>
+    </Pressable>
   )
 }
 

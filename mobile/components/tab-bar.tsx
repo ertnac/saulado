@@ -1,8 +1,13 @@
 import type { ReactElement } from 'react'
 import { Pressable, View } from 'react-native'
-import type { BottomTabBarProps } from 'expo-router/js-tabs'
 import { useTokenColor } from '../stores/theme'
 import { ChartIcon, HomeIcon, LayersIcon, ScanIcon, UserIcon, type IconProps } from './icons'
+
+import type { Tabs } from 'expo-router'
+
+export type BottomTabBarProps = Parameters<
+  NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>
+>[0]
 
 /**
  * Redesigned Floating Bottom Tab Bar.

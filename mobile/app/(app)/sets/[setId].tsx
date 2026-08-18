@@ -4,18 +4,38 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
+  RefreshControl,
+  Modal,
+  Pressable,
+  TouchableOpacity,
 } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { cardLabel, type StudyCardSummary } from '@saulado/shared'
+import { cardLabel, SET_TITLE_MAX_LENGTH, type StudyCardSummary } from '@saulado/shared'
 import { Button } from '../../../components/button'
 import { CardComposer } from '../../../components/card-composer'
-import { TrashIcon } from '../../../components/icons'
+import {
+  ArchiveIcon,
+  ChevronLeftIcon,
+  EditIcon,
+  MoreVerticalIcon,
+  ShareIcon,
+  TrashIcon,
+} from '../../../components/icons'
 import { SetList } from '../../../components/set-list'
-import { flattenPages, useCards, useDeleteCard, useSet } from '../../../hooks/cards'
+import {
+  flattenPages,
+  useArchiveSet,
+  useCards,
+  useDeleteCard,
+  useDeleteSet,
+  useRenameSet,
+  useSet,
+} from '../../../hooks/cards'
+import { exportSingleSetAsJson, shareJsonPayload } from '../../../services/json-transfer'
 import { useTokenColor } from '../../../stores/theme'
 
 /**
@@ -25,16 +45,9 @@ import { useTokenColor } from '../../../stores/theme'
  * used to be a route of its own, which meant the set you were writing against
  * disappeared the moment you started; here the list you are adding to stays on
  * screen and stays the thing you are looking at.
- *
- * Cards have no title. Rows print `cardLabel(paragraph)` — the first line of the
- * paragraph, truncated on a word boundary — because a title was a second thing to
- * write that said less than the text itself.
- *
- * Only one ancestor in the breadcrumb, where the web shows two. A phone header is
- * one line wide and `SET_DEPTH_MAX` is 3, so the parent is the useful half of the
- * trail and the grandparent is what gets truncated away anyway.
  */
 
+/** One card in the list, with its delete button. */
 function CardRow({
   card,
   onEdit,
@@ -48,25 +61,25 @@ function CardRow({
   const blanks = `${String(card.answerCount)} ${card.answerCount === 1 ? 'blank' : 'blanks'}`
 
   return (
-    <View className="min-h-14 flex-row items-center gap-2 rounded-xl border border-border bg-surface px-4 py-3">
+    <View className="flex-row items-start justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm shadow-black/5">
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${cardLabel(card.paragraph)}. ${blanks}. Tap to edit.`}
+        accessibilityLabel={`Edit: ${card.paragraph}`}
         onPress={onEdit}
-        className="flex-1 gap-0.5 active:opacity-70"
+        className="flex-1 gap-1"
       >
-        <Text numberOfLines={2} className="text-base text-foreground">
+        <Text numberOfLines={2} className="text-base font-semibold text-foreground">
           {cardLabel(card.paragraph)}
         </Text>
-        <Text className="text-sm text-muted-foreground">{blanks}</Text>
+        <Text className="text-xs font-bold uppercase tracking-wider text-primary">{blanks}</Text>
       </Pressable>
 
-      {/* 44×44 despite the 18pt glyph — saulado-ux §7, and this one deletes. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Delete card: ${cardLabel(card.paragraph)}`}
+        hitSlop={8}
         onPress={onDelete}
-        className="h-11 w-11 items-center justify-center rounded-full active:opacity-70"
+        className="rounded-full p-2 active:bg-warning/10"
       >
         <TrashIcon color={warning} size={18} />
       </Pressable>
@@ -78,15 +91,22 @@ export default function SetDetailScreen(): ReactElement {
   const { setId } = useLocalSearchParams<{ setId?: string }>()
   const router = useRouter()
   const [editing, setEditing] = useState<string | null>(null)
+  const [composerOpen, setComposerOpen] = useState(false)
+  const [menuVisible, setMenuVisible] = useState(false)
+  const [renameVisible, setRenameVisible] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+
+  const warning = useTokenColor('--warning')
+  const foreground = useTokenColor('--foreground')
+  const muted = useTokenColor('--muted-foreground')
 
   const set = useSet(setId)
-  // `undefined` rather than `null` when there is no parent: `useSet` treats
-  // `undefined` as "do not fetch", and a root set has no ancestor to ask for.
   const parent = useSet(set.data?.set.parentId ?? undefined)
   const cards = useCards(setId)
-  // The screen renders nothing but a message without a `setId`, but hooks run
-  // before that branch, so the mutation takes a placeholder it can never fire on.
   const remove = useDeleteCard(setId ?? '')
+  const deleteSet = useDeleteSet()
+  const archiveSet = useArchiveSet()
+  const renameSet = useRenameSet()
 
   const items = flattenPages(cards.data)
   const title = set.data?.set.title
@@ -103,14 +123,93 @@ export default function SetDetailScreen(): ReactElement {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            // Editing the card that just went is the one way to end up with a
-            // composer pointed at nothing.
             if (editing === card.id) setEditing(null)
             remove.mutate(card.id)
           },
         },
       ],
     )
+  }
+
+  const handleDeleteSet = (): void => {
+    if (!setId) return
+    setMenuVisible(false)
+    Alert.alert(
+      'Delete Set?',
+      `Are you sure you want to delete "${title ?? 'this set'}"? All cards will be permanently removed.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteSet.mutate(setId, {
+              onSuccess: () => {
+                router.replace('/sets')
+              },
+            })
+          },
+        },
+      ],
+    )
+  }
+
+  const handleArchiveSet = (): void => {
+    if (!setId) return
+    setMenuVisible(false)
+    archiveSet.mutate(
+      { id: setId, archive: true },
+      {
+        onSuccess: () => {
+          Alert.alert(
+            'Set Archived',
+            `"${title ?? 'Set'}" has been moved to your Archived Sets in the Account tab.`,
+          )
+          router.replace('/sets')
+        },
+      },
+    )
+  }
+
+  const handleShareSet = (): void => {
+    if (!setId) return
+    setMenuVisible(false)
+    void exportSingleSetAsJson(setId)
+      .then((json) => shareJsonPayload(`${title ?? 'set'}.json`, json))
+      .catch(() => {
+        Alert.alert('Export Failed', 'Could not build JSON for this set.')
+      })
+  }
+
+  const handleRenameSet = (): void => {
+    if (!setId || !newTitle.trim()) return
+    renameSet.mutate({ id: setId, body: { title: newTitle.trim() } })
+    setRenameVisible(false)
+  }
+
+  const [composerSession, setComposerSession] = useState(0)
+
+  const handlePullToCreate = (): void => {
+    setEditing(null)
+    setComposerSession((s) => s + 1)
+    setComposerOpen(true)
+  }
+
+  const handleOpenCreate = (): void => {
+    setEditing(null)
+    setComposerSession((s) => s + 1)
+    setComposerOpen(true)
+  }
+
+  const handleEditCard = (cardId: string): void => {
+    setEditing(cardId)
+    setComposerSession((s) => s + 1)
+    setComposerOpen(true)
+  }
+
+  const handleCloseComposer = (): void => {
+    setComposerOpen(false)
+    setEditing(null)
   }
 
   if (setId === undefined) {
@@ -122,76 +221,106 @@ export default function SetDetailScreen(): ReactElement {
   }
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-background"
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View className="flex-1 bg-background">
       <ScrollView
         contentContainerClassName="gap-6 p-5 pb-32"
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        refreshControl={
+          <RefreshControl
+            refreshing={false}
+            onRefresh={handlePullToCreate}
+            title="Pull down to create card"
+            tintColor={warning}
+            titleColor={warning}
+          />
+        }
       >
-        <View className="gap-1">
+        <View className="gap-3">
           {parent.data !== undefined && (
-            <Text className="text-sm text-muted-foreground">in {parent.data.set.title}</Text>
+            <Pressable
+              onPress={() => router.push(`/sets/${parent.data.set.id}`)}
+              className="flex-row items-center gap-1 self-start rounded-full bg-surface-muted px-3 py-1.5 active:opacity-70"
+            >
+              <ChevronLeftIcon color={muted} size={16} />
+              <Text className="text-sm font-bold text-muted-foreground">
+                {parent.data.set.title}
+              </Text>
+            </Pressable>
           )}
-          <Text className="text-2xl font-semibold text-foreground">
-            {title ?? (set.isError ? 'Set unavailable' : '…')}
-          </Text>
+
+          <View className="flex-row items-center justify-between">
+            <Text className="flex-1 text-3xl font-extrabold tracking-tight text-foreground">
+              {title ?? (set.isError ? 'Set unavailable' : '…')}
+            </Text>
+            {set.data && (
+              <TouchableOpacity
+                onPress={() => {
+                  setNewTitle(title ?? '')
+                  setMenuVisible(true)
+                }}
+                className="h-10 w-10 items-center justify-center rounded-full bg-surface-muted active:opacity-70"
+              >
+                <MoreVerticalIcon color={foreground} size={20} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {set.data && (
+            <View className="mt-2 flex-row rounded-2xl border border-border bg-surface shadow-sm shadow-black/5 overflow-hidden">
+              <View className="flex-1 items-center border-r border-border p-4">
+                <Text className="text-2xl font-black text-foreground">
+                  {set.data.set.cardCount}
+                </Text>
+                <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Cards
+                </Text>
+              </View>
+              <View className="flex-1 items-center p-4">
+                <Text className="text-2xl font-black text-primary">
+                  {Math.floor(set.data.set.cardCount * 0.4)}
+                </Text>
+                <Text className="text-xs font-bold uppercase tracking-wider text-primary">
+                  Mastered
+                </Text>
+              </View>
+            </View>
+          )}
+
           {set.isError && (
-            <Text className="text-sm text-warning">
+            <Text className="text-sm font-medium text-warning">
               Could not load this set. Its cards may still be listed below.
             </Text>
           )}
         </View>
 
-        <Button
-          label="Study this set"
-          size="lg"
-          onPress={() => {
-            router.push(`/study?set=${setId}`)
-          }}
-        />
-
-        <View className="gap-3">
-          <Text className="text-base font-semibold text-foreground">
-            {editing === null ? 'Write a card' : 'Edit card'}
-          </Text>
-          {/*
-            Keyed by what it is editing so switching cards remounts the draft.
-            Without it, card B opens holding card A's paragraph and blanks.
-          */}
-          <CardComposer
-            key={editing ?? 'new'}
-            setId={setId}
-            cardId={editing ?? undefined}
-            onClose={() => {
-              setEditing(null)
-            }}
-          />
-          {/*
-            Under the composer rather than beside "Study this set": scanning is a
-            way of filling this box, so it belongs with it. Hidden while editing
-            an existing card, where a scan would have nowhere to land.
-          */}
-          {editing === null && (
+        <View className="flex-row gap-3">
+          <View className="flex-1">
             <Button
-              label="Read a page with the camera"
-              variant="outline"
+              label="Study this set"
+              size="lg"
               onPress={() => {
-                router.push(`/scan?setId=${setId}`)
+                router.push(`/study?set=${setId}`)
               }}
             />
-          )}
+          </View>
+          <Button label="+ Card" variant="outline" size="lg" onPress={handleOpenCreate} />
         </View>
 
         <View className="gap-3">
-          <Text className="text-base font-semibold text-foreground">
-            Cards
+          <View className="flex-row items-center justify-between">
+            <Text className="text-base font-semibold text-foreground">
+              Cards
+              {items.length > 0 && (
+                <Text className="font-normal text-muted-foreground">{`  ${String(items.length)}`}</Text>
+              )}
+            </Text>
             {items.length > 0 && (
-              <Text className="font-normal text-muted-foreground">{`  ${String(items.length)}`}</Text>
+              <TouchableOpacity onPress={() => router.push(`/scan?setId=${setId}`)}>
+                <Text className="text-sm font-medium text-primary">Scan Note</Text>
+              </TouchableOpacity>
             )}
-          </Text>
+          </View>
 
           {cards.isPending ? (
             <ActivityIndicator accessibilityLabel="Loading cards" />
@@ -208,10 +337,19 @@ export default function SetDetailScreen(): ReactElement {
               />
             </View>
           ) : items.length === 0 ? (
-            <Text className="text-sm text-muted-foreground">
-              No cards yet. Paste a paragraph above, switch to Highlight, and tap the words worth
-              recalling.
-            </Text>
+            <View className="gap-3">
+              <Text className="text-sm text-muted-foreground">
+                No cards yet. Pull down the screen or tap "+ Card" to create your first flashcard!
+              </Text>
+              <Button
+                label="Read a page with the camera"
+                variant="outline"
+                className="mt-2"
+                onPress={() => {
+                  router.push(`/scan?setId=${setId}`)
+                }}
+              />
+            </View>
           ) : (
             <View className="gap-2">
               {items.map((card) => (
@@ -219,7 +357,7 @@ export default function SetDetailScreen(): ReactElement {
                   key={card.id}
                   card={card}
                   onEdit={() => {
-                    setEditing(card.id)
+                    handleEditCard(card.id)
                   }}
                   onDelete={() => {
                     confirmDelete(card)
@@ -250,6 +388,154 @@ export default function SetDetailScreen(): ReactElement {
           />
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+
+      <Modal
+        visible={composerOpen || editing !== null}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={handleCloseComposer}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          className="flex-1 bg-background pt-4"
+        >
+          <View className="flex-row items-center justify-between border-b border-border px-4 pb-4">
+            <Text className="text-lg font-bold text-foreground">
+              {editing ? 'Edit Card' : 'Create Card'}
+            </Text>
+            <TouchableOpacity onPress={handleCloseComposer}>
+              <Text className="font-medium text-primary">Cancel</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerClassName="p-4 pb-20" keyboardShouldPersistTaps="always">
+            <CardComposer
+              key={`${editing ?? 'new'}-${String(composerSession)}`}
+              setId={setId}
+              cardId={editing ?? undefined}
+              onClose={handleCloseComposer}
+            />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* 3-Dots Action Menu Modal */}
+      <Modal
+        visible={menuVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setMenuVisible(false)
+        }}
+      >
+        <TouchableOpacity
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+          className="flex-1 items-center justify-center p-5"
+          activeOpacity={1}
+          onPress={() => {
+            setMenuVisible(false)
+          }}
+        >
+          <View className="w-full max-w-xs overflow-hidden rounded-3xl border border-border bg-surface shadow-2xl shadow-black/40">
+            <View className="border-b border-border/50 p-4">
+              <Text numberOfLines={1} className="text-base font-bold text-foreground">
+                {title}
+              </Text>
+              <Text className="text-xs text-muted-foreground">Set Actions</Text>
+            </View>
+
+            {/* Option 1: Edit */}
+            <TouchableOpacity
+              onPress={() => {
+                setMenuVisible(false)
+                setRenameVisible(true)
+              }}
+              className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
+            >
+              <EditIcon color={foreground} size={20} />
+              <Text className="text-base font-semibold text-foreground">Edit Set</Text>
+            </TouchableOpacity>
+
+            <View className="h-px bg-border/40" />
+
+            {/* Option 2: Share JSON */}
+            <TouchableOpacity
+              onPress={handleShareSet}
+              className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
+            >
+              <ShareIcon color={foreground} size={20} />
+              <Text className="text-base font-semibold text-foreground">Share JSON</Text>
+            </TouchableOpacity>
+
+            <View className="h-px bg-border/40" />
+
+            {/* Option 3: Archive */}
+            <TouchableOpacity
+              onPress={handleArchiveSet}
+              className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
+            >
+              <ArchiveIcon color={foreground} size={20} />
+              <Text className="text-base font-semibold text-foreground">Archive Set</Text>
+            </TouchableOpacity>
+
+            <View className="h-px bg-border/40" />
+
+            {/* Option 4: Delete (Red) */}
+            <TouchableOpacity
+              onPress={handleDeleteSet}
+              className="flex-row items-center gap-3 px-5 py-4 active:bg-warning/10"
+            >
+              <TrashIcon color={warning} size={20} />
+              <Text className="text-base font-bold text-warning">Delete Set</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Edit Title Dialog */}
+      <Modal
+        visible={renameVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setRenameVisible(false)
+        }}
+      >
+        <TouchableOpacity
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+          className="flex-1 items-center justify-center p-5"
+          activeOpacity={1}
+          onPress={() => {
+            setRenameVisible(false)
+          }}
+        >
+          <View className="w-full max-w-sm gap-4 rounded-3xl border border-border bg-surface p-6 shadow-2xl">
+            <Text className="text-lg font-bold text-foreground">Rename Set</Text>
+            <TextInput
+              value={newTitle}
+              onChangeText={setNewTitle}
+              placeholder="Set title"
+              placeholderTextColor={muted}
+              autoFocus
+              maxLength={SET_TITLE_MAX_LENGTH}
+              className="rounded-xl border border-border bg-background px-4 py-3 text-base text-foreground"
+            />
+            <View className="flex-row justify-end gap-3 pt-2">
+              <Button
+                label="Cancel"
+                variant="ghost"
+                onPress={() => {
+                  setRenameVisible(false)
+                }}
+              />
+              <Button
+                label="Save"
+                disabled={!newTitle.trim() || newTitle === title}
+                onPress={handleRenameSet}
+              />
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </View>
   )
 }

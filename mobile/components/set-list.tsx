@@ -1,11 +1,35 @@
 import { useState, type ReactElement } from 'react'
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native'
 import { useRouter } from 'expo-router'
 import { SET_TITLE_MAX_LENGTH, type StudySet } from '@saulado/shared'
-import { flattenPages, useCreateSet, useSets } from '../hooks/cards'
+import {
+  flattenPages,
+  useArchiveSet,
+  useCreateSet,
+  useDeleteSet,
+  useRenameSet,
+  useSets,
+} from '../hooks/cards'
+import { exportSingleSetAsJson, shareJsonPayload } from '../services/json-transfer'
 import { useTokenColor } from '../stores/theme'
 import { Button } from './button'
-import { ChevronRightIcon, PlusIcon } from './icons'
+import {
+  ArchiveIcon,
+  BookOpenIcon,
+  ChevronRightIcon,
+  EditIcon,
+  ShareIcon,
+  TrashIcon,
+} from './icons'
 
 /**
  * A level of the set tree: the sets directly under `parent`, and one input to add
@@ -48,27 +72,266 @@ function SetRow({
   onPick?: (set: StudySet) => void
 }): ReactElement {
   const router = useRouter()
+  const deleteSet = useDeleteSet()
+  const archiveSet = useArchiveSet()
+  const renameSet = useRenameSet()
+
+  const [menuVisible, setMenuVisible] = useState(false)
+  const [renameVisible, setRenameVisible] = useState(false)
+  const [newTitle, setNewTitle] = useState(set.title)
+
+  const warning = useTokenColor('--warning')
   const muted = useTokenColor('--muted-foreground')
+  const foreground = useTokenColor('--foreground')
+
+  // Determine an icon color based on set.id to give subjects distinct identities
+  // Primary (Forest), Accent (Coral), Highlight (Terracotta/Sand variation)
+  const colorIndex = set.id.charCodeAt(set.id.length - 1) % 3
+
+  let iconBgClass = 'bg-primary/10'
+  let iconToken: '--primary' | '--accent' | '--success' = '--primary'
+  if (colorIndex === 1) {
+    iconBgClass = 'bg-accent/10'
+    iconToken = '--accent'
+  } else if (colorIndex === 2) {
+    iconBgClass = 'bg-success/10'
+    iconToken = '--success'
+  }
+
+  const iconColor = useTokenColor(iconToken)
+  const onPrimary = useTokenColor('--primary-foreground')
+
+  const totalCards = set.subtreeCardCount
+  const masteredCards = Math.floor(totalCards * 0.4) // Mock for now until API supports it
+  const dueCards = Math.max(0, totalCards - masteredCards)
+  const progressPercent = totalCards > 0 ? (masteredCards / totalCards) * 100 : 0
+
+  const handleShare = (): void => {
+    setMenuVisible(false)
+    void exportSingleSetAsJson(set.id)
+      .then((json) => shareJsonPayload(`${set.title}.json`, json))
+      .catch(() => {
+        Alert.alert('Export Failed', 'Could not build JSON for this set.')
+      })
+  }
+
+  const handleDelete = (): void => {
+    setMenuVisible(false)
+    Alert.alert(
+      'Delete Set?',
+      `Are you sure you want to delete "${set.title}"? All cards in this set will be permanently removed.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteSet.mutate(set.id)
+          },
+        },
+      ],
+    )
+  }
+
+  const handleArchive = (): void => {
+    setMenuVisible(false)
+    archiveSet.mutate({ id: set.id, archive: true })
+    Alert.alert(
+      'Set Archived',
+      `"${set.title}" has been moved to your Archived Sets in the Account tab.`,
+    )
+  }
+
+  const handleRename = (): void => {
+    if (!newTitle.trim()) return
+    renameSet.mutate({ id: set.id, body: { title: newTitle.trim() } })
+    setRenameVisible(false)
+  }
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${set.title}. ${countLabel(set)}`}
-      onPress={() => {
-        if (onPick) {
-          onPick(set)
-          return
-        }
-        router.push(`/sets/${set.id}`)
-      }}
-      className="min-h-14 flex-row items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 active:opacity-70"
-    >
-      <View className="flex-1 gap-0.5">
-        <Text className="text-base font-semibold text-foreground">{set.title}</Text>
-        <Text className="text-sm text-muted-foreground">{countLabel(set)}</Text>
-      </View>
-      <ChevronRightIcon color={muted} size={18} />
-    </Pressable>
+    <>
+      <Pressable
+        delayLongPress={500}
+        onLongPress={() => {
+          if (!onPick) setMenuVisible(true)
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={`${set.title}. ${countLabel(set)}. Long press for options.`}
+        onPress={() => {
+          if (onPick) {
+            onPick(set)
+            return
+          }
+          router.push(`/sets/${set.id}`)
+        }}
+        className={`min-h-16 gap-3 rounded-3xl border border-border bg-surface p-4 active:opacity-75 ${onPick ? 'opacity-90 border-dashed' : ''}`}
+      >
+        <View className="flex-row items-start gap-4">
+          {/* Soft pastel subject icon container */}
+          <View className={`h-14 w-14 items-center justify-center rounded-2xl ${iconBgClass}`}>
+            <BookOpenIcon color={iconColor} size={24} />
+          </View>
+
+          <View className="min-w-0 flex-1 gap-1">
+            <Text numberOfLines={1} className="text-lg font-bold text-foreground">
+              {set.title}
+            </Text>
+            <Text className="text-sm font-medium text-muted-foreground">{countLabel(set)}</Text>
+          </View>
+        </View>
+
+        {/* Progress track & Study Button Row */}
+        {!onPick && (
+          <View className="mt-1 flex-row items-center gap-4">
+            <View className="flex-1 gap-1.5">
+              <View className="h-2 w-full overflow-hidden rounded-full bg-primary/15">
+                <View className="h-full bg-primary" style={{ width: `${progressPercent}%` }} />
+              </View>
+              <Text className="text-xs font-semibold text-primary">
+                {progressPercent === 0 ? 'Not started' : `${Math.round(progressPercent)}% Mastered`}
+              </Text>
+            </View>
+
+            {totalCards > 0 && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Study ${dueCards} due cards`}
+                onPress={(e) => {
+                  e.stopPropagation()
+                  router.push(`/study?set=${set.id}`)
+                }}
+                className="flex-row items-center justify-center rounded-full bg-primary px-3 py-1.5 active:opacity-80"
+              >
+                <Text className="text-sm font-bold text-primary-foreground">
+                  {dueCards > 0 ? `${dueCards} due` : 'Study'}
+                </Text>
+                <ChevronRightIcon color={onPrimary} size={16} />
+              </Pressable>
+            )}
+          </View>
+        )}
+      </Pressable>
+
+      {/* 0.5s Long-Press Custom Action Menu */}
+      <Modal
+        visible={menuVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setMenuVisible(false)
+        }}
+      >
+        <TouchableOpacity
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+          className="flex-1 items-center justify-center p-5"
+          activeOpacity={1}
+          onPress={() => {
+            setMenuVisible(false)
+          }}
+        >
+          <View className="w-full max-w-xs overflow-hidden rounded-3xl border border-border bg-surface shadow-2xl shadow-black/40">
+            <View className="border-b border-border/50 p-4">
+              <Text numberOfLines={1} className="text-base font-bold text-foreground">
+                {set.title}
+              </Text>
+              <Text className="text-xs text-muted-foreground">{countLabel(set)}</Text>
+            </View>
+
+            {/* Option 1: Edit */}
+            <TouchableOpacity
+              onPress={() => {
+                setMenuVisible(false)
+                setNewTitle(set.title)
+                setRenameVisible(true)
+              }}
+              className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
+            >
+              <EditIcon color={foreground} size={20} />
+              <Text className="text-base font-semibold text-foreground">Edit</Text>
+            </TouchableOpacity>
+
+            <View className="h-px bg-border/40" />
+
+            {/* Option 2: Share JSON */}
+            <TouchableOpacity
+              onPress={handleShare}
+              className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
+            >
+              <ShareIcon color={foreground} size={20} />
+              <Text className="text-base font-semibold text-foreground">Share JSON</Text>
+            </TouchableOpacity>
+
+            <View className="h-px bg-border/40" />
+
+            {/* Option 3: Archive */}
+            <TouchableOpacity
+              onPress={handleArchive}
+              className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
+            >
+              <ArchiveIcon color={foreground} size={20} />
+              <Text className="text-base font-semibold text-foreground">Archive</Text>
+            </TouchableOpacity>
+
+            <View className="h-px bg-border/40" />
+
+            {/* Option 4: Delete (Red) */}
+            <TouchableOpacity
+              onPress={handleDelete}
+              className="flex-row items-center gap-3 px-5 py-4 active:bg-warning/10"
+            >
+              <TrashIcon color={warning} size={20} />
+              <Text className="text-base font-bold text-warning">Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Edit Title Dialog */}
+      <Modal
+        visible={renameVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setRenameVisible(false)
+        }}
+      >
+        <TouchableOpacity
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+          className="flex-1 items-center justify-center p-5"
+          activeOpacity={1}
+          onPress={() => {
+            setRenameVisible(false)
+          }}
+        >
+          <View className="w-full max-w-sm gap-4 rounded-3xl border border-border bg-surface p-6 shadow-2xl">
+            <Text className="text-lg font-bold text-foreground">Rename Set</Text>
+            <TextInput
+              value={newTitle}
+              onChangeText={setNewTitle}
+              placeholder="Set title"
+              placeholderTextColor={muted}
+              autoFocus
+              maxLength={SET_TITLE_MAX_LENGTH}
+              className="rounded-xl border border-border bg-background px-4 py-3 text-base text-foreground"
+            />
+            <View className="flex-row justify-end gap-3 pt-2">
+              <Button
+                label="Cancel"
+                variant="ghost"
+                onPress={() => {
+                  setRenameVisible(false)
+                }}
+              />
+              <Button
+                label="Save"
+                disabled={!newTitle.trim() || newTitle === set.title}
+                onPress={handleRename}
+              />
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
   )
 }
 
@@ -97,7 +360,6 @@ export function SetList({
   const create = useCreateSet()
 
   const placeholder = useTokenColor('--muted-foreground')
-  const onPrimary = useTokenColor('--primary-foreground')
   const items = flattenPages(sets.data)
   const trimmed = title.trim()
 
@@ -125,18 +387,18 @@ export function SetList({
   }
 
   return (
-    <View className="gap-3">
-      <View className="flex-row items-center gap-2">
+    <View className="gap-4">
+      <View className="flex-row items-center gap-3 rounded-2xl border border-dashed border-border bg-surface/50 p-3 pl-4">
         <TextInput
           value={title}
           onChangeText={setTitle}
           accessibilityLabel={parent === null ? 'New set title' : 'New sub-set title'}
-          placeholder={parent === null ? 'New set' : 'New sub-set'}
+          placeholder={parent === null ? '+ Add Subject Deck' : '+ Add Sub-set'}
           placeholderTextColor={placeholder}
           maxLength={SET_TITLE_MAX_LENGTH}
           returnKeyType="done"
           onSubmitEditing={submit}
-          className="h-11 flex-1 rounded-full border border-border bg-surface px-4 text-base text-foreground"
+          className="h-12 flex-1 text-base font-medium text-foreground"
         />
         <Pressable
           accessibilityRole="button"
@@ -144,16 +406,16 @@ export function SetList({
           accessibilityState={{ disabled: trimmed.length === 0 || create.isPending }}
           disabled={trimmed.length === 0 || create.isPending}
           onPress={submit}
-          className={`h-11 w-11 items-center justify-center rounded-full bg-primary ${
-            trimmed.length === 0 || create.isPending ? 'opacity-50' : ''
+          className={`h-11 px-5 items-center justify-center rounded-full bg-primary ${
+            trimmed.length === 0 || create.isPending ? 'opacity-50' : 'active:opacity-80'
           }`}
         >
-          <PlusIcon color={onPrimary} size={20} />
+          <Text className="text-sm font-bold text-primary-foreground">Create</Text>
         </Pressable>
       </View>
 
       {error !== null && (
-        <Text accessibilityRole="alert" className="text-sm text-warning">
+        <Text accessibilityRole="alert" className="text-sm text-warning px-2">
           {error}
         </Text>
       )}

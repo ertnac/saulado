@@ -1,4 +1,4 @@
-import TextRecognition from '@react-native-ml-kit/text-recognition'
+import TextRecognition from '../lib/text-recognition'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 import { dewrap, normalizeParagraph } from '@saulado/shared'
 

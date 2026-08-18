@@ -1,17 +1,40 @@
 import { useEffect, useState, type ReactElement } from 'react'
-import { Alert, Image, ScrollView, Share, Text, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  Share,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   ACCOUNT_DELETE_CONFIRMATION,
   PASSWORD_MIN_LENGTH,
   checkPassword,
   type DataExport,
 } from '@saulado/shared'
+import * as DocumentPicker from 'expo-document-picker'
+import * as FileSystem from 'expo-file-system'
 import * as ImagePicker from 'expo-image-picker'
 import { Button } from '../../components/button'
 import { Card } from '../../components/card'
 import { Field, FormAlert, FormStack } from '../../components/form'
 import { Section } from '../../components/settings-controls'
-import { UserIcon } from '../../components/icons'
+import { FileTextIcon, TrashIcon, UploadIcon, UserIcon } from '../../components/icons'
+import {
+  cardKeys,
+  flattenPages,
+  setKeys,
+  useArchiveSet,
+  useDeleteSet,
+  useSets,
+} from '../../hooks/cards'
 import {
   useChangeEmail,
   useChangePassword,
@@ -21,6 +44,7 @@ import {
   useUpdateSettings,
 } from '../../hooks/settings'
 import { useFormErrors } from '../../hooks/useFormErrors'
+import { importSetsAndCards, parseAndValidateJson } from '../../services/json-transfer'
 import { useAuthStore } from '../../stores/auth'
 import { useTokenColor } from '../../stores/theme'
 
@@ -63,11 +87,128 @@ export default function AccountScreen(): ReactElement {
       </View>
 
       <ProfileSection />
+      <ArchivedSetsSection />
+      <JsonTransferSection />
       <ChangeEmailSection currentEmail={email} />
       <ChangePasswordSection />
-      <ExportSection />
       <DeleteSection />
     </ScrollView>
+  )
+}
+
+function ArchivedSetsSection(): ReactElement {
+  const archivedSets = useSets({ archived: true })
+  const archiveSet = useArchiveSet()
+  const deleteSet = useDeleteSet()
+  const warning = useTokenColor('--warning')
+  const [expanded, setExpanded] = useState(false)
+
+  const items = flattenPages(archivedSets.data)
+
+  const handleRestore = (id: string, title: string): void => {
+    archiveSet.mutate({ id, archive: false })
+    Alert.alert('Set Restored', `"${title}" has been moved back to your Sets tab.`)
+  }
+
+  const handleDelete = (id: string, title: string): void => {
+    Alert.alert(
+      'Delete Permanently?',
+      `Are you sure you want to permanently delete "${title}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteSet.mutate(id)
+          },
+        },
+      ],
+    )
+  }
+
+  return (
+    <Section title="Archived Sets">
+      <Card className="gap-4 p-5">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-1 gap-1">
+            <Text className="text-base font-bold text-foreground">
+              {items.length === 1 ? '1 Archived Set' : `${String(items.length)} Archived Sets`}
+            </Text>
+            <Text className="text-xs text-muted-foreground">
+              Sets you archive to keep your library tidy are stored here.
+            </Text>
+          </View>
+          <Button
+            label={expanded ? 'Hide' : 'Manage'}
+            variant="outline"
+            onPress={() => {
+              setExpanded(!expanded)
+            }}
+          />
+        </View>
+
+        {expanded && (
+          <View className="gap-3 pt-2">
+            {archivedSets.isPending ? (
+              <ActivityIndicator />
+            ) : items.length === 0 ? (
+              <Text className="text-sm text-muted-foreground">No archived sets right now.</Text>
+            ) : (
+              <View className="gap-2">
+                {items.map((set) => (
+                  <View
+                    key={set.id}
+                    className="flex-row items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-3.5"
+                  >
+                    <View className="min-w-0 flex-1">
+                      <Text numberOfLines={1} className="text-sm font-bold text-foreground">
+                        {set.title}
+                      </Text>
+                      <Text className="text-xs text-muted-foreground">
+                        {`${String(set.cardCount)} cards`}
+                      </Text>
+                    </View>
+
+                    <View className="flex-row items-center gap-2">
+                      <Button
+                        label="Restore"
+                        variant="outline"
+                        onPress={() => {
+                          handleRestore(set.id, set.title)
+                        }}
+                      />
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete ${set.title}`}
+                        hitSlop={8}
+                        onPress={() => {
+                          handleDelete(set.id, set.title)
+                        }}
+                        className="rounded-full p-2 active:bg-warning/10"
+                      >
+                        <TrashIcon color={warning} size={18} />
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+
+                {archivedSets.hasNextPage === true && (
+                  <Button
+                    label={archivedSets.isFetchingNextPage ? 'Loading…' : 'Load more'}
+                    variant="ghost"
+                    disabled={archivedSets.isFetchingNextPage}
+                    onPress={() => {
+                      void archivedSets.fetchNextPage()
+                    }}
+                  />
+                )}
+              </View>
+            )}
+          </View>
+        )}
+      </Card>
+    </Section>
   )
 }
 
@@ -370,8 +511,20 @@ const SHARE_MAX_CHARS = 512_000
  * `expo-file-system` + `expo-sharing` and write the JSON to
  * `cacheDirectory` when someone actually hits that.
  */
-function ExportSection(): ReactElement {
+function JsonTransferSection(): ReactElement {
   const exportData = useExportData()
+  const queryClient = useQueryClient()
+  const [importModalVisible, setImportModalVisible] = useState(false)
+  const [importMode, setImportMode] = useState<'file' | 'text'>('file')
+  const [selectedFile, setSelectedFile] = useState<{ name: string; size?: number } | null>(null)
+  const [jsonText, setJsonText] = useState('')
+  const [isImporting, setIsImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState('')
+
+  const muted = useTokenColor('--muted-foreground')
+  const primary = useTokenColor('--primary')
+
+  const parsedResult = jsonText.trim() ? parseAndValidateJson(jsonText.trim()) : null
 
   function onExport(): void {
     exportData.mutate(undefined, {
@@ -399,18 +552,267 @@ function ExportSection(): ReactElement {
     })
   }
 
+  const handlePickFile = async (): Promise<void> => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['application/json', 'text/plain', '*/*'],
+        copyToCacheDirectory: true,
+      })
+
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        const file = res.assets[0]
+        if (file) {
+          setSelectedFile({ name: file.name, size: file.size })
+          const content = await FileSystem.readAsStringAsync(file.uri)
+          setJsonText(content)
+        }
+      }
+    } catch {
+      Alert.alert('File Error', 'Could not open or read the selected file.')
+    }
+  }
+
+  const handleStartImport = async (): Promise<void> => {
+    if (!parsedResult || !parsedResult.success) return
+
+    setIsImporting(true)
+    setImportProgress('Starting import...')
+
+    try {
+      const result = await importSetsAndCards(parsedResult.data, (_current, _total, msg) => {
+        setImportProgress(msg)
+      })
+
+      void queryClient.invalidateQueries({ queryKey: setKeys.all })
+      void queryClient.invalidateQueries({ queryKey: cardKeys.all })
+
+      setImportModalVisible(false)
+      setJsonText('')
+      setSelectedFile(null)
+      Alert.alert(
+        'Import Successful! 🎉',
+        `Successfully imported ${String(result.importedSets)} ${result.importedSets === 1 ? 'set' : 'sets'} and ${String(result.importedCards)} ${result.importedCards === 1 ? 'card' : 'cards'} into your library.`,
+      )
+    } catch {
+      Alert.alert(
+        'Import Failed',
+        'An error occurred while creating imported sets and cards. Please try again.',
+      )
+    } finally {
+      setIsImporting(false)
+      setImportProgress('')
+    }
+  }
+
   return (
-    <Section title="Your data">
-      <Text className="text-sm text-muted-foreground">
-        Everything you have written — sets, cards, answers, schedules and your review history — as
-        one JSON file. Credentials are not included.
-      </Text>
-      <Button
-        label={exportData.isPending ? 'Building…' : 'Export my data'}
-        variant="outline"
-        onPress={onExport}
-        loading={exportData.isPending}
-      />
+    <Section title="JSON Backup & Sharing">
+      <Card className="gap-4 p-5">
+        <Text className="text-sm text-muted-foreground">
+          Export your cards and sets as a portable JSON file to share with classmates, or import
+          shared JSON decks into your library.
+        </Text>
+
+        <View className="gap-2.5">
+          <Button
+            label={exportData.isPending ? 'Building JSON…' : 'Share Full Library (JSON)'}
+            variant="outline"
+            onPress={onExport}
+            loading={exportData.isPending}
+          />
+
+          <Button
+            label="Import Sets & Cards (JSON)"
+            variant="outline"
+            onPress={() => {
+              setImportModalVisible(true)
+            }}
+          />
+        </View>
+      </Card>
+
+      {/* Import Modal */}
+      <Modal
+        visible={importModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          if (!isImporting) setImportModalVisible(false)
+        }}
+      >
+        <TouchableOpacity
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+          className="flex-1 items-center justify-center p-4"
+          activeOpacity={1}
+          onPress={() => {
+            if (!isImporting) setImportModalVisible(false)
+          }}
+        >
+          <View
+            className="max-h-[90%] w-full max-w-md gap-4 rounded-3xl border border-border bg-surface p-6 shadow-2xl"
+            onStartShouldSetResponder={() => true}
+          >
+            <View className="flex-row items-center justify-between">
+              <Text className="text-lg font-bold text-foreground">Import Sets & Cards</Text>
+              {!isImporting && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setImportModalVisible(false)
+                  }}
+                >
+                  <Text className="font-semibold text-primary">Cancel</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Mode Switch Tabs */}
+            <View className="flex-row rounded-xl bg-surface-muted p-1 border border-border">
+              <TouchableOpacity
+                disabled={isImporting}
+                onPress={() => {
+                  setImportMode('file')
+                }}
+                className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-2 ${importMode === 'file' ? 'bg-surface shadow-sm' : ''}`}
+              >
+                <UploadIcon color={importMode === 'file' ? primary : muted} size={16} />
+                <Text
+                  className={`text-xs font-bold ${importMode === 'file' ? 'text-foreground' : 'text-muted-foreground'}`}
+                >
+                  File (.json / .txt)
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                disabled={isImporting}
+                onPress={() => {
+                  setImportMode('text')
+                }}
+                className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-2 ${importMode === 'text' ? 'bg-surface shadow-sm' : ''}`}
+              >
+                <FileTextIcon color={importMode === 'text' ? primary : muted} size={16} />
+                <Text
+                  className={`text-xs font-bold ${importMode === 'text' ? 'text-foreground' : 'text-muted-foreground'}`}
+                >
+                  Paste Text
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* File Mode */}
+            {importMode === 'file' ? (
+              <View className="gap-3">
+                <TouchableOpacity
+                  disabled={isImporting}
+                  onPress={() => {
+                    void handlePickFile()
+                  }}
+                  className="items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 p-6 active:opacity-75"
+                >
+                  <UploadIcon color={primary} size={32} />
+                  <Text className="text-sm font-bold text-foreground">
+                    {selectedFile ? 'Change File' : 'Select .json or .txt File'}
+                  </Text>
+                  <Text className="text-xs text-muted-foreground text-center">
+                    Tap here to choose a JSON backup or shared deck from your device.
+                  </Text>
+                </TouchableOpacity>
+
+                {selectedFile && (
+                  <View className="flex-row items-center justify-between rounded-xl border border-border bg-background p-3">
+                    <View className="flex-1 min-w-0">
+                      <Text numberOfLines={1} className="text-xs font-bold text-foreground">
+                        {`📄 ${selectedFile.name}`}
+                      </Text>
+                      {selectedFile.size !== undefined && (
+                        <Text className="text-[10px] text-muted-foreground">
+                          {`${(selectedFile.size / 1024).toFixed(1)} KB`}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                )}
+              </View>
+            ) : (
+              /* Text Paste Mode */
+              <View className="gap-1.5">
+                <Text className="text-xs text-muted-foreground">
+                  Paste the JSON data of the sets and cards:
+                </Text>
+                <TextInput
+                  value={jsonText}
+                  onChangeText={(val) => {
+                    setSelectedFile(null)
+                    setJsonText(val)
+                  }}
+                  placeholder="Paste JSON content here..."
+                  placeholderTextColor={muted}
+                  multiline
+                  textAlignVertical="top"
+                  editable={!isImporting}
+                  className="h-32 rounded-xl border border-border bg-background p-3 font-mono text-xs text-foreground"
+                />
+              </View>
+            )}
+
+            {/* Validation & Preview Card */}
+            {parsedResult !== null && (
+              <View className="gap-2">
+                {parsedResult.success ? (
+                  <View className="gap-2 rounded-2xl border border-primary/30 bg-primary/10 p-3.5">
+                    <Text className="text-sm font-bold text-primary">
+                      {`✨ Ready to import ${String(parsedResult.data.sets.length)} ${parsedResult.data.sets.length === 1 ? 'set' : 'sets'} (${String(parsedResult.data.totalCards)} cards total)`}
+                    </Text>
+                    <View className="max-h-24 gap-1">
+                      <ScrollView nestedScrollEnabled>
+                        {parsedResult.data.sets.map((s, idx) => (
+                          <Text
+                            key={idx}
+                            numberOfLines={1}
+                            className="text-xs font-medium text-foreground"
+                          >
+                            {`• ${s.title} (${String(s.cards.length)} cards)`}
+                          </Text>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  </View>
+                ) : (
+                  <View className="rounded-2xl border border-warning/30 bg-warning/10 p-3">
+                    <Text className="text-xs font-semibold text-warning">
+                      {`⚠️ ${parsedResult.error}`}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {isImporting && (
+              <View className="items-center gap-2 py-2">
+                <ActivityIndicator />
+                <Text className="text-xs font-medium text-muted-foreground">{importProgress}</Text>
+              </View>
+            )}
+
+            <View className="flex-row justify-end gap-3 pt-2">
+              <Button
+                label="Close"
+                variant="ghost"
+                disabled={isImporting}
+                onPress={() => {
+                  setImportModalVisible(false)
+                }}
+              />
+              <Button
+                label={isImporting ? 'Importing…' : 'Import to Library'}
+                disabled={!parsedResult?.success || isImporting}
+                loading={isImporting}
+                onPress={() => {
+                  void handleStartImport()
+                }}
+              />
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Section>
   )
 }

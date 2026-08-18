@@ -2,13 +2,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, type ReactElement } from 'react'
-import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated'
 import '../global.css'
-
-configureReanimatedLogger({
-  level: ReanimatedLogLevel.warn,
-  strict: false,
-})
 import { asyncStoragePersister, queryClient } from '../lib/query-client'
 import { useAuthStore } from '../stores/auth'
 import { useTheme, useTokenColor } from '../stores/theme'
