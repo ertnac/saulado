@@ -19,6 +19,7 @@ import { ChevronRightIcon } from '../../components/icons'
 import { GoalRing } from '../../components/goal-ring'
 import { Sparkline } from '../../components/sparkline'
 import { StreakCard } from '../../components/streak-card'
+import { usePrefetchCards } from '../../hooks/cards'
 import { useDashboard } from '../../hooks/progress'
 import { useSettings } from '../../hooks/settings'
 import { useAuthStore } from '../../stores/auth'
@@ -376,11 +377,19 @@ export default function DashboardScreen(): ReactElement {
   // Fetch settings to update the auth store on mount/focus
   useSettings()
 
+  const prefetchCards = usePrefetchCards()
+
   const settings = useAuthStore((s) => s.settings)
   const nickname = settings?.nickname ?? ''
   const profileImage = settings?.profileImage ?? null
 
   const data = dashboard.data
+
+  useEffect(() => {
+    if (data?.recentSets) {
+      data.recentSets.forEach((set) => prefetchCards(set.id))
+    }
+  }, [data?.recentSets, prefetchCards])
 
   function heading(): string {
     if (dashboard.isPending || dashboard.isError || data === undefined) return 'Study'

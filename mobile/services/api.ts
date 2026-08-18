@@ -202,6 +202,7 @@ async function dispatch(path: string, options: RequestOptions): Promise<Response
   return fetch(apiUrl(path), {
     method,
     headers,
+    keepalive: true,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     ...(signal ? { signal } : {}),
   })

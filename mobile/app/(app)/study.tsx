@@ -121,6 +121,7 @@ export default function StudyScreen(): ReactElement {
    */
   const [resumeId, setResumeId] = useState<string | null | undefined>(undefined)
   const [starting, setStarting] = useState(false)
+  const [isChecking, setIsChecking] = useState(false)
   const [startError, setStartError] = useState<Error | null>(null)
 
   const [mode, setMode] = useState<StartableMode>(initialMode ?? 'spaced')
@@ -235,6 +236,8 @@ export default function StudyScreen(): ReactElement {
   const send = (revealed: boolean): void => {
     if (!session.card || !sessionId || session.answer) return
 
+    setIsChecking(true)
+
     const body: SubmitAnswerRequest = {
       cardId: session.card.cardId,
       blanks: Object.entries(session.values).map(([ordinal, submitted]) => ({
@@ -246,7 +249,13 @@ export default function StudyScreen(): ReactElement {
       ...(revealed ? { revealed: true } : {}),
     }
 
-    submit.mutate({ sessionId, body }, { onSuccess: session.accept })
+    submit.mutate(
+      { sessionId, body },
+      {
+        onSuccess: session.accept,
+        onSettled: () => setIsChecking(false),
+      },
+    )
   }
 
   const next = (): void => {
@@ -454,7 +463,7 @@ export default function StudyScreen(): ReactElement {
           card={session.card}
           values={session.values}
           results={session.answer?.results ?? null}
-          disabled={session.answer !== null || submit.isPending}
+          disabled={session.answer !== null || isChecking || submit.isPending}
           onChange={session.setValue}
           onSubmit={() => {
             send(false)
@@ -508,8 +517,8 @@ export default function StudyScreen(): ReactElement {
             <Button
               className="flex-1"
               size="lg"
-              label={submit.isPending ? 'Checking…' : 'Check answer'}
-              loading={submit.isPending}
+              label={isChecking || submit.isPending ? 'Checking…' : 'Check answer'}
+              loading={isChecking || submit.isPending}
               onPress={() => {
                 send(false)
               }}
@@ -523,7 +532,7 @@ export default function StudyScreen(): ReactElement {
               size="lg"
               variant="outline"
               label="Reveal"
-              disabled={submit.isPending}
+              disabled={isChecking || submit.isPending}
               onPress={() => {
                 send(true)
               }}

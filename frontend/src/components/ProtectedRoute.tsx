@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useAdminCheck } from '@/features/admin/queries'
 import { useAuthStore } from '@/stores/auth'
 
 /**
@@ -55,6 +56,43 @@ export function AnonymousRoute({ children }: { children: ReactElement }): ReactE
   // No skeleton here: these pages are useful immediately and flashing a loader
   // in front of a login form is worse than letting it render.
   if (status === 'authenticated') return <Navigate to="/" replace />
+
+  return children
+}
+
+/**
+ * Gate for administrator-only routes.
+ *
+ * Ensures the caller is signed in and carries administrator privileges verified
+ * by the server. Redirects unauthorized users to the home dashboard.
+ */
+export function AdminRoute({ children }: { children: ReactElement }): ReactElement {
+  return (
+    <ProtectedRoute>
+      <AdminGuard>{children}</AdminGuard>
+    </ProtectedRoute>
+  )
+}
+
+function AdminGuard({ children }: { children: ReactElement }): ReactElement {
+  const { data, isLoading, isError } = useAdminCheck()
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-5xl px-4 py-8" aria-busy="true">
+        <span className="sr-only">Checking administrator privileges</span>
+        <Skeleton className="h-8 w-48" />
+        <div className="mt-6 space-y-3">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      </div>
+    )
+  }
+
+  if (isError || !data?.isAdmin) {
+    return <Navigate to="/" replace />
+  }
 
   return children
 }

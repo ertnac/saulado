@@ -14,3 +14,7 @@ allowBuilds:
   esbuild: true
   prisma: true
   tesseract.js: false
+
+overrides:
+  '@types/react': '^18.3.18'
+  '@types/react-dom': '^18.3.5'

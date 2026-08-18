@@ -8,11 +8,10 @@ export default tseslint.config(
       '**/dist/**',
       '**/node_modules/**',
       '**/coverage/**',
+      '**/.claude/**',
       'backend/src/generated/**',
       'frontend/postcss.config.js',
-      // Metro, Babel and Tailwind are configured in plain JS that no tsconfig
-      // includes, so the type-aware parser has no project to read them against.
-      'mobile/*.config.js',
+      '**/*.config.js',
     ],
   },
 

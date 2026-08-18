@@ -1,5 +1,5 @@
 import type { DashboardResponse, ProgressRange, ProgressResponse } from '@saulado/shared'
-import { useQuery, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import * as api from '../services/progress'
 
 /**
@@ -38,6 +38,16 @@ export function useDashboard(): UseQueryResult<DashboardResponse> {
     queryFn: () => api.getDashboard(),
     staleTime: 30_000,
   })
+}
+
+export function usePrefetchDashboard() {
+  const client = useQueryClient()
+  return () => {
+    void client.prefetchQuery({
+      queryKey: dashboardKeys.all,
+      queryFn: () => api.getDashboard(),
+    })
+  }
 }
 
 /**

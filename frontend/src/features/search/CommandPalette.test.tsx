@@ -57,7 +57,7 @@ function renderPalette(onClose = vi.fn()) {
       <MemoryRouter initialEntries={['/dashboard']}>
         <Routes>
           <Route path="/dashboard" element={<CommandPalette open onClose={onClose} />} />
-          <Route path="/cards/:cardId" element={<p>Card page</p>} />
+          <Route path="/sets/:setId" element={<p>Set page</p>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -140,7 +140,7 @@ describe('CommandPalette', () => {
 
     await userEvent.keyboard('{Enter}')
 
-    expect(await screen.findByText('Card page')).toBeInTheDocument()
+    expect(await screen.findByText('Set page')).toBeInTheDocument()
     expect(onClose).toHaveBeenCalled()
   })
 

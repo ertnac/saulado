@@ -67,6 +67,9 @@ const envSchema = z.object({
   /** When set, password reset mail goes out via Resend instead of the log. */
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default('Saulado <onboarding@resend.dev>'),
+
+  /** Comma-separated list of admin email addresses. */
+  ADMIN_EMAILS: z.string().default(''),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -85,6 +88,11 @@ export const env = {
   ...data,
   isProduction,
   isTest: data.NODE_ENV === 'test',
+
+  /** Parsed array of lowercase admin emails. */
+  adminEmails: data.ADMIN_EMAILS.split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
 
   /** CORS_ORIGIN is comma-separated to allow a staging + local origin at once. */
   corsOrigins: data.CORS_ORIGIN.split(',')

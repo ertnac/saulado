@@ -1,4 +1,5 @@
 import TextRecognition from '@react-native-ml-kit/text-recognition'
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 import { dewrap, normalizeParagraph } from '@saulado/shared'
 
 /**
@@ -29,8 +30,14 @@ import { dewrap, normalizeParagraph } from '@saulado/shared'
  * restores exactly the boundary `dewrap` is looking for, and the line breaks
  * inside a block stay what they are: visual wrapping, to be undone.
  */
+
 export async function recognize(uri: string): Promise<string> {
-  const result = await TextRecognition.recognize(uri)
+  const downscaled = await manipulateAsync(uri, [{ resize: { width: 1080 } }], {
+    compress: 0.8,
+    format: SaveFormat.JPEG,
+  })
+
+  const result = await TextRecognition.recognize(downscaled.uri)
   const page = result.blocks.map((block) => block.text).join('\n\n')
 
   return normalizeParagraph(dewrap(page))

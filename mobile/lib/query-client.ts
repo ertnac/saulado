@@ -1,4 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import NetInfo from '@react-native-community/netinfo'
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
 import { QueryClient, onlineManager } from '@tanstack/react-query'
 import { ApiError } from '../services/api'
 
@@ -33,39 +35,32 @@ onlineManager.setEventListener((setOnline) =>
  * miss every mutation, so a form submit with an expired token would fail while a
  * background list refetch quietly recovered. One interceptor, below both.
  */
-export function createQueryClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: {
-        /**
-         * Retrying an auth or validation failure just repeats it three times
-         * before showing the same message, and each repeat spends another slot
-         * against the rate limiter. Only retry things that are plausibly
-         * transient.
-         */
-        retry: (failureCount, error) => {
-          if (error instanceof ApiError) {
-            const permanent =
-              error.status === 401 ||
-              error.status === 403 ||
-              error.status === 404 ||
-              error.status === 422 ||
-              error.code === 'VALIDATION_ERROR' ||
-              error.code === 'RATE_LIMITED'
-            if (permanent) return false
-          }
-          return failureCount < 2
-        },
-        staleTime: 30_000,
-        // Kept off for the same reason as on the web, which reads differently
-        // here: on a phone the app is refocused constantly — every notification
-        // glance, every app switch — and a refetch storm each time is both
-        // visible jank and battery spent on data that has not changed.
-        refetchOnWindowFocus: false,
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        if (error instanceof ApiError) {
+          const permanent =
+            error.status === 401 ||
+            error.status === 403 ||
+            error.status === 404 ||
+            error.status === 422 ||
+            error.code === 'VALIDATION_ERROR' ||
+            error.code === 'RATE_LIMITED'
+          if (permanent) return false
+        }
+        return failureCount < 2
       },
-      mutations: {
-        retry: false,
-      },
+      staleTime: 1000 * 60 * 60, // 1 hour stale time for UI snappiness
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours garbage collection
+      refetchOnWindowFocus: false,
     },
-  })
-}
+    mutations: {
+      retry: false,
+    },
+  },
+})
+
+export const asyncStoragePersister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+})

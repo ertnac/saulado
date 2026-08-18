@@ -86,7 +86,7 @@ describe('the list', () => {
   })
 
   it('says "1 card" rather than "1 cards"', async () => {
-    mocked.listSets.mockResolvedValue(page([set({ cardCount: 1 })]))
+    mocked.listSets.mockResolvedValue(page([set({ cardCount: 1, subtreeCardCount: 1 })]))
     render(renderPage())
 
     await waitFor(() => {
@@ -265,8 +265,7 @@ describe('create', () => {
     await waitFor(() => {
       expect(mocked.createSet).toHaveBeenCalledWith({
         title: 'Cell Biology',
-        // Empty is sent as null, not '' — the two mean different things to the API.
-        description: null,
+        parentId: null,
         color: 'slate',
       })
     })

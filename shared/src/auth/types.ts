@@ -112,6 +112,7 @@ export type ApiErrorCode =
   | 'INVALID_CREDENTIALS'
   | 'EMAIL_TAKEN'
   | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
   | 'TOKEN_EXPIRED'
   | 'TOKEN_INVALID'
   | 'RATE_LIMITED'

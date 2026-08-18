@@ -259,6 +259,22 @@ export function useCards(setId: string | undefined, tags: readonly string[] = []
   })
 }
 
+export function usePrefetchCards() {
+  const client = useQueryClient()
+  return (setId: string, tags: readonly string[] = []) => {
+    if (!setId) return
+    void client.prefetchInfiniteQuery({
+      queryKey: cardKeys.list(setId, tags),
+      queryFn: ({ pageParam }) =>
+        api.listCards(setId, {
+          cursor: pageParam,
+          tag: tags.length > 0 ? [...tags] : undefined,
+        }),
+      initialPageParam: undefined as string | undefined,
+    })
+  }
+}
+
 /**
  * Every tag the user has, with counts.
  *
@@ -309,7 +325,32 @@ export function useCreateCard(
     mutationFn: (body: CreateCardRequest) => api.createCard(setId, body),
     onSuccess: (data) => {
       client.setQueryData<CardResponse>(cardKeys.detail(data.card.id), data)
-      void client.invalidateQueries({ queryKey: cardKeys.lists() })
+
+      const summary: StudyCardSummary = {
+        id: data.card.id,
+        studySetId: data.card.studySetId,
+        paragraph: data.card.paragraph,
+        tags: data.card.tags,
+        createdAt: data.card.createdAt,
+        updatedAt: data.card.updatedAt,
+        answerCount: data.card.answers.length,
+      }
+
+      client.setQueriesData<
+        InfiniteData<{ items: StudyCardSummary[]; nextCursor?: string | null }>
+      >({ queryKey: cardKeys.list(setId) }, (oldData) => {
+        if (!oldData || oldData.pages.length === 0) return oldData
+        const newPages = [...oldData.pages]
+        const firstPage = newPages[0]
+        if (!firstPage) return oldData
+
+        newPages[0] = {
+          ...firstPage,
+          items: [summary, ...firstPage.items],
+        }
+        return { ...oldData, pages: newPages }
+      })
+
       shiftCardCount(client, setId, 1)
       if (data.card.tags.length > 0) void client.invalidateQueries({ queryKey: tagKeys.all })
     },

@@ -4,11 +4,12 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { AppShell } from '@/components/layout/AppShell'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { NotFoundPage } from '@/components/NotFoundPage'
-import { AnonymousRoute, ProtectedRoute } from '@/components/ProtectedRoute'
+import { AnonymousRoute, AdminRoute, ProtectedRoute } from '@/components/ProtectedRoute'
 import { Toaster } from '@/components/ui/toaster'
 import { AccountPage } from '@/features/account/AccountPage'
 import { ConfirmEmailChangePage } from '@/features/account/ConfirmEmailChangePage'
 import { SettingsPage } from '@/features/account/SettingsPage'
+import { AdminDashboardPage } from '@/features/admin/AdminDashboardPage'
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
@@ -127,6 +128,14 @@ export function App(): ReactElement {
                   <Route path="/search" element={<SearchPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/account" element={<AccountPage />} />
+                  <Route
+                    path="/admin"
+                    element={
+                      <AdminRoute>
+                        <AdminDashboardPage />
+                      </AdminRoute>
+                    }
+                  />
                 </Route>
 
                 {/* Alias, so an early bookmark still lands somewhere real. */}

@@ -49,9 +49,33 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 /** Refresh answers first; anything after it falls through to this queue. */
 function mockFetch(...responses: Response[]): ReturnType<typeof vi.fn> {
-  const fn = vi.fn()
-  for (const res of responses) fn.mockResolvedValueOnce(res)
-  fn.mockResolvedValue(jsonResponse({ error: { code: 'NOT_FOUND', message: 'no' } }, 404))
+  const queue = [...responses]
+  const fn = vi.fn((input: RequestInfo | URL) => {
+    const urlStr =
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    if (urlStr.includes('/api/auth/refresh') && queue.length > 0) {
+      return Promise.resolve(queue.shift()!)
+    }
+    if (urlStr.includes('/api/dashboard')) {
+      return Promise.resolve(
+        jsonResponse({
+          totalDue: 0,
+          newCards: 0,
+          hasStudied: false,
+          streak: { current: 0, longest: 0, studiedToday: false },
+          sparkline: [],
+          recentSets: [],
+        }),
+      )
+    }
+    if (urlStr.includes('/api/admin/me')) {
+      return Promise.resolve(jsonResponse({ isAdmin: false }))
+    }
+    if (queue.length > 0) {
+      return Promise.resolve(queue.shift()!)
+    }
+    return Promise.resolve(jsonResponse({ error: { code: 'NOT_FOUND', message: 'no' } }, 404))
+  })
   vi.stubGlobal('fetch', fn)
   return fn
 }
@@ -85,7 +109,7 @@ describe('session restore', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: /Welcome, learner/, level: 1 }),
+        screen.getByRole('heading', { name: /Welcome.*Learner/i, level: 1 }),
       ).toBeInTheDocument()
     })
     expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument()

@@ -111,34 +111,34 @@ setCardsRouter.post(
     const { paragraph, answers, tags } = req.body as CreateCardBody
     const setId = req.params.setId ?? ''
 
-    if (!(await findOwnedSet(setId, requireUserId(req)))) {
-      sendNotFound(res, 'set')
-      return
-    }
-
-    /**
-     * The answers are derived from the paragraph the server is about to store,
-     * never taken from the request (plan §3.2). `paragraph` here is already
-     * NFC-normalised by the schema, which is what makes the client's offsets
-     * meaningful — they were computed against the same normalised form.
-     */
     const derived = deriveAnswers(paragraph, answers)
     if ('error' in derived) {
       sendError(res, 'VALIDATION_ERROR', derived.error, { fields: { answers: derived.error } })
       return
     }
 
-    const card = await prisma.studyCard.create({
-      data: {
-        studySetId: setId,
-        paragraph,
-        tags: tags ?? [],
-        // Nested create: the card and its answers are one statement, so a
-        // failure cannot leave a card with a partial set of blanks.
-        answers: { create: derived.answers },
-      },
-      include: cardInclude,
+    const card = await prisma.$transaction(async (tx) => {
+      const set = await tx.studySet.findFirst({
+        where: { id: setId, userId: requireUserId(req) },
+        select: { id: true },
+      })
+      if (!set) return null
+
+      return tx.studyCard.create({
+        data: {
+          studySetId: setId,
+          paragraph,
+          tags: tags ?? [],
+          answers: { create: derived.answers },
+        },
+        include: cardInclude,
+      })
     })
+
+    if (!card) {
+      sendNotFound(res, 'set')
+      return
+    }
 
     const body: CardResponse = { card: toStudyCard(card) }
     res.status(201).json(body)

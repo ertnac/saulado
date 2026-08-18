@@ -10,12 +10,14 @@ import {
   LogoutIcon,
   MoonIcon,
   SearchIcon,
+  ShieldIcon,
   SunIcon,
   type IconProps,
 } from '@/components/ui/icons'
 import { Avatar, Logo } from '@/components/ui/brand'
 import { CommandPalette } from '@/features/search/CommandPalette'
 import { useSearchShortcut } from '@/features/search/useSearchShortcut'
+import { useAdminCheck } from '@/features/admin/queries'
 import { useTheme } from '@/hooks/useTheme'
 import { useAuthStore } from '@/stores/auth'
 import { cn } from '@/lib/utils'
@@ -159,6 +161,7 @@ export function AppShell(): ReactElement {
   const logout = useAuthStore((s) => s.logout)
   const palette = useSearchShortcut()
   const location = useLocation()
+  const { data: adminCheck } = useAdminCheck()
 
   return (
     <div className="min-h-screen md:pl-20">
@@ -191,6 +194,26 @@ export function AppShell(): ReactElement {
           <div className="flex flex-1 justify-end sm:justify-center">
             <SearchTrigger onOpen={palette.onOpen} />
           </div>
+
+          {/* Admin Dashboard shortcut when privileged */}
+          {adminCheck?.isAdmin && (
+            <NavLink
+              to="/admin"
+              title="Admin Dashboard"
+              className={({ isActive }) =>
+                cn(
+                  'flex h-11 items-center gap-1.5 rounded-full px-3 text-xs font-semibold',
+                  'transition-colors duration-150',
+                  isActive
+                    ? 'bg-primary text-primary-foreground shadow-soft'
+                    : 'border border-border bg-surface text-muted-foreground hover:bg-surface-muted hover:text-foreground',
+                )
+              }
+            >
+              <ShieldIcon />
+              <span className="hidden sm:inline">Admin</span>
+            </NavLink>
+          )}
 
           <ThemeToggle />
 

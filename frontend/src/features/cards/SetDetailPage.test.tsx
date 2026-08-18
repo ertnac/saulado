@@ -96,22 +96,19 @@ beforeEach(() => {
 
 describe('the card list', () => {
   it('shows the paragraph, not the blanked form', async () => {
-    // Every blanked row would start "The ____ is…" — the words the cloze removes
-    // are exactly the ones that tell two cards apart in a list.
     render(renderPage())
 
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: 'The CPU' })).toBeInTheDocument()
+      expect(screen.getByText('The CPU is the brain of the computer')).toBeInTheDocument()
     })
-    expect(screen.getByText('The CPU is the brain of the computer')).toBeInTheDocument()
     expect(screen.getByText('1 blank')).toBeInTheDocument()
   })
 
-  it('links each card to its editor', async () => {
+  it('allows editing each card inline', async () => {
     render(renderPage())
 
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: 'The CPU' })).toHaveAttribute('href', '/cards/card-1')
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
     })
   })
 
@@ -122,10 +119,7 @@ describe('the card list', () => {
     await waitFor(() => {
       expect(screen.getByText('No cards yet')).toBeInTheDocument()
     })
-    expect(screen.getByRole('link', { name: 'Add your first card' })).toHaveAttribute(
-      'href',
-      '/sets/set-1/cards/new',
-    )
+    expect(screen.getByRole('button', { name: 'Add your first card' })).toBeInTheDocument()
   })
 
   it('explains a set that could not be loaded rather than showing an empty one', async () => {

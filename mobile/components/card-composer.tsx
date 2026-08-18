@@ -95,8 +95,9 @@ function Composer({
   const create = useCreateCard(setId)
   const update = useUpdateCard(card?.id ?? '')
   const warning = useTokenColor('--warning')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const pending = create.isPending || update.isPending
+  const pending = create.isPending || update.isPending || isSubmitting
   // The committed paragraph, not `draftText`: an uncommitted edit is not what
   // would be sent, and enabling Save on it would store the committed text while
   // the user is looking at something else.
@@ -127,6 +128,8 @@ function Composer({
     // this paragraph and nothing else.
     const body = { paragraph: draft.paragraph, answers: toAnswerInputs(draft.answers), tags }
 
+    setIsSubmitting(true)
+
     try {
       if (editing) {
         await update.mutateAsync(body)
@@ -150,6 +153,8 @@ function Composer({
       setAdded((count) => count + 1)
     } catch (error) {
       setFromError(error)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 

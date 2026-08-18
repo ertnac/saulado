@@ -76,7 +76,7 @@ function renderPage(initial = '/search') {
               </>
             }
           />
-          <Route path="/cards/:cardId" element={<p>Card page</p>} />
+          <Route path="/sets/:setId" element={<p>Set page</p>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -220,6 +220,6 @@ describe('SearchPage', () => {
 
     await userEvent.click(await screen.findByRole('link', { name: /the cpu/i }))
 
-    expect(await screen.findByText('Card page')).toBeInTheDocument()
+    expect(await screen.findByText('Set page')).toBeInTheDocument()
   })
 })

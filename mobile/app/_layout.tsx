@@ -1,4 +1,4 @@
-import { QueryClientProvider } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, type ReactElement } from 'react'
@@ -9,7 +9,7 @@ configureReanimatedLogger({
   level: ReanimatedLogLevel.warn,
   strict: false,
 })
-import { createQueryClient } from '../lib/query-client'
+import { asyncStoragePersister, queryClient } from '../lib/query-client'
 import { useAuthStore } from '../stores/auth'
 import { useTheme, useTokenColor } from '../stores/theme'
 
@@ -22,7 +22,7 @@ import { useTheme, useTokenColor } from '../stores/theme'
  * and `(app)`, and the two token-bearing email routes sit at this level
  * deliberately, outside both.
  */
-const queryClient = createQueryClient()
+// Removed createQueryClient() call since queryClient is exported directly
 
 /**
  * Restores the session once, on launch.
@@ -49,7 +49,10 @@ export default function RootLayout(): ReactElement {
   const background = useTokenColor('--background')
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister: asyncStoragePersister }}
+    >
       {/*
         `style` is derived from our own theme rather than left at `auto`, which
         reads the OS appearance. Those two disagree whenever the in-app theme
@@ -69,6 +72,6 @@ export default function RootLayout(): ReactElement {
           contentStyle: { backgroundColor: background },
         }}
       />
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   )
 }

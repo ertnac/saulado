@@ -17,7 +17,7 @@ import {
  */
 
 const SCOPE = 'set-1'
-const KEY = `saulado-card-draft:${SCOPE}`
+const KEY = `saulado-card-draft-v2:${SCOPE}`
 
 function snapshot(overrides: Partial<Omit<CardDraftSnapshot, 'savedAt'>> = {}) {
   return {
@@ -86,7 +86,7 @@ describe('clearDraft', () => {
   it('removes the draft for one scope only', () => {
     const saved = JSON.stringify({ ...snapshot(), savedAt: Date.now() })
     localStorage.setItem(KEY, saved)
-    localStorage.setItem('saulado-card-draft:set-2', saved)
+    localStorage.setItem('saulado-card-draft-v2:set-2', saved)
 
     clearDraft(SCOPE)
 

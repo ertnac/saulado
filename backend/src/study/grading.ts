@@ -50,7 +50,41 @@ export async function submitAnswer(context: GradeContext): Promise<AnswerRespons
   return prisma.$transaction(async (tx) => {
     const session = await tx.studySession.findFirst({
       where: { id: context.sessionId, userId: context.userId },
-      select: { id: true, completedAt: true, mode: true },
+      select: {
+        id: true,
+        completedAt: true,
+        mode: true,
+        cards: {
+          where: { cardId: context.body.cardId },
+          select: {
+            id: true,
+            attempts: true,
+            position: true,
+            idempotencyKey: true,
+            lastResult: true,
+            card: {
+              select: {
+                id: true,
+                set: { select: { userId: true } },
+                answers: {
+                  orderBy: { ordinal: 'asc' },
+                  select: { ordinal: true, answerText: true, altAnswers: true },
+                },
+                schedules: {
+                  where: { userId: context.userId },
+                  select: {
+                    easeFactor: true,
+                    intervalDays: true,
+                    repetitions: true,
+                    lapses: true,
+                    dueAt: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     })
 
     // 404 rather than 403 for someone else's session, as everywhere else — a 403
@@ -60,9 +94,7 @@ export async function submitAnswer(context: GradeContext): Promise<AnswerRespons
       throw new ApiError('VALIDATION_ERROR', 'This session has already finished.')
     }
 
-    const slot = await tx.studySessionCard.findUnique({
-      where: { sessionId_cardId: { sessionId: session.id, cardId: context.body.cardId } },
-    })
+    const slot = session.cards[0]
 
     if (!slot) throw new ApiError('NOT_FOUND', 'That card is not in this session.')
 
@@ -79,18 +111,11 @@ export async function submitAnswer(context: GradeContext): Promise<AnswerRespons
       return slot.lastResult as unknown as AnswerResponse
     }
 
-    const card = await tx.studyCard.findFirst({
-      where: { id: context.body.cardId, set: { userId: context.userId } },
-      select: {
-        id: true,
-        answers: {
-          orderBy: { ordinal: 'asc' },
-          select: { ordinal: true, answerText: true, altAnswers: true },
-        },
-      },
-    })
+    const card = slot.card
 
-    if (!card) throw new ApiError('NOT_FOUND', 'That card could not be found.')
+    if (!card || card.set.userId !== context.userId) {
+      throw new ApiError('NOT_FOUND', 'That card could not be found.')
+    }
 
     const { results, grade, correct } = gradeSubmission(
       card.answers,
@@ -101,16 +126,7 @@ export async function submitAnswer(context: GradeContext): Promise<AnswerRespons
     const hadEmptyBlank =
       context.body.revealed !== true && results.some((result) => result.submitted.trim() === '')
 
-    const schedule = await tx.cardSchedule.findUnique({
-      where: { userId_cardId: { userId: context.userId, cardId: card.id } },
-      select: {
-        easeFactor: true,
-        intervalDays: true,
-        repetitions: true,
-        lapses: true,
-        dueAt: true,
-      },
-    })
+    const schedule = card.schedules[0] ?? null
 
     const isDue = schedule ? schedule.dueAt <= today : false
 
@@ -183,18 +199,26 @@ export async function submitAnswer(context: GradeContext): Promise<AnswerRespons
       })
     }
 
-    const queueLength = await tx.studySessionCard.count({ where: { sessionId: session.id } })
-
-    await tx.studySessionCard.update({
-      where: { id: slot.id },
-      data: {
-        attempts,
-        hadEmptyBlank,
-        ...(verdict.requeue
-          ? { position: requeuePosition(slot.position, queueLength) }
-          : { answeredAt: context.now, grade: gradeToCode(grade), correct }),
-      },
+    const allCards = await tx.studySessionCard.findMany({
+      where: { sessionId: session.id },
+      select: { id: true, answeredAt: true, correct: true },
     })
+    const queueLength = allCards.length
+
+    const total = allCards.length
+    let answered = 0
+    let correctCount = 0
+
+    for (const c of allCards) {
+      if (c.id === slot.id) continue
+      if (c.answeredAt !== null) answered++
+      if (c.correct) correctCount++
+    }
+
+    if (!verdict.requeue) {
+      answered++
+      if (correct) correctCount++
+    }
 
     const response: AnswerResponse = {
       results,
@@ -206,18 +230,19 @@ export async function submitAnswer(context: GradeContext): Promise<AnswerRespons
           ? dayKeyInZone(schedule.dueAt, settings.timezone)
           : dueKey,
       intervalDays: outcome.interval,
-      // Only the review that *crosses* the threshold reports it, so the notice
-      // appears once rather than on every later failure of the same card.
       isLeech: outcome.isLeech && (schedule?.lapses ?? 0) < LEECH_THRESHOLD,
       requeued: verdict.requeue,
-      progress: await readProgress(tx, session.id),
+      progress: { answered, total, correct: correctCount },
     }
 
-    // Stored last, with the progress the caller is about to see, so a replayed
-    // request reports the same `7 / 24` rather than a stale one.
     await tx.studySessionCard.update({
       where: { id: slot.id },
       data: {
+        attempts,
+        hadEmptyBlank,
+        ...(verdict.requeue
+          ? { position: requeuePosition(slot.position, queueLength) }
+          : { answeredAt: context.now, grade: gradeToCode(grade), correct }),
         idempotencyKey: context.body.idempotencyKey,
         lastResult: response as unknown as Prisma.InputJsonValue,
       },
@@ -313,11 +338,17 @@ export async function readProgress(
   tx: Prisma.TransactionClient,
   sessionId: string,
 ): Promise<AnswerResponse['progress']> {
-  const [total, answered, correct] = await Promise.all([
-    tx.studySessionCard.count({ where: { sessionId } }),
-    tx.studySessionCard.count({ where: { sessionId, answeredAt: { not: null } } }),
-    tx.studySessionCard.count({ where: { sessionId, correct: true } }),
-  ])
+  const cards = await tx.studySessionCard.findMany({
+    where: { sessionId },
+    select: { answeredAt: true, correct: true },
+  })
 
-  return { answered, total, correct }
+  let answered = 0
+  let correct = 0
+  for (const card of cards) {
+    if (card.answeredAt !== null) answered++
+    if (card.correct) correct++
+  }
+
+  return { total: cards.length, answered, correct }
 }

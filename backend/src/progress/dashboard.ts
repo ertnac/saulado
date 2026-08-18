@@ -1,5 +1,6 @@
 import type { DashboardResponse, RecentSet } from '@saulado/shared'
 import { fillDaySeries, windowStart } from '@saulado/shared'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../db/client.js'
 import { getDueCounts } from '../study/due-counts.js'
 import { loadSettings, todayFor } from '../study/settings.js'
@@ -82,35 +83,32 @@ async function readRecentSets(userId: string): Promise<Omit<RecentSet, 'dueCount
   const sets = await prisma.studySet.findMany({
     where: { userId, archivedAt: null },
     orderBy: { updatedAt: 'desc' },
-    // Over-fetched deliberately: the real ordering key is last-studied, which
-    // lives on `card_schedules` and cannot be sorted on from here without a
-    // join that Prisma would turn into a per-set subquery. Taking a slightly
-    // wider slice and ordering in memory costs one query instead of N.
     take: RECENT_SET_LIMIT * 4,
     select: {
       id: true,
       title: true,
       _count: { select: { cards: true } },
-      cards: {
-        select: {
-          schedules: {
-            where: { userId },
-            orderBy: { lastReviewedAt: 'desc' },
-            take: 1,
-            select: { lastReviewedAt: true },
-          },
-        },
-      },
     },
   })
 
-  const withActivity = sets.map((set) => {
-    const lastStudied = set.cards
-      .flatMap((card) => card.schedules)
-      .map((schedule) => schedule.lastReviewedAt)
-      .filter((at): at is Date => at !== null)
-      .reduce<Date | null>((latest, at) => (latest === null || at > latest ? at : latest), null)
+  if (sets.length === 0) return []
 
+  const setIds = sets.map((s) => s.id)
+
+  const activity = await prisma.$queryRaw<{ setId: string; lastReviewedAt: Date | null }[]>`
+    SELECT card.study_set_id as "setId", MAX(schedule.last_reviewed_at) as "lastReviewedAt"
+    FROM study_cards card
+    JOIN card_schedules schedule ON schedule.card_id = card.id
+    WHERE card.study_set_id IN (${Prisma.join(setIds.map((id) => Prisma.sql`${id}::uuid`))})
+      AND schedule.user_id = ${userId}::uuid
+      AND schedule.last_reviewed_at IS NOT NULL
+    GROUP BY card.study_set_id
+  `
+
+  const activityMap = new Map(activity.map((a) => [a.setId, a.lastReviewedAt]))
+
+  const withActivity = sets.map((set) => {
+    const lastStudied = activityMap.get(set.id) ?? null
     return {
       id: set.id,
       title: set.title,
@@ -121,9 +119,6 @@ async function readRecentSets(userId: string): Promise<Omit<RecentSet, 'dueCount
 
   return withActivity
     .sort((a, b) => {
-      // Never-studied sets sort above studied ones, then each group by recency.
-      // `updatedAt` order is already applied by the query, so ties inside the
-      // never-studied group keep it.
       if (a.lastStudiedAt === null && b.lastStudiedAt === null) return 0
       if (a.lastStudiedAt === null) return -1
       if (b.lastStudiedAt === null) return 1

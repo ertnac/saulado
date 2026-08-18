@@ -1,4 +1,5 @@
 import cookieParser from 'cookie-parser'
+import compression from 'compression'
 import cors from 'cors'
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 import helmet from 'helmet'
@@ -6,6 +7,7 @@ import { env } from './config/env.js'
 import { ApiError, sendError } from './http/errors.js'
 import { accountPublicRouter, accountRouter, settingsRouter } from './routes/account.js'
 import { authRouter } from './routes/auth.js'
+import { adminRouter } from './routes/admin.js'
 import { cardsRouter, setCardsRouter, tagsRouter } from './routes/cards.js'
 import { healthRouter } from './routes/health.js'
 import { dashboardRouter, progressRouter } from './routes/progress.js'
@@ -23,26 +25,28 @@ export function createApp(): Express {
   /**
    * Render, Vercel and most PaaS hosts terminate TLS at a proxy, so
    * `req.ip` is the proxy's address unless Express is told to trust the
-   * `X-Forwarded-For` header. Rate limiting keyed on IP would otherwise see
+   * X-Forwarded-For header. Rate limiting keyed on IP would otherwise see
    * every request in the fleet as coming from one client and throttle everyone
    * together.
    *
-   * `1` — trust exactly one hop. `true` would trust the entire chain, letting a
+   * 1 — trust exactly one hop. true would trust the entire chain, letting a
    * client spoof its own address by sending the header.
    */
   if (env.isProduction) app.set('trust proxy', 1)
 
   app.use(helmet())
+  app.use(compression({ threshold: 512 }))
   app.use(cors({ origin: env.corsOrigins, credentials: true }))
   app.use(express.json({ limit: '1mb' }))
   app.use(cookieParser())
 
   app.use('/api', healthRouter)
   app.use('/api/auth', authRouter)
+  app.use('/api/admin', adminRouter)
   app.use('/api/sets', setsRouter)
   /**
-   * Mounted before `/api/sets/:id` would swallow it — Express matches in
-   * registration order, and `setsRouter` has no `/:id/cards` route, so the
+   * Mounted before /api/sets/:id would swallow it — Express matches in
+   * registration order, and setsRouter has no /:id/cards route, so the
    * nested router has to be its own mount rather than a child of it.
    */
   app.use('/api/sets/:setId/cards', setCardsRouter)
@@ -54,10 +58,10 @@ export function createApp(): Express {
   app.use('/api/search', searchRouter)
   app.use('/api/settings', settingsRouter)
   /**
-   * Both mounted at the same path, public first. `accountPublicRouter` carries
+   * Both mounted at the same path, public first. accountPublicRouter carries
    * only the email-change confirmation, which is reached by a link in an inbox
    * and so cannot require a session; anything it does not match falls through to
-   * `accountRouter`, where `requireAuth` applies.
+   * accountRouter, where requireAuth applies.
    */
   app.use('/api/account', accountPublicRouter)
   app.use('/api/account', accountRouter)
