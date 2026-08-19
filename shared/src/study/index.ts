@@ -1,5 +1,6 @@
 export type {
   AnswerResponse,
+  AnsweringType,
   BlankResult,
   BlankSubmission,
   DueCount,
@@ -40,6 +41,8 @@ export {
 } from './grades.js'
 
 export { countBlanks, fixedBlankWidth, MIN_BLANK_WIDTH, toSessionSegments } from './session-card.js'
+
+export { extractContextWords, generateBlankOptions } from './distractors.js'
 
 export type { QueueEntry, Rng } from './queue.js'
 export {

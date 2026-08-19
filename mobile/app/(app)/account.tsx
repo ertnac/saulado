@@ -20,7 +20,7 @@ import {
   type DataExport,
 } from '@saulado/shared'
 import * as DocumentPicker from 'expo-document-picker'
-import * as FileSystem from 'expo-file-system'
+import { File } from 'expo-file-system'
 import * as ImagePicker from 'expo-image-picker'
 import { Button } from '../../components/button'
 import { Card } from '../../components/card'
@@ -563,7 +563,8 @@ function JsonTransferSection(): ReactElement {
         const file = res.assets[0]
         if (file) {
           setSelectedFile({ name: file.name, size: file.size })
-          const content = await FileSystem.readAsStringAsync(file.uri)
+          const fileObj = new File(file.uri)
+          const content = await fileObj.text()
           setJsonText(content)
         }
       }
@@ -589,9 +590,11 @@ function JsonTransferSection(): ReactElement {
       setImportModalVisible(false)
       setJsonText('')
       setSelectedFile(null)
+      const failedNote =
+        result.failedCards > 0 ? ` (${String(result.failedCards)} cards could not be imported)` : ''
       Alert.alert(
-        'Import Successful! 🎉',
-        `Successfully imported ${String(result.importedSets)} ${result.importedSets === 1 ? 'set' : 'sets'} and ${String(result.importedCards)} ${result.importedCards === 1 ? 'card' : 'cards'} into your library.`,
+        'Import Complete! 🎉',
+        `Successfully imported ${String(result.importedSets)} ${result.importedSets === 1 ? 'set' : 'sets'} and ${String(result.importedCards)} ${result.importedCards === 1 ? 'card' : 'cards'}${failedNote}.`,
       )
     } catch {
       Alert.alert(

@@ -7,6 +7,7 @@ import type {
   SubmitAnswerRequest,
   StartableMode,
   StartSessionRequest,
+  AnsweringType,
 } from '@saulado/shared'
 
 import { Button } from '../../components/button'
@@ -125,6 +126,7 @@ export default function StudyScreen(): ReactElement {
   const [startError, setStartError] = useState<Error | null>(null)
 
   const [mode, setMode] = useState<StartableMode>(initialMode ?? 'spaced')
+  const [answeringType, setAnsweringType] = useState<AnsweringType>('identification')
   const [picking, setPicking] = useState(false)
 
   const resumed = useQuery({
@@ -168,6 +170,14 @@ export default function StudyScreen(): ReactElement {
     start
       .mutateAsync(body)
       .then((data) => {
+        // Log the first card's options so we can easily verify them in the terminal!
+        console.log('--- NETWORK CHECK ---')
+        console.log('Queue length:', data.session.queue.length)
+        if (data.session.queue.length > 0) {
+          console.log('First card blank options:', data.session.queue[0]?.blankOptions)
+        }
+        console.log('---------------------')
+
         setSessionId(data.session.id)
         void rememberSession(data.session.id)
         session.load(data.session)
@@ -200,7 +210,7 @@ export default function StudyScreen(): ReactElement {
   useEffect(() => {
     // The resumed session arrived. Adopting it is the same operation as adopting
     // a freshly started one — the queue already excludes answered cards.
-    if (!resumed.data || sessionId !== null) return
+    if (!resumed.data || resumed.isFetching || sessionId !== null) return
 
     setSessionId(resumed.data.session.id)
     session.load(resumed.data.session)
@@ -233,14 +243,16 @@ export default function StudyScreen(): ReactElement {
     })
   }
 
-  const send = (revealed: boolean): void => {
+  const send = (revealed: boolean, overrideValues?: Record<number, string>): void => {
     if (!session.card || !sessionId || session.answer) return
 
     setIsChecking(true)
 
+    const submittedValues = overrideValues ?? session.values
+
     const body: SubmitAnswerRequest = {
       cardId: session.card.cardId,
-      blanks: Object.entries(session.values).map(([ordinal, submitted]) => ({
+      blanks: Object.entries(submittedValues).map(([ordinal, submitted]) => ({
         ordinal: Number(ordinal),
         submitted,
       })),
@@ -457,6 +469,18 @@ export default function StudyScreen(): ReactElement {
           >
             <View className="h-full bg-primary" style={{ width: `${(answered / total) * 100}%` }} />
           </View>
+
+          <View className="mt-1 flex-row justify-end">
+            <Button
+              label={answeringType === 'multiple-choice' ? 'Multiple Choice' : 'Identification'}
+              variant="ghost"
+              onPress={() =>
+                setAnsweringType((prev) =>
+                  prev === 'multiple-choice' ? 'identification' : 'multiple-choice',
+                )
+              }
+            />
+          </View>
         </View>
 
         <StudyCard
@@ -464,9 +488,10 @@ export default function StudyScreen(): ReactElement {
           values={session.values}
           results={session.answer?.results ?? null}
           disabled={session.answer !== null || isChecking || submit.isPending}
+          answeringType={answeringType}
           onChange={session.setValue}
-          onSubmit={() => {
-            send(false)
+          onSubmit={(overrideValues) => {
+            send(false, overrideValues)
           }}
         />
 

@@ -1,6 +1,6 @@
 import { forwardRef, type ReactElement } from 'react'
 import { Platform, Text, TextInput, useWindowDimensions, View } from 'react-native'
-import type { BlankResult } from '@saulado/shared'
+import type { BlankResult, AnsweringType } from '@saulado/shared'
 
 import { useTokenColor } from '../stores/theme'
 
@@ -61,6 +61,8 @@ interface BlankSlotProps {
   disabled: boolean
   /** The last blank submits the card; the others move to the next one. */
   isLastBlank: boolean
+  answeringType: AnsweringType
+  onFocus: () => void
   onChange: (value: string) => void
   onSubmit: () => void
 }
@@ -75,6 +77,8 @@ export const BlankSlot = forwardRef<TextInput, BlankSlotProps>(function BlankSlo
     result,
     disabled,
     isLastBlank,
+    answeringType,
+    onFocus,
     onChange,
     onSubmit,
   },
@@ -143,6 +147,8 @@ export const BlankSlot = forwardRef<TextInput, BlankSlotProps>(function BlankSlo
       autoCorrect={false}
       autoComplete="off"
       spellCheck={false}
+      showSoftInputOnFocus={answeringType !== 'multiple-choice'}
+      onFocus={onFocus}
       // The last blank has nowhere to go, so its key checks the card instead.
       returnKeyType={isLastBlank ? 'done' : 'next'}
       // `submit` keeps focus and the keyboard up while the return key walks from

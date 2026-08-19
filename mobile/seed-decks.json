@@ -4,7 +4,7 @@
   "sets": [
     {
       "title": "Computer Science & Algorithms",
-      "color": "forest",
+      "color": "teal",
       "cards": [
         {
           "paragraph": "Binary search operates in O(log n) time on sorted arrays by repeatedly dividing the search interval in half.",
@@ -120,7 +120,7 @@
     },
     {
       "title": "World History & Civilizations",
-      "color": "terracotta",
+      "color": "amber",
       "cards": [
         {
           "paragraph": "The Renaissance began in 14th-century Italy and marked a cultural rebirth of art and humanism.",
@@ -236,7 +236,7 @@
     },
     {
       "title": "Human Biology & Physiology",
-      "color": "sky",
+      "color": "blue",
       "cards": [
         {
           "paragraph": "Mitochondria generate most of the chemical energy needed by the cell in the form of ATP.",

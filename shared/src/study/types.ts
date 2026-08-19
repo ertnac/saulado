@@ -42,6 +42,11 @@ export type StartableMode = Exclude<SessionMode, 'retake'>
 // ── The queue ───────────────────────────────────────────────────────────────
 
 /**
+ * The answering mode the user has selected for the session.
+ */
+export type AnsweringType = 'identification' | 'multiple-choice'
+
+/**
  * A card as the study view sees it.
  *
  * `segments` is the output of `renderCloze`, computed server-side. Text
@@ -67,6 +72,11 @@ export interface SessionCard {
   isNew: boolean
   /** `lapses >= LEECH_THRESHOLD`. Surfaced so the user can rewrite the card. */
   isLeech: boolean
+  /**
+   * Available choices for each blank when studying in multiple-choice mode.
+   * `blankOptions[0]` contains the choices for the first blank.
+   */
+  blankOptions?: string[][]
 }
 
 /**

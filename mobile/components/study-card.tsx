@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { Text, useWindowDimensions, View, type TextInput } from 'react-native'
-import type { BlankResult, SessionCard, Segment } from '@saulado/shared'
+import type { BlankResult, SessionCard, Segment, AnsweringType } from '@saulado/shared'
 
 import { BlankSlot, SLOT_FONT, SLOT_FONT_SIZE, SLOT_HEIGHT } from './blank-slot'
+import { MultipleChoiceGrid } from './multiple-choice-grid'
 
 /**
  * The card under review: the paragraph with its blanks as inputs.
@@ -111,8 +112,9 @@ interface StudyCardProps {
   /** `null` until the card is graded; then one entry per blank. */
   results: BlankResult[] | null
   disabled: boolean
+  answeringType: AnsweringType
   onChange: (ordinal: number, value: string) => void
-  onSubmit: () => void
+  onSubmit: (overrideValues?: Record<number, string>) => void
 }
 
 export function StudyCard({
@@ -120,11 +122,13 @@ export function StudyCard({
   values,
   results,
   disabled,
+  answeringType,
   onChange,
   onSubmit,
 }: StudyCardProps): ReactElement {
   const { fontScale } = useWindowDimensions()
   const [charWidth, setCharWidth] = useState(0)
+  const [focusedOrdinal, setFocusedOrdinal] = useState(0)
   const blanks = useRef<Record<number, TextInput | null>>({})
 
   useEffect(() => {
@@ -140,8 +144,27 @@ export function StudyCard({
      * while graded: moving focus back into a disabled input after an answer would
      * strand a screen reader away from the feedback it should be reading.
      */
-    if (!results) blanks.current[0]?.focus()
+    if (!results) {
+      blanks.current[0]?.focus()
+      setFocusedOrdinal(0)
+    }
   }, [card.cardId, results, charWidth])
+
+  const handleSelectChoice = (option: string) => {
+    if (disabled || !!results) return
+
+    const nextValues = { ...values, [focusedOrdinal]: option }
+    onChange(focusedOrdinal, option)
+
+    const isLastBlank = focusedOrdinal === card.blankCount - 1
+    if (isLastBlank) {
+      onSubmit(nextValues)
+    } else {
+      const nextOrdinal = focusedOrdinal + 1
+      setFocusedOrdinal(nextOrdinal)
+      blanks.current[nextOrdinal]?.focus()
+    }
+  }
 
   const byOrdinal = new Map(results?.map((result) => [result.ordinal, result]))
   const meta = card.isNew || card.isLeech || card.tags.length > 0
@@ -230,6 +253,8 @@ export function StudyCard({
                 result={byOrdinal.get(token.ordinal) ?? null}
                 disabled={disabled}
                 isLastBlank={isLastBlank}
+                answeringType={answeringType}
+                onFocus={() => setFocusedOrdinal(token.ordinal)}
                 onChange={(value) => {
                   onChange(token.ordinal, value)
                 }}
@@ -243,6 +268,16 @@ export function StudyCard({
             )
           })}
         </View>
+      )}
+
+      {answeringType === 'multiple-choice' && card.blankOptions && (
+        <MultipleChoiceGrid
+          options={card.blankOptions[focusedOrdinal] ?? []}
+          selectedValue={values[focusedOrdinal] ?? ''}
+          result={byOrdinal.get(focusedOrdinal) ?? null}
+          onSelect={handleSelectChoice}
+          disabled={disabled || !!results}
+        />
       )}
     </View>
   )

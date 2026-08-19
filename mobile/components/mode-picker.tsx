@@ -66,7 +66,7 @@ export function ModePicker({
               onPress={() => onChange(mode.id)}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
-              className={`flex-row items-start p-5 rounded-2xl border-2 transition-all duration-150 ${
+              className={`flex-row items-start p-5 rounded-2xl border-2 ${
                 active ? 'border-primary bg-primary/5' : 'border-border bg-surface'
               }`}
             >

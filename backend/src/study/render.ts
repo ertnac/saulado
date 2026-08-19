@@ -1,5 +1,10 @@
 import type { BlankWidthMode, SessionCard } from '@saulado/shared'
-import { LEECH_THRESHOLD, countBlanks, toSessionSegments } from '@saulado/shared'
+import {
+  LEECH_THRESHOLD,
+  countBlanks,
+  toSessionSegments,
+  generateBlankOptions,
+} from '@saulado/shared'
 import { prisma } from '../db/client.js'
 
 /**
@@ -28,9 +33,22 @@ export interface RenderableCard {
 
 export function toSessionCard(
   card: RenderableCard,
-  options: { isNew: boolean; lapses: number; blankWidthMode: BlankWidthMode },
+  options: {
+    isNew: boolean
+    lapses: number
+    blankWidthMode: BlankWidthMode
+    allSetAnswers: string[]
+  },
 ): SessionCard {
   const segments = toSessionSegments(card.paragraph, card.answers, options.blankWidthMode)
+
+  const blankOptions = card.answers.map((ans) =>
+    generateBlankOptions(
+      [ans.answerText, ...ans.altAnswers],
+      options.allSetAnswers,
+      card.paragraph,
+    ),
+  )
 
   return {
     cardId: card.id,
@@ -40,6 +58,7 @@ export function toSessionCard(
     tags: card.tags,
     isNew: options.isNew,
     isLeech: options.lapses >= LEECH_THRESHOLD,
+    blankOptions,
   }
 }
 
@@ -88,6 +107,20 @@ export async function loadSessionCards(
     }),
   ])
 
+  const setIds = Array.from(new Set(cards.map((card) => card.studySetId)))
+  const setAnswersRows = await prisma.cardAnswer.findMany({
+    where: { card: { studySetId: { in: setIds } } },
+    select: { answerText: true, altAnswers: true, card: { select: { studySetId: true } } },
+  })
+
+  const answersBySet = new Map<string, string[]>()
+  for (const row of setAnswersRows) {
+    const setId = row.card.studySetId
+    const arr = answersBySet.get(setId) ?? []
+    arr.push(row.answerText, ...row.altAnswers)
+    answersBySet.set(setId, arr)
+  }
+
   const byId = new Map(cards.map((card) => [card.id, card]))
   const lapsesById = new Map(schedules.map((row) => [row.cardId, row.lapses]))
 
@@ -102,6 +135,7 @@ export async function loadSessionCards(
         isNew: slot.isNew,
         lapses: lapsesById.get(slot.cardId) ?? 0,
         blankWidthMode,
+        allSetAnswers: answersBySet.get(card.studySetId) ?? [],
       }),
     ]
   })

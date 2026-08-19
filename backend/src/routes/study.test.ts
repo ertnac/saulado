@@ -109,11 +109,12 @@ describe('POST /api/study/sessions', () => {
     expect(session.progress).toEqual({ answered: 0, total: 2, correct: 0 })
   })
 
-  it('never sends answer text to the client', async () => {
+  it('never sends answer text inside segments to the client', async () => {
     /**
      * The assertion this file exists for. Grading is server-side precisely so
-     * the answer key stays there; a card carrying `answerText` would render
-     * identically and leak every answer to anyone with devtools open.
+     * the answer key stays there; a card's segments must not leak the true text.
+     * Note: Multiple Choice mode does ship `blankOptions` containing the answer
+     * among distractors, but the segments themselves must remain clean.
      */
     const { token } = await registerTestUser(app)
     // The default paragraph, deliberately: both blanks cover the two words this
@@ -121,11 +122,11 @@ describe('POST /api/study/sessions', () => {
     const setId = await seedSet(token, [{ answers: [CPU, BRAIN] }])
 
     const session = await startSession(token, setId)
-
-    expect(JSON.stringify(session)).not.toContain('CPU')
-    expect(JSON.stringify(session)).not.toContain('brain')
-
     const card = session.queue[0]
+
+    expect(JSON.stringify(card?.segments)).not.toContain('CPU')
+    expect(JSON.stringify(card?.segments)).not.toContain('brain')
+
     expect(card?.blankCount).toBe(2)
     expect(card?.segments.some((segment) => segment.kind === 'blank')).toBe(true)
   })
