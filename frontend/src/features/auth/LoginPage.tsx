@@ -46,8 +46,11 @@ export function LoginPage(): ReactElement {
   const from = (location.state as { from?: string } | null)?.from ?? '/'
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let unmounted = false
+
     const initGoogle = () => {
+      if (unmounted || typeof window === 'undefined') return
       if (window.google && googleBtnRef.current) {
         if (!isGoogleInitialized.current) {
           window.google.accounts.id.initialize({
@@ -71,11 +74,16 @@ export function LoginPage(): ReactElement {
           size: 'large',
           width: 320,
         })
-      } else {
-        setTimeout(initGoogle, 100)
+      } else if (typeof window !== 'undefined') {
+        timer = setTimeout(initGoogle, 100)
       }
     }
     initGoogle()
+
+    return () => {
+      unmounted = true
+      if (timer) clearTimeout(timer)
+    }
   }, [googleLogin, navigate, from, clear, setFromError])
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
