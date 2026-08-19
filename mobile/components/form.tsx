@@ -9,6 +9,10 @@ interface FieldProps extends TextInputProps {
   error?: string
   /** Persistent guidance shown under the field, e.g. the password rule. */
   hint?: string
+  /** Optional icon to render on the left side of the input. */
+  leftIcon?: ReactNode
+  /** Optional element to render on the right side of the input. */
+  rightElement?: ReactNode
 }
 
 /**
@@ -27,7 +31,7 @@ interface FieldProps extends TextInputProps {
  * carries it too rather than only the live region.
  */
 export const Field = forwardRef<TextInput, FieldProps>(function Field(
-  { label, error, hint, ...props },
+  { label, error, hint, leftIcon, rightElement, ...props },
   ref,
 ): ReactElement {
   const placeholder = useTokenColor('--muted-foreground')
@@ -37,16 +41,24 @@ export const Field = forwardRef<TextInput, FieldProps>(function Field(
     <View className="gap-1.5">
       <Text className="text-sm font-medium text-foreground">{label}</Text>
 
-      <TextInput
-        ref={ref}
-        accessibilityLabel={error ? `${label}. ${error}` : label}
-        accessibilityHint={hint}
-        placeholderTextColor={placeholder}
-        className={`h-11 rounded-full border bg-surface px-4 text-base text-foreground ${
+      <View
+        className={`h-14 flex-row items-center rounded-2xl border bg-surface px-4 ${
           error ? 'border-warning' : 'border-border'
         }`}
-        {...props}
-      />
+      >
+        {leftIcon !== undefined && <View className="mr-3 opacity-60">{leftIcon}</View>}
+
+        <TextInput
+          ref={ref}
+          accessibilityLabel={error ? `${label}. ${error}` : label}
+          accessibilityHint={hint}
+          placeholderTextColor={placeholder}
+          className="flex-1 text-base text-foreground"
+          {...props}
+        />
+
+        {rightElement !== undefined && <View className="ml-3">{rightElement}</View>}
+      </View>
 
       {hint !== undefined && <Text className="text-xs text-muted-foreground">{hint}</Text>}
 

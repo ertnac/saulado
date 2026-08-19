@@ -22,5 +22,5 @@ export default function AuthLayout(): ReactElement {
 
   if (status === 'authenticated') return <Redirect href="/" />
 
-  return <Stack screenOptions={{ headerShown: false }} />
+  return <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
 }

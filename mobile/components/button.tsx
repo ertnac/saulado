@@ -14,6 +14,8 @@ interface ButtonProps {
   loading?: boolean
   disabled?: boolean
   className?: string
+  /** Optional icon to display before the label. */
+  icon?: ReactNode
 }
 
 /**
@@ -63,6 +65,7 @@ export function Button({
   loading = false,
   disabled = false,
   className = '',
+  icon,
 }: ButtonProps): ReactElement {
   const blocked = disabled || loading
   const v = VARIANTS[variant]
@@ -89,6 +92,7 @@ export function Button({
         text out changes the button's width mid-press, which moves whatever is
         under the user's thumb.
       */}
+      {icon !== undefined && !loading && icon}
       {loading && <ActivityIndicator size="small" color={spinnerColor} />}
       <Text className={`font-medium ${v.text} ${s.text}`}>{label}</Text>
     </Pressable>

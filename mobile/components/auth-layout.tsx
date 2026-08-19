@@ -1,76 +1,122 @@
 import type { ReactElement, ReactNode } from 'react'
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native'
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  View,
+  Image,
+  Pressable,
+} from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { router } from 'expo-router'
+import Animated, { FadeIn } from 'react-native-reanimated'
+import sauladoLogo from '../assets/saulado.png'
 
 interface AuthLayoutProps {
   title: string
   subtitle?: string
   children: ReactNode
   footer?: ReactNode
+  activeTab?: 'login' | 'register'
 }
 
 /**
- * Shared frame for the five unauthenticated screens, ported from
- * `frontend/src/features/auth/AuthLayout.tsx`.
- *
- * The web version's job is heading hierarchy — one `<main>`, one `<h1>` per page.
- * Here it earns its keep for a different reason: the keyboard. Every screen
- * inside it is a form whose submit button must stay visible above the keyboard
- * (saulado-ux §7), and solving that once is the whole reason not to let five
- * screens each invent their own scroll container.
- *
- * `KeyboardAvoidingView` needs different behaviour per platform, and the
- * difference is not stylistic: iOS reports the keyboard as an overlay that the
- * view must be pushed clear of (`padding`), while Android already resizes the
- * window via `adjustResize` and padding on top of that would double-count.
+ * Shared frame for the five unauthenticated screens, redesigned for the mobile app
+ * with a dynamic hero header and bottom-sheet form container.
  */
-export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProps): ReactElement {
+export function AuthLayout({
+  title,
+  subtitle,
+  children,
+  footer,
+  activeTab,
+}: AuthLayoutProps): ReactElement {
   const insets = useSafeAreaInsets()
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      className="flex-1 bg-background"
-    >
-      <ScrollView
-        // The form is short enough not to scroll on most phones, but not on a
-        // small one with the keyboard up — and `Field`'s error messages grow it
-        // further. `flexGrow: 1` keeps it vertically centred until it overflows,
-        // then lets it scroll instead of clipping the submit button.
-        contentContainerStyle={{
-          flexGrow: 1,
-          justifyContent: 'center',
-          paddingTop: insets.top + 24,
-          paddingBottom: insets.bottom + 24,
-        }}
-        contentContainerClassName="px-6"
-        keyboardShouldPersistTaps="handled"
+    <View className="flex-1 bg-background dark:bg-[#031a14]">
+      {/* Absolute Header Background for the Hero Section */}
+      <View className="absolute top-0 left-0 right-0 h-[40%] bg-[#052e24] dark:bg-transparent" />
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        className="flex-1"
       >
-        <View className="mx-auto w-full max-w-md">
-          <View className="mb-6">
-            {/*
-              No back link to `/`. On the web the wordmark navigates home; here
-              "home" is behind the guard that sent the user to this screen, so
-              the link would bounce straight back and read as the tap having
-              failed.
-            */}
-            <Text className="text-sm font-medium text-muted-foreground">Saulado</Text>
-            <Text
-              accessibilityRole="header"
-              className="mt-5 text-2xl font-semibold text-foreground"
-            >
+        <ScrollView
+          contentContainerStyle={{
+            flexGrow: 1,
+            // Only add bottom padding; the top is handled by the hero area
+            paddingBottom: insets.bottom + 24,
+          }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Hero Header Area */}
+          <View
+            className="w-full items-center justify-center px-6"
+            style={{ paddingTop: Math.max(insets.top + 16, 36), minHeight: 280 }}
+          >
+            <Image source={sauladoLogo} className="w-32 h-32 mb-2" resizeMode="contain" />
+            <Text accessibilityRole="header" className="text-3xl font-bold text-white text-center">
               {title}
             </Text>
             {subtitle !== undefined && (
-              <Text className="mt-2 text-sm text-muted-foreground">{subtitle}</Text>
+              <Text className="mt-2 text-sm text-white/80 text-center max-w-[280px]">
+                {subtitle}
+              </Text>
             )}
           </View>
 
-          <View className="rounded-lg bg-surface p-6">{children}</View>
+          {/* Bottom Sheet Container */}
+          <View className="flex-1 bg-background rounded-t-[32px] px-6 pt-6 shadow-sm overflow-hidden">
+            <View className="mx-auto w-full max-w-md">
+              {/* Segmented Tab Switcher (Only on login/register screens) */}
+              {activeTab !== undefined && (
+                <View className="flex-row rounded-full bg-surface-muted p-1 mb-8">
+                  <Pressable
+                    onPress={() => {
+                      if (activeTab !== 'login') router.replace('/login')
+                    }}
+                    className={`flex-1 rounded-full py-3 items-center justify-center ${
+                      activeTab === 'login' ? 'bg-surface shadow-sm' : ''
+                    }`}
+                  >
+                    <Text
+                      className={`text-sm font-semibold ${
+                        activeTab === 'login' ? 'text-foreground' : 'text-muted-foreground'
+                      }`}
+                    >
+                      Log In
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      if (activeTab !== 'register') router.replace('/register')
+                    }}
+                    className={`flex-1 rounded-full py-3 items-center justify-center ${
+                      activeTab === 'register' ? 'bg-surface shadow-sm' : ''
+                    }`}
+                  >
+                    <Text
+                      className={`text-sm font-semibold ${
+                        activeTab === 'register' ? 'text-foreground' : 'text-muted-foreground'
+                      }`}
+                    >
+                      Sign Up
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
 
-          {footer !== undefined && <View className="mt-6">{footer}</View>}
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+              {/* Form Content */}
+              <Animated.View entering={FadeIn.duration(200)}>{children}</Animated.View>
+
+              {/* Footer Links */}
+              {footer !== undefined && <View className="mt-8 items-center pb-6">{footer}</View>}
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   )
 }
