@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import type {
@@ -14,12 +14,21 @@ import { Button } from '../../components/button'
 import { FeedbackPanel } from '../../components/feedback-panel'
 import { SessionSummaryView } from '../../components/session-summary'
 import { StudyCard } from '../../components/study-card'
+import { FlashcardCard } from '../../components/flashcard-card'
 import { ModePicker } from '../../components/mode-picker'
-import { AlertIcon, CheckIcon } from '../../components/icons'
+import {
+  AlertIcon,
+  CheckIcon,
+  CloseIcon,
+  PencilIcon,
+  ListIcon,
+  CardsIcon,
+} from '../../components/icons'
 import { forgetSession, readResumableSession, rememberSession } from '../../lib/study-resume'
 import { completeSession, getSession, startSession, submitAnswer } from '../../services/study'
 import { ApiError } from '../../services/api'
 import { useStudySession } from '../../hooks/useStudySession'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTokenColor } from '../../stores/theme'
 
 /**
@@ -95,6 +104,7 @@ export default function StudyScreen(): ReactElement {
   const { set, mode: initialMode } = useLocalSearchParams<{ set?: string; mode?: StartableMode }>()
   const studySetId = set ?? null
   const router = useRouter()
+  const insets = useSafeAreaInsets()
 
   const session = useStudySession()
   const start = useMutation({
@@ -133,13 +143,16 @@ export default function StudyScreen(): ReactElement {
     queryKey: ['study', 'session', resumeId],
     queryFn: () => getSession(resumeId ?? ''),
     enabled: sessionId === null && typeof resumeId === 'string',
-    staleTime: Infinity,
+    staleTime: 0,
+    gcTime: 0,
     retry: false,
   })
 
   const elapsed = useCardTimer(session.card?.cardId)
   const started = useRef(false)
   const danger = useTokenColor('--danger')
+  const primaryColor = useTokenColor('--primary')
+  const mutedColor = useTokenColor('--muted-foreground')
 
   useEffect(() => {
     void readResumableSession().then(setResumeId)
@@ -170,14 +183,6 @@ export default function StudyScreen(): ReactElement {
     start
       .mutateAsync(body)
       .then((data) => {
-        // Log the first card's options so we can easily verify them in the terminal!
-        console.log('--- NETWORK CHECK ---')
-        console.log('Queue length:', data.session.queue.length)
-        if (data.session.queue.length > 0) {
-          console.log('First card blank options:', data.session.queue[0]?.blankOptions)
-        }
-        console.log('---------------------')
-
         setSessionId(data.session.id)
         void rememberSession(data.session.id)
         session.load(data.session)
@@ -212,8 +217,23 @@ export default function StudyScreen(): ReactElement {
     // a freshly started one — the queue already excludes answered cards.
     if (!resumed.data || resumed.isFetching || sessionId !== null) return
 
-    setSessionId(resumed.data.session.id)
-    session.load(resumed.data.session)
+    const resumedSession = resumed.data.session
+
+    // If the resumed session belongs to a different set than the one the user
+    // just tapped "Study" on, discard the stale pointer and start fresh rather
+    // than hijacking a new study intent with leftover cards from another set.
+    if (studySetId !== null && resumedSession.studySetId !== studySetId) {
+      void forgetSession()
+      if (!initialMode) {
+        setPicking(true)
+      } else {
+        begin(initialMode)
+      }
+      return
+    }
+
+    setSessionId(resumedSession.id)
+    session.load(resumedSession)
   }, [resumed.data, sessionId, session])
 
   useEffect(() => {
@@ -264,7 +284,13 @@ export default function StudyScreen(): ReactElement {
     submit.mutate(
       { sessionId, body },
       {
-        onSuccess: session.accept,
+        onSuccess: (data) => {
+          session.accept(data)
+          if (answeringType === 'flashcard') {
+            const spent = session.advance()
+            if (spent && sessionId) finish(sessionId)
+          }
+        },
         onSettled: () => setIsChecking(false),
       },
     )
@@ -410,16 +436,14 @@ export default function StudyScreen(): ReactElement {
   }
 
   if (!session.card) {
-    // Skeleton bars matching the final layout, not a spinner: a spinner swapped
-    // for a card is a second layout shift on a screen whose whole premise is that
-    // the text does not move.
     return shell(
       <View accessibilityLabel="Loading your session" className="gap-5">
-        <View className="h-2 w-full rounded-full bg-surface-muted" />
-        <View className="gap-3 rounded-xl border border-border bg-surface p-5">
-          <View className="h-5 w-full rounded bg-surface-muted" />
-          <View className="h-5 w-full rounded bg-surface-muted" />
-          <View className="h-5 w-3/4 rounded bg-surface-muted" />
+        <View className="h-2.5 w-full rounded-full bg-surface-muted" />
+        <View className="gap-4 rounded-3xl border border-border bg-surface p-6 shadow-sm">
+          <View className="h-5 w-24 rounded-full bg-surface-muted" />
+          <View className="h-6 w-full rounded-lg bg-surface-muted" />
+          <View className="h-6 w-full rounded-lg bg-surface-muted" />
+          <View className="h-6 w-3/4 rounded-lg bg-surface-muted" />
         </View>
       </View>,
     )
@@ -428,93 +452,133 @@ export default function StudyScreen(): ReactElement {
   const answered = session.progress.answered
   const total = Math.max(session.progress.total, 1)
 
+  const getModeInfo = (type: AnsweringType) => {
+    switch (type) {
+      case 'identification':
+        return { label: 'Type In', icon: <PencilIcon color={primaryColor} size={13} /> }
+      case 'multiple-choice':
+        return { label: 'Quiz', icon: <ListIcon color={primaryColor} size={13} /> }
+      case 'flashcard':
+        return { label: 'Cards', icon: <CardsIcon color={primaryColor} size={13} /> }
+    }
+  }
+
+  const modeInfo = getModeInfo(answeringType)
+
   return (
     <KeyboardAvoidingView
       className="flex-1 bg-background"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
     >
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="gap-6 p-6 pb-10"
-        keyboardShouldPersistTaps="handled"
+      {/* ── Sleek Top Navigation Bar ── */}
+      <View
+        style={{ paddingTop: Math.max(12, insets.top) }}
+        className="flex-row items-center justify-between border-b border-border/50 bg-surface px-4 pb-3 shadow-xs"
       >
-        <View className="gap-2">
-          <View className="flex-row items-center justify-between gap-3">
-            {/*
-              Progress is the server's count, so a re-queued card is honest about
-              having been answered rather than silently rewinding the bar.
-            */}
-            <Text className="text-sm text-muted-foreground">
-              {answered} of {session.progress.total} answered
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="End session"
+          className="h-9 w-9 rounded-full bg-surface border border-border/80 items-center justify-center shadow-xs active:bg-surface-muted"
+          disabled={complete.isPending}
+          onPress={() => {
+            if (sessionId) finish(sessionId)
+          }}
+        >
+          <CloseIcon color={mutedColor} size={15} />
+        </Pressable>
+
+        <View className="flex-1 mx-3 gap-1">
+          <View className="flex-row items-center justify-between">
+            <Text className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              Progress
             </Text>
-            <Button
-              label="End session"
-              variant="ghost"
-              disabled={complete.isPending}
-              onPress={() => {
-                if (sessionId) finish(sessionId)
-              }}
-            />
+            <Text className="text-xs font-bold text-foreground">
+              {answered}{' '}
+              <Text className="font-normal text-muted-foreground">/ {session.progress.total}</Text>
+            </Text>
           </View>
-          {/*
-            No `<progress>` element here, so the bar carries its own value for a
-            screen reader rather than relying on a role that does not exist.
-          */}
           <View
             accessibilityRole="progressbar"
             accessibilityLabel="Session progress"
             accessibilityValue={{ min: 0, max: total, now: answered }}
-            className="h-2 w-full overflow-hidden rounded-full bg-surface-muted"
+            className="h-2 w-full overflow-hidden rounded-full bg-surface-muted border border-border/40"
           >
-            <View className="h-full bg-primary" style={{ width: `${(answered / total) * 100}%` }} />
-          </View>
-
-          <View className="mt-1 flex-row justify-end">
-            <Button
-              label={answeringType === 'multiple-choice' ? 'Multiple Choice' : 'Identification'}
-              variant="ghost"
-              onPress={() =>
-                setAnsweringType((prev) =>
-                  prev === 'multiple-choice' ? 'identification' : 'multiple-choice',
-                )
-              }
+            <View
+              className="h-full bg-primary rounded-full"
+              style={{ width: `${Math.min(100, Math.max(5, (answered / total) * 100))}%` }}
             />
           </View>
         </View>
 
-        <StudyCard
-          card={session.card}
-          values={session.values}
-          results={session.answer?.results ?? null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Switch answering mode"
           disabled={session.answer !== null || isChecking || submit.isPending}
-          answeringType={answeringType}
-          onChange={session.setValue}
-          onSubmit={(overrideValues) => {
-            send(false, overrideValues)
+          className={`rounded-full bg-surface border border-border/80 px-3 py-1.5 flex-row items-center gap-1.5 shadow-xs active:bg-surface-muted ${
+            session.answer !== null ? 'opacity-40' : 'opacity-100'
+          }`}
+          onPress={() => {
+            if (session.answer !== null) return
+            setAnsweringType((prev) =>
+              prev === 'identification'
+                ? 'multiple-choice'
+                : prev === 'multiple-choice'
+                  ? 'flashcard'
+                  : 'identification',
+            )
           }}
-        />
+        >
+          {modeInfo.icon}
+          <Text className="text-xs font-semibold text-foreground">{modeInfo.label}</Text>
+        </Pressable>
+      </View>
 
-        {session.answer && <FeedbackPanel answer={session.answer} />}
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="gap-5 p-5 pb-10"
+        keyboardShouldPersistTaps="handled"
+      >
+        {answeringType === 'flashcard' ? (
+          <FlashcardCard
+            card={session.card}
+            disabled={session.answer !== null || isChecking || submit.isPending}
+            onSubmit={(overrideValues) => {
+              send(false, overrideValues)
+            }}
+          />
+        ) : (
+          <StudyCard
+            card={session.card}
+            values={session.values}
+            results={session.answer?.results ?? null}
+            disabled={session.answer !== null || isChecking || submit.isPending}
+            answeringType={answeringType}
+            onChange={session.setValue}
+            onSubmit={(overrideValues) => {
+              send(false, overrideValues)
+            }}
+          />
+        )}
 
-        {/*
-          A failed submission keeps the card and its typed answers on screen. The
-          idempotency key is unchanged, so the retry either books the review once
-          or replays the verdict of an attempt that actually landed.
-        */}
+        {session.answer && answeringType !== 'flashcard' && (
+          <FeedbackPanel answer={session.answer} />
+        )}
+
         {submit.isError && (
           <View
             accessibilityLiveRegion="polite"
-            className="rounded-lg border border-danger/30 bg-danger/10 p-4"
+            className="rounded-2xl border border-danger/30 bg-danger/10 p-4 shadow-sm"
           >
-            <View className="flex-row items-start gap-1.5">
-              <AlertIcon color={danger} size={16} />
+            <View className="flex-row items-start gap-2">
+              <AlertIcon color={danger} size={18} />
               <Text className="flex-1 text-sm text-foreground">{submit.error.message}</Text>
             </View>
             <Button
               className="mt-3 self-start"
               label="Try again"
               variant="outline"
+              size="md"
               onPress={() => {
                 send(false)
               }}
@@ -523,48 +587,44 @@ export default function StudyScreen(): ReactElement {
         )}
       </ScrollView>
 
-      {/*
-        Outside the ScrollView on purpose. saulado-ux §7 — the action the user
-        needs next must never be behind the keyboard or below the fold, and on a
-        long paragraph it would be both.
-      */}
-      <View className="flex-row gap-3 border-t border-border bg-surface px-5 py-3">
-        {session.answer ? (
-          <Button
-            className="flex-1"
-            size="lg"
-            label={session.isLast ? 'Finish session' : 'Next card'}
-            loading={complete.isPending}
-            onPress={next}
-          />
-        ) : (
-          <>
+      {/* ── Bottom Sticky Action Footer ── */}
+      {answeringType !== 'flashcard' && (
+        <View
+          style={{ paddingBottom: Math.max(16, insets.bottom) }}
+          className="flex-row gap-3 border-t border-border/80 bg-surface/95 px-5 pt-3.5 shadow-md"
+        >
+          {session.answer ? (
             <Button
               className="flex-1"
               size="lg"
-              label={isChecking || submit.isPending ? 'Checking…' : 'Check answer'}
-              loading={isChecking || submit.isPending}
-              onPress={() => {
-                send(false)
-              }}
+              label={session.isLast ? 'Finish session 🎉' : 'Next card →'}
+              loading={complete.isPending}
+              onPress={next}
             />
-            {/*
-              Reveal is not a shortcut to a good grade — it books `again`
-              server-side regardless of what is typed — so it is labelled as the
-              escape hatch it is rather than hidden away.
-            */}
-            <Button
-              size="lg"
-              variant="outline"
-              label="Reveal"
-              disabled={isChecking || submit.isPending}
-              onPress={() => {
-                send(true)
-              }}
-            />
-          </>
-        )}
-      </View>
+          ) : (
+            <>
+              <Button
+                size="lg"
+                variant="outline"
+                label="Reveal"
+                disabled={isChecking || submit.isPending}
+                onPress={() => {
+                  send(true)
+                }}
+              />
+              <Button
+                className="flex-1"
+                size="lg"
+                label={isChecking || submit.isPending ? 'Checking…' : 'Check answer'}
+                loading={isChecking || submit.isPending}
+                onPress={() => {
+                  send(false)
+                }}
+              />
+            </>
+          )}
+        </View>
+      )}
     </KeyboardAvoidingView>
   )
 }

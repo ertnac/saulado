@@ -44,7 +44,7 @@ export type StartableMode = Exclude<SessionMode, 'retake'>
 /**
  * The answering mode the user has selected for the session.
  */
-export type AnsweringType = 'identification' | 'multiple-choice'
+export type AnsweringType = 'identification' | 'multiple-choice' | 'flashcard'
 
 /**
  * A card as the study view sees it.
@@ -77,6 +77,11 @@ export interface SessionCard {
    * `blankOptions[0]` contains the choices for the first blank.
    */
   blankOptions?: string[][]
+  /**
+   * The canonical answers for the blanks, only populated for flashcards
+   * so the back of the card can reveal them.
+   */
+  blankAnswers?: string[]
 }
 
 /**

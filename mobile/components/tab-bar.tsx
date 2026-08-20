@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { Pressable, View } from 'react-native'
+import { TouchableOpacity, View } from 'react-native'
 import { useTokenColor } from '../stores/theme'
 import { ChartIcon, HomeIcon, LayersIcon, ScanIcon, UserIcon, type IconProps } from './icons'
 
@@ -77,31 +77,29 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
         1. SOLO FLOATING SCAN BUTTON (LEFT SIDE)
         Styled in theme's accent color (clay/orange). 56x56 circular container.
       */}
-      <View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Scan a page with the camera"
-          accessibilityState={{ selected: active === 'scan' }}
-          onPress={() => {
-            go('scan')
-          }}
-          style={{
-            backgroundColor: accent,
-            width: 56,
-            height: 56,
-            alignItems: 'center',
-            justifyContent: 'center',
-            shadowColor: '#000000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.15,
-            shadowRadius: 10,
-            elevation: 8,
-          }}
-          className="active:opacity-85 rounded-full"
-        >
-          <ScanIcon color={onAccent} size={24} />
-        </Pressable>
-      </View>
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Scan a page with the camera"
+        accessibilityState={{ selected: active === 'scan' }}
+        onPress={() => {
+          go('scan')
+        }}
+        style={{
+          backgroundColor: accent,
+          width: 56,
+          height: 56,
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: '#000000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.15,
+          shadowRadius: 10,
+          elevation: 8,
+        }}
+        className="active:opacity-85 rounded-full"
+      >
+        <ScanIcon color={onAccent} size={24} />
+      </TouchableOpacity>
 
       {/* Spacer */}
       <View style={{ width: 12 }} />
@@ -132,7 +130,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
           const tint = selected ? '#ffffff' : '#86a39b' // White when active, soft teal-gray when inactive
 
           return (
-            <Pressable
+            <TouchableOpacity
               key={name}
               accessibilityRole="tab"
               accessibilityLabel={label}
@@ -160,7 +158,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
                   marginTop: 4,
                 }}
               />
-            </Pressable>
+            </TouchableOpacity>
           )
         })}
       </View>

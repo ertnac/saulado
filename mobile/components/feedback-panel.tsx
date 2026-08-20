@@ -2,35 +2,21 @@ import type { ReactElement } from 'react'
 import { Text, View } from 'react-native'
 import type { AnswerResponse, Grade } from '@saulado/shared'
 
-import { CheckIcon, CloseIcon } from './icons'
+import { CheckIcon, CloseIcon, SparklesIcon } from './icons'
 import { SLOT_FONT } from './blank-slot'
 import { useTokenColor } from '../stores/theme'
-
-/**
- * The verdict on the card just answered (plan §4.3).
- *
- * Deliberately below the card rather than over it: a sheet would cover the
- * paragraph, and the paragraph is the thing worth re-reading while the answer is
- * fresh. Nothing here moves the card above it, so the sentence the user just
- * worked on stays exactly where their eyes left it.
- *
- * The advance button is *not* here, unlike the web. On a phone it belongs in the
- * screen's sticky footer, above the keyboard and in thumb reach — saulado-ux §7.
- * The panel scrolls; the button must not.
- */
 
 interface FeedbackPanelProps {
   answer: AnswerResponse
 }
 
-const GRADE_LABEL: Record<Grade, string> = {
+const GRADE_TITLE: Record<Grade, string> = {
   again: 'Not quite',
   hard: 'Partly right',
-  good: 'Correct',
-  easy: 'Correct',
+  good: 'Correct! 🎉',
+  easy: 'Excellent! 🌟',
 }
 
-/** "in 1 day" reads better than "in 1 days", and "tomorrow" better than either. */
 function whenBack(intervalDays: number): string {
   if (intervalDays <= 1) return 'tomorrow'
   if (intervalDays < 30) return `in ${String(intervalDays)} days`
@@ -39,91 +25,122 @@ function whenBack(intervalDays: number): string {
 }
 
 export function FeedbackPanel({ answer }: FeedbackPanelProps): ReactElement {
-  const success = useTokenColor('--success')
-  const danger = useTokenColor('--danger')
+  const primary = useTokenColor('--primary')
 
   const wrong = answer.results.filter((result) => !result.correct)
   const typos = answer.results.filter((result) => result.correct && result.matchType === 'typo')
+  const isPositive = answer.correct
 
   return (
     <View
-      // Polite, not assertive: this is announced after a submission the user
-      // initiated, so it must not cut off whatever the reader is mid-way through.
       accessibilityLiveRegion="polite"
-      className={`rounded-lg border p-5 ${
-        answer.correct ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10'
+      className={`rounded-2xl border border-border/80 bg-surface p-4 shadow-sm ${
+        isPositive ? 'border-l-4 border-l-success' : 'border-l-4 border-l-danger'
       }`}
     >
-      <View className="flex-row flex-wrap items-center gap-x-3 gap-y-1">
-        {/*
-          Icon, word and colour all say the same thing. Any one of the three is
-          enough on its own, which is the requirement — roughly one reader in
-          twelve cannot separate the green from the red.
-        */}
-        <View className="flex-row items-center gap-1.5">
-          {answer.correct ? <CheckIcon color={success} /> : <CloseIcon color={danger} />}
-          <Text
-            className={`text-lg font-semibold ${answer.correct ? 'text-success' : 'text-danger'}`}
+      {/* ── Status Header ── */}
+      <View className="flex-row items-center justify-between gap-3">
+        <View className="flex-row items-center gap-3">
+          <View
+            className={`h-9 w-9 rounded-full items-center justify-center shadow-xs ${
+              isPositive ? 'bg-success' : 'bg-danger'
+            }`}
           >
-            {GRADE_LABEL[answer.grade]}
-          </Text>
+            {isPositive ? (
+              <CheckIcon color="#FFFFFF" size={18} />
+            ) : (
+              <CloseIcon color="#FFFFFF" size={18} />
+            )}
+          </View>
+
+          <View>
+            <Text className="text-base font-bold text-foreground">{GRADE_TITLE[answer.grade]}</Text>
+            <Text className="text-xs text-muted-foreground mt-0.5">
+              {answer.requeued
+                ? '🔁 Requeued for review today'
+                : `📅 Scheduled for review ${whenBack(answer.intervalDays)}`}
+            </Text>
+          </View>
         </View>
 
-        {/*
-          The schedule is stated in plain language because it is the payoff of
-          answering honestly — a user who cannot see that "again" means "back
-          tomorrow" has no reason not to reveal every card.
-        */}
-        <Text className="text-sm text-muted-foreground">
-          {answer.requeued
-            ? 'Coming back later in this session, and again tomorrow.'
-            : `Back ${whenBack(answer.intervalDays)}.`}
-        </Text>
+        <View
+          className={`rounded-full border px-2.5 py-0.5 ${
+            isPositive ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10'
+          }`}
+        >
+          <Text
+            className={`text-[11px] font-bold uppercase tracking-wider ${
+              isPositive ? 'text-success' : 'text-danger'
+            }`}
+          >
+            {isPositive ? 'Passed' : 'Needs practice'}
+          </Text>
+        </View>
       </View>
 
-      {/*
-        Echoing the wrong submission beside the right answer is the whole point of
-        the panel: "you wrote X, it was Y" is a correction, "it was Y" alone
-        leaves the user to remember what they typed.
-      */}
+      {/* ── Corrections (if any blank was missed) ── */}
       {wrong.length > 0 && (
-        <View className="mt-3 gap-1.5">
+        <View className="mt-3.5 border-t border-border/60 pt-3 gap-2.5">
           {wrong.map((result) => (
-            <View key={result.ordinal} className="flex-row flex-wrap items-baseline gap-x-2">
-              <Text className="text-sm text-muted-foreground">
+            <View
+              key={result.ordinal}
+              className="rounded-xl border border-border/60 bg-surface-muted/50 p-3 gap-1.5"
+            >
+              <Text className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Blank {result.ordinal + 1}
-                {result.submitted.trim() === '' ? ' (left blank)' : ':'}
               </Text>
-              {result.submitted.trim() !== '' && (
-                <Text
-                  style={{ fontFamily: SLOT_FONT, textDecorationLine: 'line-through' }}
-                  className="text-sm text-foreground opacity-70"
-                >
-                  {result.submitted}
-                </Text>
-              )}
-              <Text
-                style={{ fontFamily: SLOT_FONT }}
-                className="text-sm font-semibold text-foreground"
-              >
-                {result.canonical}
-              </Text>
+
+              <View className="flex-row flex-wrap items-center justify-between gap-2">
+                <View className="flex-row items-center gap-1.5">
+                  <Text className="text-xs text-muted-foreground">Your answer:</Text>
+                  {result.submitted.trim() !== '' ? (
+                    <Text
+                      style={{ fontFamily: SLOT_FONT }}
+                      className="text-xs font-semibold text-danger line-through"
+                    >
+                      {result.submitted}
+                    </Text>
+                  ) : (
+                    <Text className="text-xs italic text-muted-foreground">(Left blank)</Text>
+                  )}
+                </View>
+
+                <View className="flex-row items-center gap-1.5 rounded-lg bg-success/15 border border-success/30 px-2 py-1">
+                  <Text className="text-[10px] font-bold uppercase text-success">Correct:</Text>
+                  <Text
+                    style={{ fontFamily: SLOT_FONT }}
+                    className="text-xs font-bold text-success"
+                  >
+                    {result.canonical}
+                  </Text>
+                </View>
+              </View>
             </View>
           ))}
         </View>
       )}
 
+      {/* ── Accepted Typos ── */}
       {typos.length > 0 && (
-        <Text className="mt-3 text-sm text-muted-foreground">
-          Counted as correct despite the spelling — {typos.map((r) => r.canonical).join(', ')}.
-        </Text>
+        <View className="mt-3 flex-row items-center gap-2 rounded-xl border border-border/60 bg-surface-muted/50 p-3">
+          <SparklesIcon color={primary} size={15} />
+          <Text className="flex-1 text-xs text-muted-foreground">
+            Spelling accepted —{' '}
+            <Text className="font-semibold text-foreground">
+              {typos.map((r) => r.canonical).join(', ')}
+            </Text>
+          </Text>
+        </View>
       )}
 
+      {/* ── Leech Warning ── */}
       {answer.isLeech && (
-        <Text className="mt-3 text-sm text-foreground">
-          This card keeps catching you out. It is often worth rewriting the paragraph so the answer
-          is inferable from its context.
-        </Text>
+        <View className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-3">
+          <Text className="text-xs text-warning-foreground font-medium">
+            ⚠️ This card has been missed multiple times. Consider rewriting or adding more context
+            clues to the card.
+          </Text>
+        </View>
       )}
     </View>
   )

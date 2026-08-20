@@ -419,3 +419,38 @@ export function GoogleIcon({ size = 24 }: Omit<IconProps, 'color'>): ReactElemen
     </Svg>
   )
 }
+
+export function RotateCwIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+      <Path d="M21 3v5h-5" />
+    </Icon>
+  )
+}
+
+export function PencilIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+      <Path d="m15 5 4 4" />
+    </Icon>
+  )
+}
+
+export function ListIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+    </Icon>
+  )
+}
+
+export function CardsIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M7 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3" />
+      <Path d="M10 9h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z" />
+    </Icon>
+  )
+}

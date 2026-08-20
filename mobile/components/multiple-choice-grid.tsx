@@ -1,5 +1,5 @@
 import { type ReactElement } from 'react'
-import { Text, Pressable, View } from 'react-native'
+import { Text, TouchableOpacity, View } from 'react-native'
 import type { BlankResult } from '@saulado/shared'
 import { CheckIcon, CloseIcon } from './icons'
 import { useTokenColor } from '../stores/theme'
@@ -12,6 +12,8 @@ interface MultipleChoiceGridProps {
   disabled: boolean
 }
 
+const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F']
+
 export function MultipleChoiceGrid({
   options,
   selectedValue,
@@ -23,74 +25,95 @@ export function MultipleChoiceGrid({
   const dangerColor = useTokenColor('--danger')
 
   const isGraded = result !== null && result !== undefined
+  const isAnyOptionLong = options.some((opt) => opt.length > 22)
 
   return (
-    <View className="mt-6 flex-row flex-wrap gap-3">
-      {options.map((option, index) => {
-        const isSelected = selectedValue === option
+    <View className="mt-4 gap-2.5">
+      <View className="flex-row flex-wrap gap-2.5">
+        {options.map((option, index) => {
+          const isSelected = selectedValue === option
+          const letter = OPTION_LETTERS[index] ?? String(index + 1)
 
-        // Grading verdicts:
-        // 1. Is this option the canonical correct answer?
-        const isCanonical =
-          isGraded &&
-          Boolean(result?.canonical) &&
-          option.toLowerCase().trim() === result.canonical.toLowerCase().trim()
+          // Grading verdicts:
+          const isCanonical =
+            isGraded &&
+            Boolean(result?.canonical) &&
+            option.toLowerCase().trim() === result.canonical.toLowerCase().trim()
 
-        // 2. Did the user select this option and was it wrong?
-        const isSelectedWrong = isGraded && isSelected && !result?.correct
+          const isSelectedWrong = isGraded && isSelected && !result?.correct
+          const isUnselectedOther = isGraded && !isCanonical && !isSelected
 
-        // 3. Unselected other distractors
-        const isUnselectedOther = isGraded && !isCanonical && !isSelected
+          let containerStyle = 'border-border/80 bg-surface shadow-xs'
+          let letterBadgeStyle = 'bg-surface-muted border-border/70 text-muted-foreground'
+          let textStyle = 'text-foreground font-medium'
 
-        let borderBgStyle = 'border-border bg-surface'
-        let textStyle = 'text-foreground'
-
-        if (isGraded) {
-          if (isCanonical) {
-            borderBgStyle = 'border-success bg-success/15'
-            textStyle = 'text-success font-bold'
-          } else if (isSelectedWrong) {
-            borderBgStyle = 'border-danger bg-danger/15'
-            textStyle = 'text-danger font-bold'
-          } else if (isUnselectedOther) {
-            borderBgStyle = 'border-border/30 bg-surface/30 opacity-40'
-            textStyle = 'text-muted-foreground'
-          }
-        } else {
-          if (isSelected) {
-            borderBgStyle = 'border-primary bg-primary/10'
-            textStyle = 'text-primary font-semibold'
+          if (isGraded) {
+            if (isCanonical) {
+              containerStyle = 'border-success bg-success/12'
+              letterBadgeStyle = 'bg-success text-success-foreground border-success'
+              textStyle = 'text-success font-semibold'
+            } else if (isSelectedWrong) {
+              containerStyle = 'border-danger bg-danger/12'
+              letterBadgeStyle = 'bg-danger text-white border-danger'
+              textStyle = 'text-danger font-semibold'
+            } else if (isUnselectedOther) {
+              containerStyle = 'border-border/40 bg-surface/40 opacity-40'
+              letterBadgeStyle = 'bg-transparent border-border/40 text-muted-foreground/50'
+              textStyle = 'text-muted-foreground'
+            }
           } else {
-            borderBgStyle = 'border-border bg-surface'
-            textStyle = 'text-foreground'
+            if (isSelected) {
+              containerStyle = 'border-primary bg-primary/8 shadow-xs'
+              letterBadgeStyle = 'bg-primary text-primary-foreground border-primary'
+              textStyle = 'text-primary font-semibold'
+            } else {
+              containerStyle = 'border-border bg-surface'
+              letterBadgeStyle = 'bg-surface-muted border-border/60 text-muted-foreground'
+              textStyle = 'text-foreground'
+            }
           }
-        }
 
-        return (
-          <Pressable
-            key={`${index}-${option}`}
-            accessibilityRole="button"
-            accessibilityState={{ selected: isSelected, disabled: disabled || isGraded }}
-            disabled={disabled || isGraded}
-            onPress={() => {
-              if (!disabled && !isGraded) {
-                onSelect(option)
-              }
-            }}
-            className={`
-              flex-1 basis-[45%] rounded-xl border p-4 items-center justify-center min-h-[64px]
-              ${borderBgStyle}
-              ${disabled && !isGraded ? 'opacity-50' : 'opacity-100'}
-            `}
-          >
-            <View className="flex-row items-center justify-center gap-1.5 px-1">
-              {isCanonical && <CheckIcon color={successColor} size={18} />}
-              {isSelectedWrong && <CloseIcon color={dangerColor} size={18} />}
-              <Text className={`text-center font-medium ${textStyle}`}>{option}</Text>
-            </View>
-          </Pressable>
-        )
-      })}
+          return (
+            <TouchableOpacity
+              key={`${index}-${option}`}
+              activeOpacity={0.75}
+              disabled={disabled || isGraded}
+              onPress={() => {
+                if (!disabled && !isGraded) {
+                  onSelect(option)
+                }
+              }}
+              className={`
+                ${isAnyOptionLong ? 'w-full basis-full' : 'flex-1 basis-[46%]'} min-h-[58px] rounded-2xl border p-3.5 flex-row items-center justify-between
+                ${containerStyle}
+                ${disabled && !isGraded ? 'opacity-50' : 'opacity-100'}
+              `}
+            >
+              <View className="flex-1 flex-row items-center gap-2.5 pr-2">
+                <View
+                  className={`h-7 w-7 rounded-full border items-center justify-center ${letterBadgeStyle}`}
+                >
+                  <Text className="text-xs font-bold">{letter}</Text>
+                </View>
+                <Text className={`flex-1 text-sm ${textStyle}`} numberOfLines={2}>
+                  {option}
+                </Text>
+              </View>
+
+              {isCanonical && (
+                <View className="h-6 w-6 rounded-full bg-success/20 items-center justify-center">
+                  <CheckIcon color={successColor} size={14} />
+                </View>
+              )}
+              {isSelectedWrong && (
+                <View className="h-6 w-6 rounded-full bg-danger/20 items-center justify-center">
+                  <CloseIcon color={dangerColor} size={14} />
+                </View>
+              )}
+            </TouchableOpacity>
+          )
+        })}
+      </View>
     </View>
   )
 }

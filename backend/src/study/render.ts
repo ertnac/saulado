@@ -50,7 +50,7 @@ export function toSessionCard(
     ),
   )
 
-  return {
+  const result: SessionCard = {
     cardId: card.id,
     studySetId: card.studySetId,
     segments,
@@ -59,7 +59,9 @@ export function toSessionCard(
     isNew: options.isNew,
     isLeech: options.lapses >= LEECH_THRESHOLD,
     blankOptions,
+    blankAnswers: card.answers.map((a) => a.answerText),
   }
+  return result
 }
 
 /**
