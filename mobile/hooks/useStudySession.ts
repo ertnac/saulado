@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import {
-  requeuePosition,
+  checkAnswers,
+  gradeCard,
   type AnswerResponse,
   type SessionCard,
   type SessionProgress,
@@ -58,7 +59,11 @@ export interface StudySessionController {
   /** Loads a session's queue, replacing anything in progress. */
   load: (session: StudySession) => void
   /** Records a graded answer and stops accepting input for this card. */
-  accept: (answer: AnswerResponse) => void
+  accept: (answer: AnswerResponse, forCardId?: string) => void
+  /** Updates the progress tracking silently */
+  syncProgress: (progress: SessionProgress) => void
+  /** Instantly evaluates the current card answers locally */
+  evaluateLocally: (values: Record<number, string>, revealed: boolean) => AnswerResponse | null
   /** Advances past the graded card. Returns `true` when the session is spent. */
   advance: () => boolean
   reset: () => void
@@ -110,33 +115,68 @@ export function useStudySession(): StudySessionController {
   )
 
   const accept = useCallback(
-    (graded: AnswerResponse) => {
-      setAnswerBoth(graded)
-      // Trusted over any local tally: a re-queued card counts once per attempt,
-      // and a replayed idempotency key must not advance the count at all. The
-      // server is the only place that knows which of those just happened.
+    (graded: AnswerResponse, forCardId?: string) => {
+      // Only set the answer if the user is STILL looking at this card!
+      // This prevents delayed background network responses from flashing previous card answers.
+      if (!forCardId || queueRef.current[0]?.cardId === forCardId) {
+        setAnswerBoth(graded)
+      }
       setProgress(graded.progress)
     },
     [setAnswerBoth],
   )
 
+  const syncProgress = useCallback((serverProgress: SessionProgress) => {
+    setProgress(serverProgress)
+  }, [])
+
   const advance = useCallback((): boolean => {
-    const [head, ...rest] = queueRef.current
-    const requeued = answerRef.current?.requeued ?? false
+    const [, ...rest] = queueRef.current
 
-    let next = rest
-    if (head && requeued) {
-      next = [...rest]
-      next.splice(requeuePosition(0, rest.length), 0, head)
-    }
-
-    setQueueBoth(next)
+    setQueueBoth(rest)
     setAnswerBoth(null)
     setValues({})
     setIdempotencyKey(newIdempotencyKey())
 
-    return next.length === 0
+    return rest.length === 0
   }, [setQueueBoth, setAnswerBoth])
+
+  const evaluateLocally = useCallback(
+    (submittedValues: Record<number, string>, revealed: boolean): AnswerResponse | null => {
+      const currentCard = queueRef.current[0]
+      if (!currentCard) return null
+
+      // Use cardAnswers if provided (containing altAnswers), fallback to blankAnswers
+      const answersForEval =
+        currentCard.cardAnswers ??
+        (currentCard.blankAnswers ?? []).map((text) => ({ answerText: text, altAnswers: [] }))
+
+      // Prepare inputs array (e.g. index 0 -> submittedValues[0])
+      const inputs = answersForEval.map((_, i) => (revealed ? '' : (submittedValues[i] ?? '')))
+
+      const rawResults = checkAnswers(inputs, answersForEval, { typoTolerance: true })
+      const results = rawResults.map((result, i) => ({
+        ...result,
+        ordinal: i,
+        submitted: inputs[i] ?? '',
+      }))
+      const grade = revealed ? 'again' : gradeCard(results)
+      const correct = !revealed && grade !== 'again' && grade !== 'hard'
+
+      return {
+        results,
+        grade,
+        correct,
+        // Optimistic default stubs until server responds
+        dueAt: '',
+        intervalDays: 0,
+        isLeech: false,
+        requeued: false,
+        progress: { ...progress, answered: progress.answered + 1 },
+      }
+    },
+    [progress],
+  )
 
   const setValue = useCallback((ordinal: number, value: string) => {
     setValues((current) => ({ ...current, [ordinal]: value }))
@@ -155,11 +195,13 @@ export function useStudySession(): StudySessionController {
     answer,
     progress,
     remaining: queue.length,
-    isLast: queue.length === 1 && !(answer?.requeued ?? false),
+    isLast: queue.length === 1,
     idempotencyKey,
     setValue,
     load,
     accept,
+    syncProgress,
+    evaluateLocally,
     advance,
     reset,
   }

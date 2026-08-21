@@ -515,7 +515,12 @@ export function useDeleteCard(setId: string) {
  * it being undefined on first render.
  */
 export function flattenPages<T>(
-  data: InfiniteData<{ items: T[]; nextCursor: string | null }> | undefined,
+  data:
+    InfiniteData<{ items: T[]; nextCursor: string | null }> | { items: T[] }[] | undefined | null,
 ): T[] {
-  return data?.pages.flatMap((page) => page.items) ?? []
+  if (!data) return []
+  if (Array.isArray(data)) {
+    return (data as { items: T[] }[]).flatMap((page) => page?.items ?? [])
+  }
+  return data.pages?.flatMap((page) => page?.items ?? []) ?? []
 }

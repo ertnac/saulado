@@ -9,7 +9,6 @@ import {
   Share,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native'
 import { useQueryClient } from '@tanstack/react-query'
@@ -634,188 +633,192 @@ function JsonTransferSection(): ReactElement {
       </Card>
 
       {/* Import Modal */}
-      <Modal
-        visible={importModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => {
-          if (!isImporting) setImportModalVisible(false)
-        }}
-      >
-        <TouchableOpacity
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
-          className="flex-1 items-center justify-center p-4"
-          activeOpacity={1}
-          onPress={() => {
+      {importModalVisible && (
+        <Modal
+          visible={importModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => {
             if (!isImporting) setImportModalVisible(false)
           }}
         >
-          <View
-            className="max-h-[90%] w-full max-w-md gap-4 rounded-3xl border border-border bg-surface p-6 shadow-2xl"
-            onStartShouldSetResponder={() => true}
+          <Pressable
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+            className="flex-1 items-center justify-center p-4"
+            onPress={() => {
+              if (!isImporting) setImportModalVisible(false)
+            }}
           >
-            <View className="flex-row items-center justify-between">
-              <Text className="text-lg font-bold text-foreground">Import Sets & Cards</Text>
-              {!isImporting && (
-                <TouchableOpacity
+            <View
+              className="max-h-[90%] w-full max-w-md gap-4 rounded-3xl border border-border bg-surface p-6"
+              onStartShouldSetResponder={() => true}
+            >
+              <View className="flex-row items-center justify-between">
+                <Text className="text-lg font-bold text-foreground">Import Sets & Cards</Text>
+                {!isImporting && (
+                  <Pressable
+                    hitSlop={8}
+                    onPress={() => {
+                      setImportModalVisible(false)
+                    }}
+                  >
+                    <Text className="font-semibold text-primary">Cancel</Text>
+                  </Pressable>
+                )}
+              </View>
+
+              {/* Mode Switch Tabs */}
+              <View className="flex-row rounded-xl bg-surface-muted p-1 border border-border">
+                <Pressable
+                  disabled={isImporting}
+                  onPress={() => {
+                    setImportMode('file')
+                  }}
+                  className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-2 ${importMode === 'file' ? 'bg-surface' : ''}`}
+                >
+                  <UploadIcon color={importMode === 'file' ? primary : muted} size={16} />
+                  <Text
+                    className={`text-xs font-bold ${importMode === 'file' ? 'text-foreground' : 'text-muted-foreground'}`}
+                  >
+                    File (.json / .txt)
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  disabled={isImporting}
+                  onPress={() => {
+                    setImportMode('text')
+                  }}
+                  className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-2 ${importMode === 'text' ? 'bg-surface' : ''}`}
+                >
+                  <FileTextIcon color={importMode === 'text' ? primary : muted} size={16} />
+                  <Text
+                    className={`text-xs font-bold ${importMode === 'text' ? 'text-foreground' : 'text-muted-foreground'}`}
+                  >
+                    Paste Text
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* File Mode */}
+              {importMode === 'file' ? (
+                <View className="gap-3">
+                  <Pressable
+                    disabled={isImporting}
+                    onPress={() => {
+                      void handlePickFile()
+                    }}
+                    className="items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 p-6 active:opacity-75"
+                  >
+                    <UploadIcon color={primary} size={32} />
+                    <Text className="text-sm font-bold text-foreground">
+                      {selectedFile ? 'Change File' : 'Select .json or .txt File'}
+                    </Text>
+                    <Text className="text-xs text-muted-foreground text-center">
+                      Tap here to choose a JSON backup or shared deck from your device.
+                    </Text>
+                  </Pressable>
+
+                  {selectedFile && (
+                    <View className="flex-row items-center justify-between rounded-xl border border-border bg-background p-3">
+                      <View className="flex-1 min-w-0">
+                        <Text numberOfLines={1} className="text-xs font-bold text-foreground">
+                          {`📄 ${selectedFile.name}`}
+                        </Text>
+                        {selectedFile.size !== undefined && (
+                          <Text className="text-[10px] text-muted-foreground">
+                            {`${(selectedFile.size / 1024).toFixed(1)} KB`}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  )}
+                </View>
+              ) : (
+                /* Text Paste Mode */
+                <View className="gap-1.5">
+                  <Text className="text-xs text-muted-foreground">
+                    Paste the JSON data of the sets and cards:
+                  </Text>
+                  <TextInput
+                    value={jsonText}
+                    onChangeText={(val) => {
+                      setSelectedFile(null)
+                      setJsonText(val)
+                    }}
+                    placeholder="Paste JSON content here..."
+                    placeholderTextColor={muted}
+                    multiline
+                    textAlignVertical="top"
+                    editable={!isImporting}
+                    className="h-32 rounded-xl border border-border bg-background p-3 font-mono text-xs text-foreground"
+                  />
+                </View>
+              )}
+
+              {/* Validation & Preview Card */}
+              {parsedResult !== null && (
+                <View className="gap-2">
+                  {parsedResult.success ? (
+                    <View className="gap-2 rounded-2xl border border-primary/30 bg-primary/10 p-3.5">
+                      <Text className="text-sm font-bold text-primary">
+                        {`✨ Ready to import ${String(parsedResult.data.sets.length)} ${parsedResult.data.sets.length === 1 ? 'set' : 'sets'} (${String(parsedResult.data.totalCards)} cards total)`}
+                      </Text>
+                      <View className="max-h-24 gap-1">
+                        <ScrollView nestedScrollEnabled>
+                          {parsedResult.data.sets.map((s, idx) => (
+                            <Text
+                              key={idx}
+                              numberOfLines={1}
+                              className="text-xs font-medium text-foreground"
+                            >
+                              {`• ${s.title} (${String(s.cards.length)} cards)`}
+                            </Text>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    </View>
+                  ) : (
+                    <View className="rounded-2xl border border-warning/30 bg-warning/10 p-3">
+                      <Text className="text-xs font-semibold text-warning">
+                        {`⚠️ ${parsedResult.error}`}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {isImporting && (
+                <View className="items-center gap-2 py-2">
+                  <ActivityIndicator />
+                  <Text className="text-xs font-medium text-muted-foreground">
+                    {importProgress}
+                  </Text>
+                </View>
+              )}
+
+              <View className="flex-row justify-end gap-3 pt-2">
+                <Button
+                  label="Close"
+                  variant="ghost"
+                  disabled={isImporting}
                   onPress={() => {
                     setImportModalVisible(false)
                   }}
-                >
-                  <Text className="font-semibold text-primary">Cancel</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Mode Switch Tabs */}
-            <View className="flex-row rounded-xl bg-surface-muted p-1 border border-border">
-              <TouchableOpacity
-                disabled={isImporting}
-                onPress={() => {
-                  setImportMode('file')
-                }}
-                className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-2 ${importMode === 'file' ? 'bg-surface shadow-sm' : ''}`}
-              >
-                <UploadIcon color={importMode === 'file' ? primary : muted} size={16} />
-                <Text
-                  className={`text-xs font-bold ${importMode === 'file' ? 'text-foreground' : 'text-muted-foreground'}`}
-                >
-                  File (.json / .txt)
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                disabled={isImporting}
-                onPress={() => {
-                  setImportMode('text')
-                }}
-                className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-2 ${importMode === 'text' ? 'bg-surface shadow-sm' : ''}`}
-              >
-                <FileTextIcon color={importMode === 'text' ? primary : muted} size={16} />
-                <Text
-                  className={`text-xs font-bold ${importMode === 'text' ? 'text-foreground' : 'text-muted-foreground'}`}
-                >
-                  Paste Text
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* File Mode */}
-            {importMode === 'file' ? (
-              <View className="gap-3">
-                <TouchableOpacity
-                  disabled={isImporting}
+                />
+                <Button
+                  label={isImporting ? 'Importing…' : 'Import to Library'}
+                  disabled={!parsedResult?.success || isImporting}
+                  loading={isImporting}
                   onPress={() => {
-                    void handlePickFile()
+                    void handleStartImport()
                   }}
-                  className="items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 p-6 active:opacity-75"
-                >
-                  <UploadIcon color={primary} size={32} />
-                  <Text className="text-sm font-bold text-foreground">
-                    {selectedFile ? 'Change File' : 'Select .json or .txt File'}
-                  </Text>
-                  <Text className="text-xs text-muted-foreground text-center">
-                    Tap here to choose a JSON backup or shared deck from your device.
-                  </Text>
-                </TouchableOpacity>
-
-                {selectedFile && (
-                  <View className="flex-row items-center justify-between rounded-xl border border-border bg-background p-3">
-                    <View className="flex-1 min-w-0">
-                      <Text numberOfLines={1} className="text-xs font-bold text-foreground">
-                        {`📄 ${selectedFile.name}`}
-                      </Text>
-                      {selectedFile.size !== undefined && (
-                        <Text className="text-[10px] text-muted-foreground">
-                          {`${(selectedFile.size / 1024).toFixed(1)} KB`}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                )}
-              </View>
-            ) : (
-              /* Text Paste Mode */
-              <View className="gap-1.5">
-                <Text className="text-xs text-muted-foreground">
-                  Paste the JSON data of the sets and cards:
-                </Text>
-                <TextInput
-                  value={jsonText}
-                  onChangeText={(val) => {
-                    setSelectedFile(null)
-                    setJsonText(val)
-                  }}
-                  placeholder="Paste JSON content here..."
-                  placeholderTextColor={muted}
-                  multiline
-                  textAlignVertical="top"
-                  editable={!isImporting}
-                  className="h-32 rounded-xl border border-border bg-background p-3 font-mono text-xs text-foreground"
                 />
               </View>
-            )}
-
-            {/* Validation & Preview Card */}
-            {parsedResult !== null && (
-              <View className="gap-2">
-                {parsedResult.success ? (
-                  <View className="gap-2 rounded-2xl border border-primary/30 bg-primary/10 p-3.5">
-                    <Text className="text-sm font-bold text-primary">
-                      {`✨ Ready to import ${String(parsedResult.data.sets.length)} ${parsedResult.data.sets.length === 1 ? 'set' : 'sets'} (${String(parsedResult.data.totalCards)} cards total)`}
-                    </Text>
-                    <View className="max-h-24 gap-1">
-                      <ScrollView nestedScrollEnabled>
-                        {parsedResult.data.sets.map((s, idx) => (
-                          <Text
-                            key={idx}
-                            numberOfLines={1}
-                            className="text-xs font-medium text-foreground"
-                          >
-                            {`• ${s.title} (${String(s.cards.length)} cards)`}
-                          </Text>
-                        ))}
-                      </ScrollView>
-                    </View>
-                  </View>
-                ) : (
-                  <View className="rounded-2xl border border-warning/30 bg-warning/10 p-3">
-                    <Text className="text-xs font-semibold text-warning">
-                      {`⚠️ ${parsedResult.error}`}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {isImporting && (
-              <View className="items-center gap-2 py-2">
-                <ActivityIndicator />
-                <Text className="text-xs font-medium text-muted-foreground">{importProgress}</Text>
-              </View>
-            )}
-
-            <View className="flex-row justify-end gap-3 pt-2">
-              <Button
-                label="Close"
-                variant="ghost"
-                disabled={isImporting}
-                onPress={() => {
-                  setImportModalVisible(false)
-                }}
-              />
-              <Button
-                label={isImporting ? 'Importing…' : 'Import to Library'}
-                disabled={!parsedResult?.success || isImporting}
-                loading={isImporting}
-                onPress={() => {
-                  void handleStartImport()
-                }}
-              />
             </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+          </Pressable>
+        </Modal>
+      )}
     </Section>
   )
 }

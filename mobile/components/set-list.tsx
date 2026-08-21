@@ -19,6 +19,7 @@ import {
   useRenameSet,
   useSets,
 } from '../hooks/cards'
+import { useDueCounts } from '../hooks/study'
 import { exportSingleSetAsJson, shareJsonPayload } from '../services/json-transfer'
 import { useTokenColor } from '../stores/theme'
 import { Button } from './button'
@@ -75,6 +76,7 @@ function SetRow({
   const deleteSet = useDeleteSet()
   const archiveSet = useArchiveSet()
   const renameSet = useRenameSet()
+  const dueCounts = useDueCounts()
 
   const [menuVisible, setMenuVisible] = useState(false)
   const [renameVisible, setRenameVisible] = useState(false)
@@ -101,9 +103,10 @@ function SetRow({
   const iconColor = useTokenColor(iconToken)
   const onPrimary = useTokenColor('--primary-foreground')
 
+  const countEntry = dueCounts.data?.counts.find((c) => c.studySetId === set.id)
   const totalCards = set.subtreeCardCount
-  const masteredCards = Math.floor(totalCards * 0.4) // Mock for now until API supports it
-  const dueCards = Math.max(0, totalCards - masteredCards)
+  const masteredCards = countEntry?.mastered ?? 0
+  const dueCards = countEntry?.due ?? 0
   const progressPercent = totalCards > 0 ? (masteredCards / totalCards) * 100 : 0
 
   const handleShare = (): void => {

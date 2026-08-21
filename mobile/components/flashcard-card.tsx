@@ -91,24 +91,30 @@ export function FlashcardCard({ card, disabled, onSubmit }: FlashcardCardProps):
               <View className="mb-4 flex-row flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-3">
                 <View className="flex-row flex-wrap items-center gap-1.5">
                   {card.isNew && (
-                    <Badge text="✨ New" className="bg-primary/10 border-primary/20 text-primary" />
+                    <Badge
+                      text="✨ New"
+                      className="bg-primary/15 border-primary/30"
+                      textClassName="text-primary"
+                    />
                   )}
                   {card.isLeech && (
                     <Badge
                       text="⚠️ Review"
-                      className="bg-warning/15 border-warning/30 text-warning"
+                      className="bg-warning/15 border-warning/30"
+                      textClassName="text-warning"
                     />
                   )}
                   {card.tags.map((tag) => (
                     <Badge
                       key={tag}
                       text={`#${tag}`}
-                      className="bg-surface-muted border-border/60 text-muted-foreground"
+                      className="bg-surface-muted border-border/80"
+                      textClassName="text-foreground/80"
                     />
                   ))}
                 </View>
-                <View className="rounded-full bg-sand/60 px-2 py-0.5 border border-sand-foreground/20">
-                  <Text className="text-[11px] font-bold text-sand-foreground uppercase tracking-wider">
+                <View className="rounded-full bg-accent/15 px-2.5 py-0.5 border border-accent/30">
+                  <Text className="text-[10px] font-bold text-accent-strong uppercase tracking-wider">
                     Question
                   </Text>
                 </View>
@@ -139,11 +145,11 @@ export function FlashcardCard({ card, disabled, onSubmit }: FlashcardCardProps):
                 return (
                   <View
                     key={`b${String(token.ordinal)}`}
-                    className="mx-1 justify-center rounded-lg bg-surface-muted border border-border/70 px-2.5 py-0.5"
+                    className="mx-1 justify-center rounded-lg bg-surface-muted border border-border/80 px-2.5 py-0.5 shadow-xs"
                   >
                     <Text
                       style={{ fontSize: PARAGRAPH_FONT_SIZE - 1 }}
-                      className="font-mono font-medium text-muted-foreground"
+                      className="font-mono font-bold text-primary"
                     >
                       {'[ ? ]'}
                     </Text>

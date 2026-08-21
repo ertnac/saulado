@@ -87,6 +87,8 @@ export interface SpacedRepetitionOptions {
   dailyCap: number
   /** Reviews already done today, which the cap is measured against. */
   reviewsToday?: number
+  /** When true, ignore daily cap and allow reviewing even if already studied today. */
+  allowReviewAhead?: boolean
 }
 
 export class SpacedRepetitionSource implements CardSource {
@@ -100,28 +102,43 @@ export class SpacedRepetitionSource implements CardSource {
   build(): QueueSlot[] {
     if (this.queue !== null) return this.queue
 
-    const { due, fresh, newCardsPerDay, dailyCap, reviewsToday = 0 } = this.options
+    const {
+      due,
+      fresh,
+      newCardsPerDay,
+      dailyCap,
+      reviewsToday = 0,
+      allowReviewAhead = false,
+    } = this.options
 
-    // The cap counts reviews already done today, so studying twice in one day
-    // does not hand out two full sessions.
-    const remaining = Math.max(0, dailyCap - reviewsToday)
+    // When allowReviewAhead is true (passed when starting a session),
+    // allow the user to review all available cards without being capped at 0.
+    const remaining = allowReviewAhead
+      ? Math.max(dailyCap, due.length + fresh.length)
+      : Math.max(0, dailyCap - reviewsToday)
 
     const dueIds = [...due].sort(compareDue).map((card) => card.cardId)
 
-    // New cards are ordered by id rather than by creation date. A set imported
-    // in one transaction shares a `created_at` to the millisecond, so ordering
-    // on it is ordering on nothing — and an arbitrary-but-stable order at least
-    // survives a session resume.
     const freshIds = [...fresh]
       .sort((a, b) => (a.cardId < b.cardId ? -1 : a.cardId > b.cardId ? 1 : 0))
       .slice(0, Math.max(0, newCardsPerDay))
       .map((card) => card.cardId)
 
-    // Due cards are capped first and new cards fill what is left. Trimming the
-    // interleaved queue instead would drop whichever kind happened to sort last,
-    // which on a backlog day means the new cards silently never appear.
-    const cappedDue = dueIds.slice(0, remaining)
-    const cappedFresh = freshIds.slice(0, Math.max(0, remaining - cappedDue.length))
+    let cappedDue = dueIds.slice(0, remaining)
+    let cappedFresh = freshIds.slice(0, Math.max(0, remaining - cappedDue.length))
+
+    // Fallback: If remaining was 0 or everything was finished today,
+    // allow reviewing the cards instead of dropping them all to an empty queue.
+    if (
+      allowReviewAhead &&
+      cappedDue.length === 0 &&
+      cappedFresh.length === 0 &&
+      (dueIds.length > 0 || freshIds.length > 0)
+    ) {
+      cappedDue = dueIds.slice(0, Math.max(1, dailyCap))
+      cappedFresh = freshIds.slice(0, Math.max(0, Math.max(1, dailyCap) - cappedDue.length))
+    }
+
     const freshSet = new Set(cappedFresh)
 
     this.queue = interleaveNew(cappedDue, cappedFresh).map((cardId, position) => ({
@@ -364,7 +381,7 @@ export function verdictFor(mode: SessionMode, input: GradeInput): GradeVerdict {
     case 'spaced':
       return { requeue: shouldRequeue(grade, attempts), reschedule: true, record: true }
     case 'sequential':
-      return { requeue, reschedule: false, record: true }
+      return { requeue, reschedule: isDue || correct, record: true }
     case 'shuffled':
       return { requeue, reschedule: isDue || correct, record: true }
     case 'retake':

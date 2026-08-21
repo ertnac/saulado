@@ -408,11 +408,12 @@ describe('session lifecycle', () => {
       .set('Authorization', auth(token))
       .send({ studySetId: setId })
 
-    // Nothing is due any more, so the honest answer is the "nothing due" 400 —
-    // never a 200 carrying an empty queue.
-    expect(res.status).toBe(400)
+    // The spent session is closed rather than left open with an empty queue,
+    // and a new review session is returned for the user to continue practicing.
+    expect(res.status).toBe(200)
+    expect((res.body as { session: { queue: unknown[] } }).session.queue.length).toBeGreaterThan(0)
 
-    // And the spent session is closed rather than left to win the lookup again.
+    // And the prior spent session is marked completed.
     const resumed = await request(app)
       .get(`/api/study/sessions/${session.id}`)
       .set('Authorization', auth(token))

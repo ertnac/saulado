@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   SessionSummary,
   SubmitAnswerRequest,
@@ -17,17 +17,19 @@ import { StudyCard } from '../../components/study-card'
 import { FlashcardCard } from '../../components/flashcard-card'
 import { ModePicker } from '../../components/mode-picker'
 import {
-  AlertIcon,
   CheckIcon,
   CloseIcon,
   PencilIcon,
   ListIcon,
   CardsIcon,
+  ChevronLeftIcon,
 } from '../../components/icons'
 import { forgetSession, readResumableSession, rememberSession } from '../../lib/study-resume'
 import { completeSession, getSession, startSession, submitAnswer } from '../../services/study'
 import { ApiError } from '../../services/api'
 import { useStudySession } from '../../hooks/useStudySession'
+import { useDueCounts } from '../../hooks/study'
+import { useSet } from '../../hooks/cards'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTokenColor } from '../../stores/theme'
 
@@ -132,12 +134,30 @@ export default function StudyScreen(): ReactElement {
    */
   const [resumeId, setResumeId] = useState<string | null | undefined>(undefined)
   const [starting, setStarting] = useState(false)
-  const [isChecking, setIsChecking] = useState(false)
   const [startError, setStartError] = useState<Error | null>(null)
 
   const [mode, setMode] = useState<StartableMode>(initialMode ?? 'spaced')
   const [answeringType, setAnsweringType] = useState<AnsweringType>('identification')
   const [picking, setPicking] = useState(false)
+
+  const dueCounts = useDueCounts()
+  const setDetails = useSet(studySetId ?? undefined)
+
+  const setEntry = studySetId
+    ? dueCounts.data?.counts.find((c) => c.studySetId === studySetId)
+    : undefined
+  const dueCardsCount = studySetId
+    ? (setEntry?.due ?? 0) + (setEntry?.newCards ?? 0)
+    : (dueCounts.data?.totalDue ?? 0) + (dueCounts.data?.totalNew ?? 0)
+  const totalCardsCount = setDetails.data?.set.cardCount
+
+  useEffect(() => {
+    // If no cards are due and user hasn't explicitly specified a mode query param,
+    // pre-select sequential drill so they are ready to study immediately.
+    if (dueCardsCount === 0 && !initialMode && mode === 'spaced') {
+      setMode('sequential')
+    }
+  }, [dueCardsCount, initialMode])
 
   const resumed = useQuery({
     queryKey: ['study', 'session', resumeId],
@@ -150,9 +170,32 @@ export default function StudyScreen(): ReactElement {
 
   const elapsed = useCardTimer(session.card?.cardId)
   const started = useRef(false)
-  const danger = useTokenColor('--danger')
   const primaryColor = useTokenColor('--primary')
   const mutedColor = useTokenColor('--muted-foreground')
+  const foreground = useTokenColor('--foreground')
+
+  const currentSetRef = useRef<string | null | undefined>(undefined)
+
+  useEffect(() => {
+    // Whenever studySetId changes (e.g. user goes back and picks another set to study)
+    if (currentSetRef.current !== undefined && currentSetRef.current !== studySetId) {
+      console.log(
+        '[study.tsx] studySetId changed from',
+        currentSetRef.current,
+        'to',
+        studySetId,
+        '- resetting study state',
+      )
+      setSummary(null)
+      setSessionId(null)
+      setStartError(null)
+      setStarting(false)
+      started.current = false
+      setPicking(studySetId !== null && !initialMode)
+      void readResumableSession().then(setResumeId)
+    }
+    currentSetRef.current = studySetId
+  }, [studySetId, initialMode])
 
   useEffect(() => {
     void readResumableSession().then(setResumeId)
@@ -168,6 +211,7 @@ export default function StudyScreen(): ReactElement {
    * Start a session and adopt it.
    */
   const begin = (chosenMode?: StartableMode, retakeOf?: string): void => {
+    console.log('[study.tsx] begin() called', { chosenMode, mode, studySetId, retakeOf })
     started.current = true
     setStartError(null)
     setStarting(true)
@@ -180,16 +224,21 @@ export default function StudyScreen(): ReactElement {
           ...(activeMode !== 'spaced' ? { mode: activeMode } : {}),
         }
 
+    console.log('[study.tsx] Sending startSession request with body:', body)
+
     start
       .mutateAsync(body)
       .then((data) => {
+        console.log('[study.tsx] startSession succeeded! Session:', data.session)
         setSessionId(data.session.id)
         void rememberSession(data.session.id)
         session.load(data.session)
         setPicking(false)
       })
       .catch((error: unknown) => {
+        console.error('[study.tsx] startSession failed with error:', error)
         setStartError(error instanceof Error ? error : new Error('Could not start this session.'))
+        setPicking(false)
       })
       .finally(() => {
         setStarting(false)
@@ -253,12 +302,18 @@ export default function StudyScreen(): ReactElement {
     }
   })
 
+  const queryClient = useQueryClient()
+
   const finish = (id: string): void => {
     complete.mutate(id, {
       onSuccess: (data) => {
         void forgetSession()
         setSummary(data.summary)
         session.reset()
+        void queryClient.invalidateQueries({ queryKey: ['study'] })
+        void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+        void queryClient.invalidateQueries({ queryKey: ['progress'] })
+        void queryClient.invalidateQueries({ queryKey: ['sets'] })
       },
     })
   }
@@ -266,12 +321,22 @@ export default function StudyScreen(): ReactElement {
   const send = (revealed: boolean, overrideValues?: Record<number, string>): void => {
     if (!session.card || !sessionId || session.answer) return
 
-    setIsChecking(true)
-
     const submittedValues = overrideValues ?? session.values
+    const activeCardId = session.card.cardId
 
+    // 1. INSTANT LOCAL EVALUATION (0ms UX)
+    const localVerdict = session.evaluateLocally(submittedValues, revealed)
+    if (localVerdict) {
+      session.accept(localVerdict, activeCardId)
+      if (answeringType === 'flashcard') {
+        const spent = session.advance()
+        if (spent && sessionId) finish(sessionId)
+      }
+    }
+
+    // 2. BACKGROUND SERVER SYNC
     const body: SubmitAnswerRequest = {
-      cardId: session.card.cardId,
+      cardId: activeCardId,
       blanks: Object.entries(submittedValues).map(([ordinal, submitted]) => ({
         ordinal: Number(ordinal),
         submitted,
@@ -285,13 +350,9 @@ export default function StudyScreen(): ReactElement {
       { sessionId, body },
       {
         onSuccess: (data) => {
-          session.accept(data)
-          if (answeringType === 'flashcard') {
-            const spent = session.advance()
-            if (spent && sessionId) finish(sessionId)
-          }
+          // If user hasn't advanced yet, update with true SM-2 schedules from server
+          session.accept(data, activeCardId)
         },
-        onSettled: () => setIsChecking(false),
       },
     )
   }
@@ -323,14 +384,34 @@ export default function StudyScreen(): ReactElement {
     if (sessionSpent) void forgetSession()
   }, [sessionSpent])
 
-  const shell = (children: ReactElement): ReactElement => (
-    <ScrollView
-      className="flex-1 bg-background"
-      contentContainerClassName="gap-6 p-6 pb-12"
-      keyboardShouldPersistTaps="handled"
-    >
-      {children}
-    </ScrollView>
+  const shell = (children: ReactElement, showBack = true): ReactElement => (
+    <View style={{ paddingTop: insets.top }} className="flex-1 bg-background">
+      {showBack && (
+        <View className="flex-row items-center px-4 pt-2">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back()
+              } else {
+                router.replace('/')
+              }
+            }}
+            className="h-10 w-10 items-center justify-center rounded-full bg-surface border border-border/80 shadow-xs active:bg-surface-muted"
+          >
+            <ChevronLeftIcon color={foreground} size={20} />
+          </Pressable>
+        </View>
+      )}
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="gap-6 p-6 pt-3 pb-12"
+        keyboardShouldPersistTaps="handled"
+      >
+        {children}
+      </ScrollView>
+    </View>
   )
 
   if (picking) {
@@ -339,9 +420,12 @@ export default function StudyScreen(): ReactElement {
         selected={mode}
         onChange={setMode}
         onStart={() => {
+          console.log('[study.tsx] ModePicker onStart triggered with mode:', mode)
           begin(mode)
         }}
         pending={starting}
+        dueCount={dueCardsCount}
+        totalCount={totalCardsCount}
       />,
     )
   }
@@ -352,9 +436,15 @@ export default function StudyScreen(): ReactElement {
         summary={summary}
         studySetId={studySetId}
         pending={starting}
+        onClose={() => {
+          setSummary(null)
+          setSessionId(null)
+          started.current = false
+        }}
         onStudyAgain={() => {
           setSummary(null)
           setSessionId(null)
+          started.current = false
           if (studySetId) {
             setPicking(true)
           } else {
@@ -362,9 +452,11 @@ export default function StudyScreen(): ReactElement {
           }
         }}
         onRetake={() => {
+          const finishedSessionId = summary.sessionId
           setSummary(null)
           setSessionId(null)
-          begin(undefined, summary.sessionId)
+          started.current = false
+          begin(undefined, finishedSessionId)
         }}
       />,
     )
@@ -377,7 +469,10 @@ export default function StudyScreen(): ReactElement {
     misdescribe a finished day as a broken one.
   */
   if (startError) {
-    const nothingDue = startError instanceof ApiError && startError.code === 'VALIDATION_ERROR'
+    const nothingDue =
+      startError instanceof ApiError &&
+      startError.code === 'VALIDATION_ERROR' &&
+      startError.message.toLowerCase().includes('nothing is due')
 
     return shell(
       <Notice
@@ -390,13 +485,22 @@ export default function StudyScreen(): ReactElement {
         }
       >
         <>
-          {!nothingDue && (
-            <Button label="Try again" size="lg" disabled={starting} onPress={begin} />
+          <Button label="Try again" size="lg" disabled={starting} onPress={() => begin()} />
+          {studySetId !== null && !initialMode && (
+            <Button
+              label="Pick a different study mode"
+              size="lg"
+              variant="outline"
+              onPress={() => {
+                setStartError(null)
+                setPicking(true)
+              }}
+            />
           )}
           <Button
             label="Back to the dashboard"
             size="lg"
-            variant="outline"
+            variant="ghost"
             onPress={() => {
               router.replace('/')
             }}
@@ -514,7 +618,7 @@ export default function StudyScreen(): ReactElement {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Switch answering mode"
-          disabled={session.answer !== null || isChecking || submit.isPending}
+          disabled={session.answer !== null}
           className={`rounded-full bg-surface border border-border/80 px-3 py-1.5 flex-row items-center gap-1.5 shadow-xs active:bg-surface-muted ${
             session.answer !== null ? 'opacity-40' : 'opacity-100'
           }`}
@@ -542,7 +646,7 @@ export default function StudyScreen(): ReactElement {
         {answeringType === 'flashcard' ? (
           <FlashcardCard
             card={session.card}
-            disabled={session.answer !== null || isChecking || submit.isPending}
+            disabled={session.answer !== null}
             onSubmit={(overrideValues) => {
               send(false, overrideValues)
             }}
@@ -552,7 +656,7 @@ export default function StudyScreen(): ReactElement {
             card={session.card}
             values={session.values}
             results={session.answer?.results ?? null}
-            disabled={session.answer !== null || isChecking || submit.isPending}
+            disabled={session.answer !== null}
             answeringType={answeringType}
             onChange={session.setValue}
             onSubmit={(overrideValues) => {
@@ -563,27 +667,6 @@ export default function StudyScreen(): ReactElement {
 
         {session.answer && answeringType !== 'flashcard' && (
           <FeedbackPanel answer={session.answer} />
-        )}
-
-        {submit.isError && (
-          <View
-            accessibilityLiveRegion="polite"
-            className="rounded-2xl border border-danger/30 bg-danger/10 p-4 shadow-sm"
-          >
-            <View className="flex-row items-start gap-2">
-              <AlertIcon color={danger} size={18} />
-              <Text className="flex-1 text-sm text-foreground">{submit.error.message}</Text>
-            </View>
-            <Button
-              className="mt-3 self-start"
-              label="Try again"
-              variant="outline"
-              size="md"
-              onPress={() => {
-                send(false)
-              }}
-            />
-          </View>
         )}
       </ScrollView>
 
@@ -607,7 +690,6 @@ export default function StudyScreen(): ReactElement {
                 size="lg"
                 variant="outline"
                 label="Reveal"
-                disabled={isChecking || submit.isPending}
                 onPress={() => {
                   send(true)
                 }}
@@ -615,8 +697,7 @@ export default function StudyScreen(): ReactElement {
               <Button
                 className="flex-1"
                 size="lg"
-                label={isChecking || submit.isPending ? 'Checking…' : 'Check answer'}
-                loading={isChecking || submit.isPending}
+                label="Check answer"
                 onPress={() => {
                   send(false)
                 }}

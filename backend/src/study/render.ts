@@ -60,6 +60,10 @@ export function toSessionCard(
     isLeech: options.lapses >= LEECH_THRESHOLD,
     blankOptions,
     blankAnswers: card.answers.map((a) => a.answerText),
+    cardAnswers: card.answers.map((a) => ({
+      answerText: a.answerText,
+      altAnswers: a.altAnswers,
+    })),
   }
   return result
 }

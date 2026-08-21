@@ -30,7 +30,8 @@ import {
 import { useTokenColor } from '../../../stores/theme'
 import { Card } from '../../../components/card'
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue'
-import { useTags } from '../../../hooks/cards'
+import { flattenPages, useSets, useTags } from '../../../hooks/cards'
+import { useDueCounts } from '../../../hooks/study'
 import { isSearchable, useSearch } from '../../../hooks/search'
 
 const PAGE_SIZE = SEARCH_PAGE_SIZE_DEFAULT
@@ -169,6 +170,34 @@ export default function SetsScreen(): ReactElement {
   const muted = useTokenColor('--muted-foreground')
   const listRef = useRef<ScrollView>(null)
 
+  // Live sets and due counts
+  const setsQuery = useSets({ parent: null, archived: false })
+  const dueCounts = useDueCounts()
+  const rootSets = flattenPages(setsQuery.data)
+
+  const totalSubjects = rootSets.length
+  const totalCards = rootSets.reduce((sum, s) => sum + s.subtreeCardCount, 0)
+
+  // Top priority set for the hero deck
+  const prioritySet =
+    rootSets.length > 0
+      ? [...rootSets].sort((a, b) => {
+          const dueA = dueCounts.data?.counts.find((c) => c.studySetId === a.id)?.due ?? 0
+          const dueB = dueCounts.data?.counts.find((c) => c.studySetId === b.id)?.due ?? 0
+          if (dueB !== dueA) return dueB - dueA
+          return b.subtreeCardCount - a.subtreeCardCount
+        })[0]
+      : null
+
+  const priorityCountEntry = prioritySet
+    ? dueCounts.data?.counts.find((c) => c.studySetId === prioritySet.id)
+    : null
+  const priorityDue = priorityCountEntry?.due ?? 0
+  const priorityMastered = priorityCountEntry?.mastered ?? 0
+  const priorityTotalCards = prioritySet?.subtreeCardCount ?? 0
+  const priorityProgress =
+    priorityTotalCards > 0 ? (priorityMastered / priorityTotalCards) * 100 : 0
+
   // Search filter states
   const [text, setText] = useState('')
   const [due, setDue] = useState<DueState | null>(null)
@@ -276,63 +305,75 @@ export default function SetsScreen(): ReactElement {
                 Subjects
               </Text>
               <Text className="text-sm font-medium text-muted-foreground">
-                8 Subjects · 320 Cards Total
+                {totalSubjects} {totalSubjects === 1 ? 'Subject' : 'Subjects'} · {totalCards}{' '}
+                {totalCards === 1 ? 'Card Total' : 'Cards Total'}
               </Text>
             </View>
 
-            {/* Filter Pills */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5 px-5">
-              <View className="flex-row gap-2 py-2">
-                <Chip label="All Subjects" selected={true} onPress={() => {}} />
-                <Chip label="Due for Review" selected={false} onPress={() => {}} />
-                <Chip label="Midterms" selected={false} onPress={() => {}} />
-                <Chip label="Biology" selected={false} onPress={() => {}} />
-              </View>
-            </ScrollView>
-
-            {/* Hero Priority Deck */}
-            <View className="mt-2 gap-3">
-              <Text className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                Priority Study
-              </Text>
-              <View className="overflow-hidden rounded-[32px] bg-primary">
-                <View className="p-6 pb-5">
-                  <View className="mb-4 flex-row items-start justify-between">
-                    <View className="rounded-full bg-white/20 px-3 py-1">
-                      <Text className="text-xs font-bold text-white">12 Due Today</Text>
-                    </View>
-                    <View className="h-10 w-10 items-center justify-center rounded-full bg-white/10">
-                      <ZapIcon color="white" size={20} />
-                    </View>
-                  </View>
-                  <Text className="mb-1 text-2xl font-extrabold text-white">
-                    Anatomy & Physiology
-                  </Text>
-                  <Text className="mb-6 text-sm font-medium text-white/80">
-                    Chapter 4: The Nervous System
-                  </Text>
-
-                  <View className="flex-row items-center gap-4">
-                    <View className="flex-1 gap-2">
-                      <View className="h-1.5 w-full overflow-hidden rounded-full bg-black/20">
-                        <View className="h-full w-2/3 bg-white" />
+            {/* Hero Priority Deck (Rendered only when user has sets) */}
+            {prioritySet && (
+              <View className="mt-1 gap-3">
+                <Text className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                  Priority Study
+                </Text>
+                <View className="overflow-hidden rounded-[32px] bg-primary shadow-sm">
+                  <View className="p-6 pb-5">
+                    <View className="mb-4 flex-row items-start justify-between">
+                      <View className="rounded-full bg-white/20 px-3 py-1">
+                        <Text className="text-xs font-bold text-white">
+                          {priorityDue > 0
+                            ? `${priorityDue} Due Today`
+                            : priorityTotalCards > 0
+                              ? 'Up to date ✨'
+                              : 'New Subject'}
+                        </Text>
                       </View>
-                      <Text className="text-xs font-semibold text-white/90">66% Mastered</Text>
+                      <View className="h-10 w-10 items-center justify-center rounded-full bg-white/10">
+                        <ZapIcon color="white" size={20} />
+                      </View>
                     </View>
+                    <Text numberOfLines={2} className="mb-1 text-2xl font-extrabold text-white">
+                      {prioritySet.title}
+                    </Text>
+                    <Text className="mb-6 text-sm font-medium text-white/80">
+                      {prioritySet.cardCount} {prioritySet.cardCount === 1 ? 'card' : 'cards'}
+                      {prioritySet.subtreeCardCount > prioritySet.cardCount
+                        ? ` · ${prioritySet.subtreeCardCount - prioritySet.cardCount} in sub-sets`
+                        : ''}
+                    </Text>
 
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => setSheetOpen(true)}
-                      className="items-center justify-center rounded-full bg-white px-5 py-2.5 active:opacity-90"
-                    >
-                      <Text className="text-sm font-bold text-primary">Study Now</Text>
-                    </Pressable>
+                    <View className="flex-row items-center gap-4">
+                      <View className="flex-1 gap-2">
+                        <View className="h-1.5 w-full overflow-hidden rounded-full bg-black/20">
+                          <View
+                            className="h-full bg-white"
+                            style={{
+                              width: `${Math.min(100, Math.max(0, priorityProgress))}%`,
+                            }}
+                          />
+                        </View>
+                        <Text className="text-xs font-semibold text-white/90">
+                          {priorityProgress === 0
+                            ? '0% Mastered'
+                            : `${Math.round(priorityProgress)}% Mastered`}
+                        </Text>
+                      </View>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Study ${prioritySet.title}`}
+                        onPress={() => router.push(`/study?set=${prioritySet.id}`)}
+                        className="items-center justify-center rounded-full bg-white px-5 py-2.5 active:opacity-90 shadow-sm"
+                      >
+                        <Text className="text-sm font-bold text-primary">Study Now</Text>
+                      </Pressable>
+                    </View>
                   </View>
                 </View>
               </View>
-            </View>
+            )}
 
-            <View className="mt-4 gap-3">
+            <View className="mt-3 gap-3">
               <Text className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
                 All Subjects
               </Text>

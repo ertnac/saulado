@@ -315,10 +315,10 @@ describe('verdictFor', () => {
     expect(verdictFor('spaced', { ...base, grade: 'again', correct: false }).requeue).toBe(true)
   })
 
-  it('never reschedules in sequential mode', () => {
+  it('reschedules a correct answer in sequential mode', () => {
     expect(verdictFor('sequential', base)).toEqual({
       requeue: false,
-      reschedule: false,
+      reschedule: true,
       record: true,
     })
   })

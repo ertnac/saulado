@@ -277,7 +277,10 @@ export function StudySessionPage(): ReactElement {
     would misdescribe a finished day as a broken one.
   */
   if (startError) {
-    const nothingDue = startError instanceof ApiError && startError.code === 'VALIDATION_ERROR'
+    const nothingDue =
+      startError instanceof ApiError &&
+      startError.code === 'VALIDATION_ERROR' &&
+      startError.message.toLowerCase().includes('nothing is due')
 
     return (
       <Card tone="dashed" className="p-8 text-center">

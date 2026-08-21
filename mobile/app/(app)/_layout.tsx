@@ -136,29 +136,30 @@ export default function AppLayout(): ReactElement {
       {SCREENS.map(({ name, title }) => {
         const options = {
           title,
-          ...(name === 'study' ||
-          name === 'scan' ||
-          name === 'scan-review' ||
-          name === 'sets/[setId]'
+          ...(name === 'study'
             ? {
-                headerLeft: () => (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Go back"
-                    onPress={() => {
-                      if (router.canGoBack()) {
-                        router.back()
-                      } else {
-                        router.replace('/')
-                      }
-                    }}
-                    className="h-11 w-11 items-center justify-center rounded-md ml-2 active:opacity-60"
-                  >
-                    <ChevronLeftIcon color={foreground} size={24} />
-                  </Pressable>
-                ),
+                headerShown: false,
               }
-            : {}),
+            : name === 'scan' || name === 'scan-review' || name === 'sets/[setId]'
+              ? {
+                  headerLeft: () => (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Go back"
+                      onPress={() => {
+                        if (router.canGoBack()) {
+                          router.back()
+                        } else {
+                          router.replace('/')
+                        }
+                      }}
+                      className="h-11 w-11 items-center justify-center rounded-md ml-2 active:opacity-60"
+                    >
+                      <ChevronLeftIcon color={foreground} size={24} />
+                    </Pressable>
+                  ),
+                }
+              : {}),
         }
 
         return <Tabs.Screen key={name} name={name} options={options} />

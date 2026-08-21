@@ -104,9 +104,7 @@ export async function startSession(
   if (slots.length === 0) {
     throw new ApiError(
       'VALIDATION_ERROR',
-      mode === 'spaced'
-        ? 'Nothing is due right now. Come back later.'
-        : 'This set has no cards to study yet.',
+      'This set has no cards to study yet. Add cards with blanks to begin.',
     )
   }
 
@@ -167,6 +165,7 @@ async function buildSource(
     newCardsPerDay: settings.newCardsPerDay,
     dailyCap: dailyCapFor(settings),
     reviewsToday: await countReviewsToday(userId, today),
+    allowReviewAhead: true,
   })
 }
 
@@ -195,7 +194,7 @@ async function loadCandidates(
   userId: string,
   studySetId: string | undefined,
   today: DayKey,
-): Promise<{ due: CandidateCard[]; fresh: CandidateCard[] }> {
+): Promise<{ due: CandidateCard[]; fresh: CandidateCard[]; isReviewAhead: boolean }> {
   const scope = {
     ...(studySetId
       ? { studySetId: { in: await subtreeIds(userId, studySetId) } }
@@ -223,6 +222,30 @@ async function loadCandidates(
     }),
   ])
 
+  // If there are no due cards and no unstudied cards, pull all cards in the scope so the user can review them anytime!
+  if (dueRows.length === 0 && freshRows.length === 0) {
+    const allRows = await prisma.studyCard.findMany({
+      where: scope,
+      select: {
+        id: true,
+        studySetId: true,
+        schedules: { where: { userId }, select: { dueAt: true, lapses: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    return {
+      due: allRows.map((row) => ({
+        cardId: row.id,
+        studySetId: row.studySetId,
+        dueAt: row.schedules[0]?.dueAt ?? null,
+        lapses: row.schedules[0]?.lapses ?? 0,
+      })),
+      fresh: [],
+      isReviewAhead: true,
+    }
+  }
+
   return {
     due: dueRows.map((row) => ({
       cardId: row.id,
@@ -236,6 +259,7 @@ async function loadCandidates(
       dueAt: null,
       lapses: 0,
     })),
+    isReviewAhead: false,
   }
 }
 

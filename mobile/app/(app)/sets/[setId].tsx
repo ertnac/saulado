@@ -35,6 +35,7 @@ import {
   useRenameSet,
   useSet,
 } from '../../../hooks/cards'
+import { useDueCounts } from '../../../hooks/study'
 import { exportSingleSetAsJson, shareJsonPayload } from '../../../services/json-transfer'
 import { useTokenColor } from '../../../stores/theme'
 
@@ -101,6 +102,9 @@ export default function SetDetailScreen(): ReactElement {
   const muted = useTokenColor('--muted-foreground')
 
   const set = useSet(setId)
+  const dueCounts = useDueCounts()
+  const countEntry = dueCounts.data?.counts.find((c) => c.studySetId === setId)
+  const masteredCount = countEntry?.mastered ?? 0
   const parent = useSet(set.data?.set.parentId ?? undefined)
   const cards = useCards(setId)
   const remove = useDeleteCard(setId ?? '')
@@ -277,9 +281,7 @@ export default function SetDetailScreen(): ReactElement {
                 </Text>
               </View>
               <View className="flex-1 items-center p-4">
-                <Text className="text-2xl font-black text-primary">
-                  {Math.floor(set.data.set.cardCount * 0.4)}
-                </Text>
+                <Text className="text-2xl font-black text-primary">{masteredCount}</Text>
                 <Text className="text-xs font-bold uppercase tracking-wider text-primary">
                   Mastered
                 </Text>
@@ -297,8 +299,9 @@ export default function SetDetailScreen(): ReactElement {
         <View className="flex-row gap-3">
           <View className="flex-1">
             <Button
-              label="Study this set"
+              label={items.length === 0 ? 'No cards to study' : 'Study this set'}
               size="lg"
+              disabled={items.length === 0}
               onPress={() => {
                 router.push(`/study?set=${setId}`)
               }}

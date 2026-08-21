@@ -273,7 +273,7 @@ describe('GET /api/study/due', () => {
       scheduledCards: number
     }
     const entry = body.counts.find((count) => count.studySetId === setId)
-    expect(entry).toEqual({ studySetId: setId, due: 0, newCards: 1 })
+    expect(entry).toEqual({ studySetId: setId, due: 0, newCards: 1, mastered: 0 })
     expect(body.totalDue).toBe(0)
     // Nothing studied yet. This is what lets the dashboard tell "never started"
     // from "caught up" — `counts` is empty for both once the queue is cleared.

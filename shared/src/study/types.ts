@@ -82,6 +82,10 @@ export interface SessionCard {
    * so the back of the card can reveal them.
    */
   blankAnswers?: string[]
+  /**
+   * Full answers (including alternative answers) for accurate 0ms local evaluation.
+   */
+  cardAnswers?: { answerText: string; altAnswers: string[] }[]
 }
 
 /**
@@ -261,6 +265,8 @@ export interface DueCount {
   studySetId: string
   due: number
   newCards: number
+  /** Cards answered correctly across at least 2 consecutive reviews (repetitions >= 2). */
+  mastered?: number
 }
 
 export interface DueCountsResponse {
@@ -294,6 +300,8 @@ export interface DueCountsResponse {
    * figures for that reason.
    */
   totalNew: number
+  /** Total mastered cards across all sets (repetitions >= 2). */
+  totalMastered?: number
   /**
    * Cards this user has a schedule row for — i.e. has studied at least once.
    *

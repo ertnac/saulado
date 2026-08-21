@@ -171,38 +171,52 @@ export async function submitAnswer(context: GradeContext): Promise<AnswerRespons
       correct,
     })
 
-    if (verdict.reschedule) {
-      await tx.cardSchedule.upsert({
-        where: { userId_cardId: { userId: context.userId, cardId: card.id } },
-        create: { userId: context.userId, cardId: card.id, ...scheduleData },
-        update: scheduleData,
-      })
-    }
-
-    if (verdict.record) {
-      await tx.review.create({
-        data: {
-          userId: context.userId,
-          cardId: card.id,
-          grade: gradeToCode(grade),
-          blankResults: results as unknown as Prisma.InputJsonValue,
-          durationMs: context.body.durationMs ?? null,
-          reviewedAt: context.now,
-        },
-      })
-
-      await upsertDailyStats(tx, {
-        userId: context.userId,
-        day: today,
-        correct,
-        dailyGoal: settings.dailyGoal,
-      })
-    }
-
-    const allCards = await tx.studySessionCard.findMany({
+    const sessionCardsPromise = tx.studySessionCard.findMany({
       where: { sessionId: session.id },
       select: { id: true, answeredAt: true, correct: true },
     })
+
+    const backgroundTasks: Promise<unknown>[] = []
+
+    if (verdict.reschedule) {
+      backgroundTasks.push(
+        tx.cardSchedule.upsert({
+          where: { userId_cardId: { userId: context.userId, cardId: card.id } },
+          create: { userId: context.userId, cardId: card.id, ...scheduleData },
+          update: scheduleData,
+        }),
+      )
+    }
+
+    if (verdict.record) {
+      backgroundTasks.push(
+        tx.review.create({
+          data: {
+            userId: context.userId,
+            cardId: card.id,
+            grade: gradeToCode(grade),
+            blankResults: results as unknown as Prisma.InputJsonValue,
+            durationMs: context.body.durationMs ?? null,
+            reviewedAt: context.now,
+          },
+        }),
+      )
+
+      backgroundTasks.push(
+        upsertDailyStats(tx, {
+          userId: context.userId,
+          day: today,
+          correct,
+          dailyGoal: settings.dailyGoal,
+        }),
+      )
+    }
+
+    const [allCards] = (await Promise.all([sessionCardsPromise, ...backgroundTasks])) as [
+      { id: string; answeredAt: Date | null; correct: boolean }[],
+      ...unknown[],
+    ]
+
     const queueLength = allCards.length
 
     const total = allCards.length

@@ -12,6 +12,7 @@ interface SessionSummaryProps {
   studySetId: string | null
   onStudyAgain: () => void
   onRetake?: () => void
+  onClose?: () => void
   pending: boolean
 }
 
@@ -37,6 +38,7 @@ export function SessionSummaryView({
   studySetId,
   onStudyAgain,
   onRetake,
+  onClose,
   pending,
 }: SessionSummaryProps): ReactElement {
   const router = useRouter()
@@ -134,6 +136,7 @@ export function SessionSummaryView({
           size="lg"
           variant="outline"
           onPress={() => {
+            onClose?.()
             router.replace(studySetId === null ? '/sets' : `/sets/${studySetId}`)
           }}
         />

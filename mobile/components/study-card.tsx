@@ -102,10 +102,20 @@ export function tokenize(segments: Segment[]): Token[] {
   return tokens
 }
 
-export function Badge({ text, className }: { text: string; className: string }): ReactElement {
+export function Badge({
+  text,
+  className = '',
+  textClassName = '',
+}: {
+  text: string
+  className?: string
+  textClassName?: string
+}): ReactElement {
   return (
-    <View className={`rounded-full px-2.5 py-0.5 border border-transparent ${className}`}>
-      <Text className="text-xs font-semibold">{text}</Text>
+    <View
+      className={`rounded-full px-2.5 py-0.5 border border-transparent items-center justify-center ${className}`}
+    >
+      <Text className={`text-xs font-semibold ${textClassName}`}>{text}</Text>
     </View>
   )
 }
@@ -182,16 +192,25 @@ export function StudyCard({
         <View className="mb-4 flex-row flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-3">
           <View className="flex-row flex-wrap items-center gap-1.5">
             {card.isNew && (
-              <Badge text="✨ New" className="bg-primary/10 border-primary/20 text-primary" />
+              <Badge
+                text="✨ New"
+                className="bg-primary/15 border-primary/30"
+                textClassName="text-primary"
+              />
             )}
             {card.isLeech && (
-              <Badge text="⚠️ Review" className="bg-warning/15 border-warning/30 text-warning" />
+              <Badge
+                text="⚠️ Review"
+                className="bg-warning/15 border-warning/30"
+                textClassName="text-warning"
+              />
             )}
             {card.tags.map((tag) => (
               <Badge
                 key={tag}
                 text={`#${tag}`}
-                className="bg-surface-muted border-border/60 text-muted-foreground"
+                className="bg-surface-muted border-border/80"
+                textClassName="text-foreground/80"
               />
             ))}
           </View>
