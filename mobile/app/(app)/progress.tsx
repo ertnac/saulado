@@ -14,6 +14,7 @@ import { Heatmap } from '../../components/heatmap'
 import { TrendChart } from '../../components/trend-chart'
 import { useProgress } from '../../hooks/progress'
 import { useTokenColor } from '../../stores/theme'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 /**
  * The progress screen — a port of `frontend/src/features/dashboard/ProgressPage.tsx`.
@@ -147,6 +148,7 @@ function NothingYet({ onStudy }: { onStudy: () => void }): ReactElement {
 
 export default function ProgressScreen(): ReactElement {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const [range, setRange] = useState<ProgressRange>('30d')
   const progress = useProgress(range)
   const primary = useTokenColor('--primary')
@@ -162,7 +164,8 @@ export default function ProgressScreen(): ReactElement {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-6 p-5 pb-32"
+      contentContainerClassName="gap-6 p-5"
+      contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 96, 128) }}
       refreshControl={
         <RefreshControl
           refreshing={progress.isRefetching}

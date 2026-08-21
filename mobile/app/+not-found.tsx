@@ -1,6 +1,7 @@
 import { Link, usePathname } from 'expo-router'
 import type { ReactElement } from 'react'
 import { Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuthStore } from '../stores/auth'
 
 /**
@@ -12,13 +13,17 @@ import { useAuthStore } from '../stores/auth'
  * the default is an unstyled developer screen.
  */
 export default function NotFoundScreen(): ReactElement {
+  const insets = useSafeAreaInsets()
   const pathname = usePathname()
   const status = useAuthStore((s) => s.status)
 
   const signedIn = status === 'authenticated'
 
   return (
-    <View className="flex-1 justify-center bg-background px-6 py-12">
+    <View
+      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
+      className="flex-1 justify-center bg-background px-6 py-12"
+    >
       <Text className="font-mono text-sm text-muted-foreground">404</Text>
       <Text className="mt-2 text-2xl font-semibold text-foreground">No page here</Text>
 

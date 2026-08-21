@@ -33,6 +33,7 @@ import { useDebouncedValue } from '../../../hooks/useDebouncedValue'
 import { flattenPages, useSets, useTags } from '../../../hooks/cards'
 import { useDueCounts } from '../../../hooks/study'
 import { isSearchable, useSearch } from '../../../hooks/search'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 const PAGE_SIZE = SEARCH_PAGE_SIZE_DEFAULT
 
@@ -166,6 +167,7 @@ function PageButton({
 
 export default function SetsScreen(): ReactElement {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const [sheetOpen, setSheetOpen] = useState(false)
   const muted = useTokenColor('--muted-foreground')
   const listRef = useRef<ScrollView>(null)
@@ -264,7 +266,8 @@ export default function SetsScreen(): ReactElement {
     >
       <ScrollView
         ref={listRef}
-        contentContainerClassName="gap-5 p-5 pb-32"
+        contentContainerClassName="gap-5 p-5"
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 96, 128) }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >

@@ -38,6 +38,7 @@ import {
 import { useDueCounts } from '../../../hooks/study'
 import { exportSingleSetAsJson, shareJsonPayload } from '../../../services/json-transfer'
 import { useTokenColor } from '../../../stores/theme'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 /**
  * One set: what is in it, what is under it, and the composer for adding to it.
@@ -91,6 +92,7 @@ function CardRow({
 export default function SetDetailScreen(): ReactElement {
   const { setId } = useLocalSearchParams<{ setId?: string }>()
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const [editing, setEditing] = useState<string | null>(null)
   const [composerOpen, setComposerOpen] = useState(false)
   const [menuVisible, setMenuVisible] = useState(false)
@@ -227,7 +229,9 @@ export default function SetDetailScreen(): ReactElement {
   return (
     <View className="flex-1 bg-background">
       <ScrollView
-        contentContainerClassName="gap-6 p-5 pb-32"
+        className="flex-1 bg-background"
+        contentContainerClassName="gap-6 p-5"
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 96, 128) }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         refreshControl={

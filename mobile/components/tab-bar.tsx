@@ -123,7 +123,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
           shadowRadius: 10,
           elevation: 8,
         }}
-        className="bg-[#052e24] dark:bg-[#031a14] rounded-2xl"
+        className="bg-[#052e24] dark:bg-surface dark:border dark:border-border/80 rounded-2xl"
       >
         {DESTINATIONS.map(({ name, label, icon: Icon }) => {
           const selected = isTabActive(name)

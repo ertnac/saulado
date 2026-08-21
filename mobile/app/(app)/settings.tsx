@@ -19,6 +19,7 @@ import {
 } from '../../components/settings-controls'
 import { useSettings, useUpdateSettings } from '../../hooks/settings'
 import { useTheme, useThemeStore } from '../../stores/theme'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 /**
  * Settings — a port of `frontend/src/features/account/SettingsPage.tsx`.
@@ -40,6 +41,7 @@ const BLANK_WIDTH_LABELS: Record<BlankWidthMode, string> = {
 }
 
 export default function SettingsScreen(): ReactElement {
+  const insets = useSafeAreaInsets()
   const { data, isPending, isError } = useSettings()
   const update = useUpdateSettings()
   const theme = useTheme()
@@ -123,7 +125,8 @@ export default function SettingsScreen(): ReactElement {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-5 p-5 pb-28"
+      contentContainerClassName="gap-5 p-5"
+      contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 96, 128) }}
       keyboardShouldPersistTaps="handled"
     >
       <View className="gap-1">

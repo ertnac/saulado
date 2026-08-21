@@ -8,6 +8,7 @@ import { AlertIcon, ImageIcon } from '../../components/icons'
 import { setScannedPage } from '../../lib/scan-handoff'
 import { recognize } from '../../services/ocr'
 import { useTokenColor } from '../../stores/theme'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 /**
  * Point the phone at a page and watch the text settle — Phase 6's camera screen.
@@ -60,6 +61,7 @@ const NO_TEXT =
 const FAILED = 'Could not read that image. Try again, or pick a different photo.'
 
 export default function ScanScreen(): ReactElement {
+  const insets = useSafeAreaInsets()
   const router = useRouter()
   // Which set the cards land in. The page itself travels through
   // `scan-handoff`, not a route param — a multi-kilobyte href would put every
@@ -292,7 +294,10 @@ export default function ScanScreen(): ReactElement {
         )}
       </View>
 
-      <View className="gap-4 border-t border-border bg-surface p-5">
+      <View
+        style={{ paddingBottom: Math.max(insets.bottom + 16, 24) }}
+        className="gap-4 border-t border-border bg-surface p-5"
+      >
         <View accessibilityLiveRegion="polite" className="min-h-10 justify-center">
           {phase.kind === 'error' ? (
             <View className="flex-row items-start gap-1.5">

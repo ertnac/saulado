@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   Modal,
   Pressable,
   ScrollView,
@@ -46,6 +47,7 @@ import { useFormErrors } from '../../hooks/useFormErrors'
 import { importSetsAndCards, parseAndValidateJson } from '../../services/json-transfer'
 import { useAuthStore } from '../../stores/auth'
 import { useTokenColor } from '../../stores/theme'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 /**
  * Account and data — a port of `frontend/src/features/account/AccountPage.tsx`.
@@ -64,6 +66,7 @@ import { useTokenColor } from '../../stores/theme'
  * second navigation for the same event.
  */
 export default function AccountScreen(): ReactElement {
+  const insets = useSafeAreaInsets()
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const email = user?.email ?? ''
@@ -71,7 +74,8 @@ export default function AccountScreen(): ReactElement {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-5 p-5 pb-32"
+      contentContainerClassName="gap-5 p-5"
+      contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 96, 128) }}
       keyboardShouldPersistTaps="handled"
     >
       <View className="flex-row items-center justify-between">
@@ -255,17 +259,24 @@ function ProfileSection(): ReactElement {
     }
   }
 
+  const [savedSuccess, setSavedSuccess] = useState(false)
+
   const removePhoto = () => {
     setLocalProfileImage(null)
     updateSettings.mutate({ profileImage: null })
   }
 
   const handleSave = () => {
+    Keyboard.dismiss()
+    setSavedSuccess(false)
     updateSettings.mutate(
       { nickname: nickname.trim() },
       {
         onSuccess: () => {
-          Alert.alert('Saved', 'Profile details updated successfully.')
+          setSavedSuccess(true)
+          setTimeout(() => {
+            setSavedSuccess(false)
+          }, 2500)
         },
       },
     )
@@ -311,15 +322,21 @@ function ProfileSection(): ReactElement {
           <Field
             label="Nickname"
             value={nickname}
-            onChangeText={setLocalNickname}
+            onChangeText={(text) => {
+              setSavedSuccess(false)
+              setLocalNickname(text)
+            }}
             hint="Your nickname is displayed on the dashboard welcome banner."
             autoCorrect={false}
             maxLength={30}
           />
           <Button
-            label="Save Profile"
+            label={
+              savedSuccess ? 'Saved! ✨' : updateSettings.isPending ? 'Saving…' : 'Save Profile'
+            }
             onPress={handleSave}
             disabled={nickname.trim() === storedNickname || updateSettings.isPending}
+            loading={updateSettings.isPending}
           />
         </FormStack>
       </View>

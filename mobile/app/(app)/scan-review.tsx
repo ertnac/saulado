@@ -16,6 +16,7 @@ import { HighlightSurface } from '../../components/highlight-surface'
 import { SetList } from '../../components/set-list'
 import { takeScannedPage } from '../../lib/scan-handoff'
 import { useImportQueue } from '../../stores/import-queue'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 /**
  * The scanned page, turned into cards — the mobile half of the two-stage flow in
@@ -81,6 +82,7 @@ function toQuestion(page: string, range: Pick<AnswerRange, 'startOffset' | 'endO
 }
 
 export default function ScanReviewScreen(): ReactElement {
+  const insets = useSafeAreaInsets()
   const router = useRouter()
   const { setId } = useLocalSearchParams<{ setId?: string }>()
   const startImport = useImportQueue((state) => state.start)
@@ -190,7 +192,10 @@ export default function ScanReviewScreen(): ReactElement {
         )}
       </ScrollView>
 
-      <View className="gap-3 border-t border-border bg-surface p-5">
+      <View
+        style={{ paddingBottom: Math.max(insets.bottom + 16, 24) }}
+        className="gap-3 border-t border-border bg-surface p-5"
+      >
         {question === undefined ? (
           <>
             <Button
@@ -272,6 +277,7 @@ function ChooseSet({
   onPick: (setId: string) => void
   onCancel: () => void
 }): ReactElement {
+  const insets = useSafeAreaInsets()
   return (
     <View className="flex-1 bg-background">
       <ScrollView contentContainerClassName="gap-5 p-5 pb-8" keyboardShouldPersistTaps="handled">
@@ -300,7 +306,10 @@ function ChooseSet({
         />
       </ScrollView>
 
-      <View className="border-t border-border bg-surface p-5">
+      <View
+        style={{ paddingBottom: Math.max(insets.bottom + 16, 24) }}
+        className="border-t border-border bg-surface p-5"
+      >
         <Button label="Back to the blanks" variant="ghost" onPress={onCancel} />
       </View>
     </View>

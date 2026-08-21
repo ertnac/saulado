@@ -37,6 +37,7 @@ import { StreakCard } from '../../components/streak-card'
 import { usePrefetchCards } from '../../hooks/cards'
 import { useDashboard } from '../../hooks/progress'
 import { useSettings } from '../../hooks/settings'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuthStore } from '../../stores/auth'
 import { useTokenColor } from '../../stores/theme'
 
@@ -555,6 +556,7 @@ function RecentSets({
 
 export default function DashboardScreen(): ReactElement {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const user = useAuthStore((s) => s.user)
   const dashboard = useDashboard()
   const primary = useTokenColor('--primary')
@@ -639,7 +641,8 @@ export default function DashboardScreen(): ReactElement {
     <>
       <ScrollView
         className="flex-1 bg-background"
-        contentContainerClassName="gap-7 p-5 pb-36"
+        contentContainerClassName="gap-7 p-5"
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 96, 128) }}
         refreshControl={
           <RefreshControl
             refreshing={dashboard.isRefetching}
