@@ -1,5 +1,5 @@
-import { useState, useRef, type ReactElement } from 'react'
-import { Text, View, PanResponder, type LayoutRectangle } from 'react-native'
+import { useState, type ReactElement } from 'react'
+import { Text, View } from 'react-native'
 import { ANSWERS_MAX_PER_CARD, rangesOverlap, type AnswerRange } from '@saulado/shared'
 import { spanBetween, toPieces, tokenize, type WordToken } from '../lib/highlight-offsets'
 import { useTokenColor } from '../stores/theme'
@@ -69,13 +69,9 @@ export function HighlightSurface({
   noun = 'blank',
   max = ANSWERS_MAX_PER_CARD,
 }: HighlightSurfaceProps): ReactElement {
+  const [armed, setArmed] = useState<WordToken | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const warning = useTokenColor('--warning')
-
-  // Track layouts and tokens of words for drag selection
-  const wordLayouts = useRef<Record<number, LayoutRectangle>>({})
-  const wordTokens = useRef<Record<number, WordToken>>({})
-  const dragRangeRef = useRef<{ start: WordToken; current: WordToken } | null>(null)
 
   function handleAddHighlight(range: Pick<AnswerRange, 'startOffset' | 'endOffset'>): void {
     const collisions = answers.filter((answer) => rangesOverlap(range, answer))
@@ -96,81 +92,33 @@ export function HighlightSurface({
 
     onAddHighlight(range)
     setMessage(null)
+    setArmed(null)
   }
 
-  // PanResponder to handle drag across words
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent
-        const word = findWordAt(locationX, locationY)
-        if (word) {
-          dragRangeRef.current = { start: word, current: word }
-        }
-      },
-      onPanResponderMove: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent
-        const word = findWordAt(locationX, locationY)
-        if (word && dragRangeRef.current) {
-          dragRangeRef.current.current = word
-        }
-      },
-      onPanResponderRelease: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent
-        const endWord = findWordAt(locationX, locationY)
-        const prev = dragRangeRef.current
-        dragRangeRef.current = null
-
-        if (prev) {
-          const finalEnd = endWord || prev.current
-          // If it's a single word tap, just toggle it
-          if (prev.start.start === finalEnd.start) {
-            const range = { startOffset: prev.start.start, endOffset: prev.start.end }
-            // Check if tapped on existing blank to remove it
-            const hit = answers.find((a) => rangesOverlap(range, a))
-            if (hit) {
-              onRemoveHighlight(hit.ordinal)
-              setMessage(null)
-            } else {
-              handleAddHighlight(range)
-            }
-          } else {
-            // Multi-word drag
-            const range = spanBetween(prev.start, finalEnd)
-            handleAddHighlight(range)
-          }
-        }
-      },
-    }),
-  ).current
-
-  function findWordAt(x: number, y: number): WordToken | null {
-    for (const [key, layout] of Object.entries(wordLayouts.current)) {
-      if (
-        x >= layout.x &&
-        x <= layout.x + layout.width &&
-        y >= layout.y &&
-        y <= layout.y + layout.height
-      ) {
-        return wordTokens.current[Number(key)] || null
-      }
+  function handleWordPress(token: WordToken): void {
+    if (armed === null) {
+      // First tap arms the word
+      setArmed(token)
+      setMessage(null)
+    } else if (armed.start === token.start) {
+      // Second tap on the same word creates a 1-word blank
+      handleAddHighlight({ startOffset: token.start, endOffset: token.end })
+    } else {
+      // Tap on a second word creates a multi-word blank
+      handleAddHighlight(spanBetween(armed, token))
     }
-    return null
+  }
+
+  function handleWordLongPress(token: WordToken): void {
+    // Quick single-word blank on long press
+    handleAddHighlight({ startOffset: token.start, endOffset: token.end })
   }
 
   return (
-    <View className="gap-3">
-      <View
-        className="rounded-md border border-border bg-surface p-4"
-        {...panResponder.panHandlers}
-      >
-        <View className="flex-row flex-wrap">
+    <View className="gap-2.5">
+      <View className="rounded-md border border-border bg-surface p-4">
+        <View className="flex-row flex-wrap items-center">
           {toPieces(paragraph, answers).map((piece) => {
-            // Bound to a `const` before the branch: TypeScript drops a narrowing
-            // on a parameter once it is read inside a closure, and the remove
-            // handler below is one.
             const { ordinal } = piece
 
             if (ordinal === null) {
@@ -179,10 +127,9 @@ export function HighlightSurface({
                   key={piece.start}
                   text={piece.text}
                   offset={piece.start}
-                  onWordLayout={(token, layout) => {
-                    wordLayouts.current[token.start] = layout
-                    wordTokens.current[token.start] = token
-                  }}
+                  armed={armed}
+                  onWordPress={handleWordPress}
+                  onWordLongPress={handleWordLongPress}
                 />
               )
             }
@@ -203,6 +150,21 @@ export function HighlightSurface({
         </View>
       </View>
 
+      {/* Armed Selection Guide */}
+      {armed !== null && (
+        <View className="flex-row items-center justify-between rounded-lg border border-primary/40 bg-primary/10 px-3 py-2">
+          <Text className="flex-1 text-xs text-primary font-medium">
+            {`Selected "${armed.text}". Tap it again for 1 word, or tap another word to highlight a phrase.`}
+          </Text>
+          <Text
+            onPress={() => setArmed(null)}
+            className="ml-2 text-xs font-bold text-muted-foreground uppercase underline"
+          >
+            Cancel
+          </Text>
+        </View>
+      )}
+
       {message !== null && (
         <View
           accessibilityLiveRegion="polite"
@@ -214,7 +176,7 @@ export function HighlightSurface({
       )}
 
       <Text className="text-xs text-muted-foreground">
-        {`Tap a word to create a blank. Drag across words to group them. Tap a ${noun} to remove it.`}
+        {`Tap a word twice or tap two words to create a ${noun}. Tap a ${noun} to remove it.`}
       </Text>
     </View>
   )
@@ -223,11 +185,15 @@ export function HighlightSurface({
 function PlainRun({
   text,
   offset,
-  onWordLayout,
+  armed,
+  onWordPress,
+  onWordLongPress,
 }: {
   text: string
   offset: number
-  onWordLayout: (token: WordToken, layout: LayoutRectangle) => void
+  armed: WordToken | null
+  onWordPress: (token: WordToken) => void
+  onWordLongPress: (token: WordToken) => void
 }): ReactElement {
   return (
     <>
@@ -243,23 +209,32 @@ function PlainRun({
           return token.text === '\n' ? (
             <View key={absolute.start} style={{ width: '100%', height: 8 }} />
           ) : (
-            <View key={absolute.start} style={{ width: 4 }} />
-          )
-        }
-
-        return (
-          <View
-            key={absolute.start}
-            onLayout={(e) => onWordLayout(absolute, e.nativeEvent.layout)}
-            className="mb-1"
-          >
             <Text
+              key={absolute.start}
               style={{ fontSize: FONT_SIZE, lineHeight: LINE_HEIGHT }}
               className="text-foreground"
             >
-              {token.text}
+              {' '}
             </Text>
-          </View>
+          )
+        }
+
+        const isArmed = armed !== null && armed.start === absolute.start
+
+        return (
+          <Text
+            key={absolute.start}
+            onPress={() => onWordPress(absolute)}
+            onLongPress={() => onWordLongPress(absolute)}
+            style={{ fontSize: FONT_SIZE, lineHeight: LINE_HEIGHT }}
+            className={`rounded px-1 text-foreground ${
+              isArmed
+                ? 'bg-amber-400/30 text-amber-300 font-bold underline'
+                : 'active:bg-surface-muted'
+            }`}
+          >
+            {token.text}
+          </Text>
         )
       })}
     </>

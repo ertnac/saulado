@@ -1,13 +1,5 @@
 import type { ReactElement, ReactNode } from 'react'
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  View,
-  Image,
-  Pressable,
-} from 'react-native'
+import { KeyboardAvoidingView, Platform, Text, View, Image, Pressable } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import Animated, { FadeIn } from 'react-native-reanimated'
@@ -35,40 +27,36 @@ export function AuthLayout({
   const insets = useSafeAreaInsets()
 
   return (
-    <View className="flex-1 bg-background dark:bg-[#031a14]">
-      {/* Absolute Header Background for the Hero Section */}
-      <View className="absolute top-0 left-0 right-0 h-[40%] bg-[#052e24] dark:bg-transparent" />
-
+    <View className="flex-1 bg-[#052e24] dark:bg-[#031a14]">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         className="flex-1"
       >
-        <ScrollView
-          contentContainerStyle={{
-            flexGrow: 1,
-            // Only add bottom padding; the top is handled by the hero area
-            paddingBottom: insets.bottom + 24,
-          }}
-          keyboardShouldPersistTaps="handled"
-        >
+        <View className="flex-1">
           {/* Hero Header Area */}
           <View
             className="w-full items-center justify-center px-6"
-            style={{ paddingTop: Math.max(insets.top + 16, 36), minHeight: 280 }}
+            style={{
+              paddingTop: Math.max(insets.top + 8, 24),
+              paddingBottom: 16,
+            }}
           >
-            <Image source={sauladoLogo} className="w-32 h-32 mb-2" resizeMode="contain" />
-            <Text accessibilityRole="header" className="text-3xl font-bold text-white text-center">
+            <Image source={sauladoLogo} className="w-20 h-20 mb-1" resizeMode="contain" />
+            <Text accessibilityRole="header" className="text-2xl font-bold text-white text-center">
               {title}
             </Text>
             {subtitle !== undefined && (
-              <Text className="mt-2 text-sm text-white/80 text-center max-w-[280px]">
+              <Text className="mt-1 text-xs text-white/80 text-center max-w-[280px]">
                 {subtitle}
               </Text>
             )}
           </View>
 
           {/* Bottom Sheet Container */}
-          <View className="flex-1 bg-background rounded-t-[32px] px-6 pt-6 shadow-sm overflow-hidden">
+          <View
+            className="flex-1 bg-background rounded-t-[32px] px-6 pt-6 shadow-sm overflow-hidden"
+            style={{ paddingBottom: Math.max(insets.bottom + 16, 24) }}
+          >
             <View className="mx-auto w-full max-w-md">
               {/* Segmented Tab Switcher (Only on login/register screens) */}
               {activeTab !== undefined && (
@@ -115,7 +103,7 @@ export function AuthLayout({
               {footer !== undefined && <View className="mt-8 items-center pb-6">{footer}</View>}
             </View>
           </View>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </View>
   )

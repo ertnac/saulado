@@ -2,14 +2,40 @@ import Constants, { ExecutionEnvironment } from 'expo-constants'
 
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient
 
+export interface Frame {
+  width: number
+  height: number
+  top: number
+  left: number
+}
+
+export interface Point {
+  x: number
+  y: number
+}
+
+export interface TextElement {
+  text: string
+  frame?: Frame
+}
+
+export interface TextLine {
+  text: string
+  frame?: Frame
+  elements?: TextElement[]
+}
+
 export interface TextBlock {
   text: string
-  lines?: { text: string }[]
+  frame?: Frame
+  lines?: TextLine[]
 }
 
 export interface TextRecognitionResult {
   text: string
   blocks: TextBlock[]
+  width?: number
+  height?: number
 }
 
 interface TextRecognitionModuleType {

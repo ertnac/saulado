@@ -9,3 +9,4 @@
 export type { ExtractedParagraph } from './segment.js'
 export { segmentParagraphs } from './segment.js'
 export { dewrap } from './dewrap.js'
+export { enhanceOcrText } from './ocr-enhancer.js'
