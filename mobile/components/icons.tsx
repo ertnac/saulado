@@ -454,3 +454,30 @@ export function CardsIcon(props: IconProps): ReactElement {
     </Icon>
   )
 }
+
+export function DownloadIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <Path d="M7 10l5 5 5-5" />
+      <Path d="M12 15V3" />
+    </Icon>
+  )
+}
+
+export function CloudOffIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M22.61 16.95A5 5 0 0 0 18 10h-1.26a8 8 0 0 0-7.05-6M5 5a8 8 0 0 0 4 15h9a5 5 0 0 0 1.7-.3" />
+      <Path d="M2 2l20 20" />
+    </Icon>
+  )
+}
+
+export function CloudIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+    </Icon>
+  )
+}

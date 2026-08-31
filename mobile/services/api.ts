@@ -1,5 +1,6 @@
 import type { ApiErrorCode, ApiErrorResponse, AuthResponse } from '@saulado/shared'
 import * as SecureStore from 'expo-secure-store'
+import { clearAuthCache, loadAuthCache, saveAuthCache } from './auth-cache'
 import { apiUrl } from './config'
 
 /**
@@ -115,7 +116,7 @@ export async function storeRefreshToken(token: string | null): Promise<void> {
 
 // ── Session change notification ─────────────────────────────────────────────
 
-type SessionListener = (session: AuthResponse | null) => void
+type SessionListener = (session: AuthResponse | null, isOffline?: boolean) => void
 
 let sessionListener: SessionListener | null = null
 
@@ -123,8 +124,8 @@ export function onSessionChange(listener: SessionListener | null): void {
   sessionListener = listener
 }
 
-function notify(session: AuthResponse | null): void {
-  sessionListener?.(session)
+function notify(session: AuthResponse | null, isOffline = false): void {
+  sessionListener?.(session, isOffline)
 }
 
 /**
@@ -145,11 +146,13 @@ export async function adoptSession(session: AuthResponse): Promise<void> {
     return
   }
   await storeRefreshToken(session.refreshToken)
+  await saveAuthCache(session.user, session.settings)
 }
 
 export async function clearSession(): Promise<void> {
   setAccessToken(null)
   await storeRefreshToken(null)
+  await clearAuthCache()
 }
 
 // ── Request dispatch ────────────────────────────────────────────────────────
@@ -247,17 +250,23 @@ async function performRefresh(): Promise<AuthResponse | null> {
     })
 
     if (!res.ok) {
-      // The stored token is spent, revoked, or expired. Clearing it is the whole
-      // point: leaving it in the keychain means every future launch retries a
-      // credential that can only fail, and a replay is what the server reads as
-      // an attack.
-      await clearSession()
-      notify(null)
-      return null
+      if (res.status === 401 || res.status === 403 || res.status === 400) {
+        // The stored token is spent, revoked, or expired. Clearing it is the whole
+        // point: leaving it in the keychain means every future launch retries a
+        // credential that can only fail, and a replay is what the server reads as
+        // an attack.
+        await clearSession()
+        notify(null)
+        return null
+      }
+      // Transient failures (5xx, captive portals, rate limits) should NOT sign the user out.
+      // Throw to let the catch block fall back to the offline-authenticated state.
+      throw new Error(`Transient refresh failure: ${res.status}`)
     }
 
     const session = (await res.json()) as AuthResponse
     await adoptSession(session)
+    // 🟢 Single-flight atomic transition from offline-authenticated -> authenticated
     notify(session)
     return session
   } catch {
@@ -265,6 +274,21 @@ async function performRefresh(): Promise<AuthResponse | null> {
     // one: a tunnel, a lift, a dead hotspot. The token is NOT cleared, because
     // it is probably still valid and discarding it would sign the user out for
     // walking into a basement. Only an explicit server rejection above clears it.
+
+    // Attempt offline restoration using the auth cache
+    const cached = await loadAuthCache()
+    if (cached) {
+      const fakeSession: AuthResponse = {
+        user: cached.user,
+        settings: cached.settings,
+        accessToken: '', // Sentinel value indicating offline
+        expiresIn: 0,
+      }
+      setAccessToken(null)
+      notify(fakeSession, true)
+      return fakeSession
+    }
+
     setAccessToken(null)
     notify(null)
     return null
@@ -288,6 +312,16 @@ export function refreshSession(): Promise<AuthResponse | null> {
  * backend distinguishes them precisely so the client does not have to guess.
  */
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  if (options.authorized && !accessToken) {
+    const session = await refreshSession()
+    if (session && session.accessToken === '') {
+      throw new TypeError('Network request failed')
+    }
+    if (!session?.accessToken) {
+      throw new ApiError('Authentication required.', 401, 'UNAUTHORIZED')
+    }
+  }
+
   const res = await dispatch(path, options)
 
   if (res.status !== 401 || !options.authorized) return parse<T>(res)
@@ -296,7 +330,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   if (error.code !== 'TOKEN_EXPIRED') throw error
 
   const session = await refreshSession()
-  if (!session) throw error
+  if (!session?.accessToken) throw error
 
   return parse<T>(await dispatch(path, options))
 }

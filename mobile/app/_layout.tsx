@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import '../global.css'
 import { asyncStoragePersister, queryClient } from '../lib/query-client'
 import { useAuthStore } from '../stores/auth'
+import { useOfflineSetsStore } from '../stores/offline-sets'
 import { useTheme, useTokenColor } from '../stores/theme'
 
 /**
@@ -34,6 +35,8 @@ import { useTheme, useTokenColor } from '../stores/theme'
 function useSessionRestore(): void {
   useEffect(() => {
     void useAuthStore.getState().restore()
+    // Phase 5.5: Load offline sets index
+    void useOfflineSetsStore.getState().load()
   }, [])
 }
 

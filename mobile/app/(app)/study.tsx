@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { onlineManager, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   SessionSummary,
   SubmitAnswerRequest,
@@ -32,6 +32,9 @@ import { useDueCounts } from '../../hooks/study'
 import { useSet } from '../../hooks/cards'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTokenColor } from '../../stores/theme'
+import { getOfflineSet } from '../../lib/offline/sets'
+import { generateOfflineSession } from '../../lib/offline/study-generation'
+import { useAuthStore } from '../../stores/auth'
 
 /**
  * The study screen (plan §4.2–4.4), ported from `StudySessionPage.tsx`.
@@ -123,6 +126,7 @@ export default function StudyScreen(): ReactElement {
   const complete = useMutation({ mutationFn: (id: string) => completeSession(id) })
 
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [isOfflineSession, setIsOfflineSession] = useState(false)
   const [summary, setSummary] = useState<SessionSummary | null>(null)
   /**
    * `undefined` means the pointer has not been read yet.
@@ -159,10 +163,14 @@ export default function StudyScreen(): ReactElement {
     }
   }, [dueCardsCount, initialMode])
 
+  const isResumeOffline =
+    !onlineManager.isOnline() ||
+    (typeof resumeId === 'string' && resumeId.startsWith('offline-session-'))
+
   const resumed = useQuery({
     queryKey: ['study', 'session', resumeId],
     queryFn: () => getSession(resumeId ?? ''),
-    enabled: sessionId === null && typeof resumeId === 'string',
+    enabled: sessionId === null && typeof resumeId === 'string' && !isResumeOffline,
     staleTime: 0,
     gcTime: 0,
     retry: false,
@@ -188,6 +196,7 @@ export default function StudyScreen(): ReactElement {
       )
       setSummary(null)
       setSessionId(null)
+      setIsOfflineSession(false)
       setStartError(null)
       setStarting(false)
       started.current = false
@@ -203,20 +212,48 @@ export default function StudyScreen(): ReactElement {
 
   useEffect(() => {
     if (resumeId !== undefined) {
-      setPicking(studySetId !== null && !initialMode && resumeId === null)
+      const isOfflineOrLocal =
+        !onlineManager.isOnline() ||
+        (typeof resumeId === 'string' && resumeId.startsWith('offline-session-'))
+      setPicking(studySetId !== null && !initialMode && (resumeId === null || isOfflineOrLocal))
     }
   }, [resumeId, studySetId, initialMode])
 
   /**
    * Start a session and adopt it.
    */
-  const begin = (chosenMode?: StartableMode, retakeOf?: string): void => {
+  const begin = async (chosenMode?: StartableMode, retakeOf?: string): Promise<void> => {
     console.log('[study.tsx] begin() called', { chosenMode, mode, studySetId, retakeOf })
     started.current = true
     setStartError(null)
     setStarting(true)
 
     const activeMode = chosenMode ?? mode
+    const isOnline = onlineManager.isOnline()
+    const offlineSet = studySetId ? await getOfflineSet(studySetId) : null
+
+    // 1. DETERMINISTIC OFFLINE ROUTING
+    if (!isOnline) {
+      if (offlineSet) {
+        console.log('[study.tsx] Device is offline; immediately starting local offline session')
+        const localSession = generateOfflineSession(studySetId!, activeMode, offlineSet.cards)
+        setIsOfflineSession(true)
+        setSessionId(localSession.id)
+        void rememberSession(localSession.id)
+        session.load(localSession)
+        setPicking(false)
+        setStarting(false)
+        return
+      } else {
+        console.warn('[study.tsx] Device is offline and set is not downloaded')
+        setStartError(new Error('This set has not been downloaded for offline study.'))
+        setPicking(false)
+        setStarting(false)
+        return
+      }
+    }
+
+    // 2. ONLINE FLOW
     const body: StartSessionRequest = retakeOf
       ? { retakeOf }
       : {
@@ -226,38 +263,69 @@ export default function StudyScreen(): ReactElement {
 
     console.log('[study.tsx] Sending startSession request with body:', body)
 
-    start
-      .mutateAsync(body)
-      .then((data) => {
-        console.log('[study.tsx] startSession succeeded! Session:', data.session)
-        setSessionId(data.session.id)
-        void rememberSession(data.session.id)
-        session.load(data.session)
-        setPicking(false)
-      })
-      .catch((error: unknown) => {
-        console.error('[study.tsx] startSession failed with error:', error)
-        setStartError(error instanceof Error ? error : new Error('Could not start this session.'))
-        setPicking(false)
-      })
-      .finally(() => {
-        setStarting(false)
-      })
+    try {
+      const data = await start.mutateAsync(body)
+      console.log('[study.tsx] startSession succeeded! Session:', data.session)
+      setIsOfflineSession(false)
+      setSessionId(data.session.id)
+      void rememberSession(data.session.id)
+      session.load(data.session)
+      setPicking(false)
+    } catch (error: unknown) {
+      console.error('[study.tsx] startSession failed with error:', error)
+
+      // Phase 5.5: Offline Set Fallback if online start unexpectedly failed
+      const isNetworkError =
+        error instanceof Error &&
+        (error.message.includes('Network') || error.message.includes('Failed to fetch'))
+
+      if (isNetworkError && studySetId) {
+        try {
+          const fallbackSet = await getOfflineSet(studySetId)
+          if (fallbackSet) {
+            console.log(
+              '[study.tsx] Online start failed with network error; falling back to downloaded set',
+            )
+            const localSession = generateOfflineSession(studySetId, activeMode, fallbackSet.cards)
+            setIsOfflineSession(true)
+            setSessionId(localSession.id)
+            void rememberSession(localSession.id)
+            session.load(localSession)
+            setPicking(false)
+            setStarting(false)
+            return
+          }
+        } catch (e) {
+          console.error('[study.tsx] Failed to start offline fallback session', e)
+        }
+      }
+
+      setStartError(error instanceof Error ? error : new Error('Could not start this session.'))
+      setPicking(false)
+    } finally {
+      setStarting(false)
+    }
   }
 
   useEffect(() => {
     /**
      * Auto-start session if:
-     * - Resume pointer is already read and is null (no resume)
+     * - Resume pointer is already read and is null (no resume) or offline/local
      * - We have not started yet
      * - Either we are studying all sets (studySetId === null) or mode query param is explicitly provided
      */
-    if (started.current || resumeId === undefined || resumeId !== null) return
+    if (started.current || resumeId === undefined) return
 
-    if (studySetId === null) {
-      begin('spaced')
-    } else if (initialMode) {
-      begin(initialMode)
+    const isOfflineOrLocal =
+      !onlineManager.isOnline() ||
+      (typeof resumeId === 'string' && resumeId.startsWith('offline-session-'))
+
+    if (resumeId === null || isOfflineOrLocal) {
+      if (studySetId === null) {
+        void begin('spaced')
+      } else if (initialMode) {
+        void begin(initialMode)
+      }
     }
   })
 
@@ -276,11 +344,12 @@ export default function StudyScreen(): ReactElement {
       if (!initialMode) {
         setPicking(true)
       } else {
-        begin(initialMode)
+        void begin(initialMode)
       }
       return
     }
 
+    setIsOfflineSession(false)
     setSessionId(resumedSession.id)
     session.load(resumedSession)
   }, [resumed.data, sessionId, session])
@@ -298,13 +367,46 @@ export default function StudyScreen(): ReactElement {
     if (studySetId && !initialMode) {
       setPicking(true)
     } else {
-      begin(initialMode ?? 'spaced')
+      void begin(initialMode ?? 'spaced')
     }
   })
 
   const queryClient = useQueryClient()
 
   const finish = (id: string): void => {
+    const isOffline =
+      isOfflineSession || id.startsWith('offline-session-') || !onlineManager.isOnline()
+
+    if (isOffline) {
+      void forgetSession()
+      const answered = session.progress.answered
+      const correct = session.progress.correct
+      const userSettings = useAuthStore.getState().settings
+      const dailyGoal = userSettings?.dailyGoal ?? 10
+      const reviewsToday = correct
+      const goalMet = reviewsToday >= dailyGoal
+
+      const offlineSummary: SessionSummary = {
+        sessionId: id,
+        startedAt: new Date(Date.now() - 60000).toISOString(),
+        completedAt: new Date().toISOString(),
+        cardsSeen: answered,
+        correctCards: correct,
+        accuracy: answered === 0 ? 0 : correct / answered,
+        durationMs: 60000,
+        toRevisit: [],
+        mode,
+        unanswered: [],
+        reviewsToday,
+        dailyGoal,
+        goalMet,
+      }
+
+      setSummary(offlineSummary)
+      session.reset()
+      return
+    }
+
     complete.mutate(id, {
       onSuccess: (data) => {
         void forgetSession()
@@ -335,26 +437,32 @@ export default function StudyScreen(): ReactElement {
     }
 
     // 2. BACKGROUND SERVER SYNC
-    const body: SubmitAnswerRequest = {
-      cardId: activeCardId,
-      blanks: Object.entries(submittedValues).map(([ordinal, submitted]) => ({
-        ordinal: Number(ordinal),
-        submitted,
-      })),
-      durationMs: elapsed(),
-      idempotencyKey: session.idempotencyKey,
-      ...(revealed ? { revealed: true } : {}),
-    }
+    if (
+      !isOfflineSession &&
+      !sessionId.startsWith('offline-session-') &&
+      onlineManager.isOnline()
+    ) {
+      const body: SubmitAnswerRequest = {
+        cardId: activeCardId,
+        blanks: Object.entries(submittedValues).map(([ordinal, submitted]) => ({
+          ordinal: Number(ordinal),
+          submitted,
+        })),
+        durationMs: elapsed(),
+        idempotencyKey: session.idempotencyKey,
+        ...(revealed ? { revealed: true } : {}),
+      }
 
-    submit.mutate(
-      { sessionId, body },
-      {
-        onSuccess: (data) => {
-          // If user hasn't advanced yet, update with true SM-2 schedules from server
-          session.accept(data, activeCardId)
+      submit.mutate(
+        { sessionId, body },
+        {
+          onSuccess: (data) => {
+            // If user hasn't advanced yet, update with true SM-2 schedules from server
+            session.accept(data, activeCardId)
+          },
         },
-      },
-    )
+      )
+    }
   }
 
   const next = (): void => {
@@ -421,7 +529,7 @@ export default function StudyScreen(): ReactElement {
         onChange={setMode}
         onStart={() => {
           console.log('[study.tsx] ModePicker onStart triggered with mode:', mode)
-          begin(mode)
+          void begin(mode)
         }}
         pending={starting}
         dueCount={dueCardsCount}
@@ -448,7 +556,7 @@ export default function StudyScreen(): ReactElement {
           if (studySetId) {
             setPicking(true)
           } else {
-            begin(mode)
+            void begin(mode)
           }
         }}
         onRetake={() => {
@@ -456,7 +564,7 @@ export default function StudyScreen(): ReactElement {
           setSummary(null)
           setSessionId(null)
           started.current = false
-          begin(undefined, finishedSessionId)
+          void begin(undefined, finishedSessionId)
         }}
       />,
     )
@@ -485,7 +593,14 @@ export default function StudyScreen(): ReactElement {
         }
       >
         <>
-          <Button label="Try again" size="lg" disabled={starting} onPress={() => begin()} />
+          <Button
+            label="Try again"
+            size="lg"
+            disabled={starting}
+            onPress={() => {
+              void begin()
+            }}
+          />
           {studySetId !== null && !initialMode && (
             <Button
               label="Pick a different study mode"
@@ -523,7 +638,7 @@ export default function StudyScreen(): ReactElement {
             loading={starting}
             onPress={() => {
               setSessionId(null)
-              begin()
+              void begin()
             }}
           />
           <Button

@@ -24,8 +24,13 @@ import {
   MoreVerticalIcon,
   ShareIcon,
   TrashIcon,
+  DownloadIcon,
+  CloudOffIcon,
+  CloudIcon,
 } from '../../../components/icons'
 import { SetList } from '../../../components/set-list'
+import { useOfflineSetsStore } from '../../../stores/offline-sets'
+import { downloadSet, removeOfflineSet } from '../../../lib/offline/sets'
 import {
   flattenPages,
   useArchiveSet,
@@ -102,6 +107,7 @@ export default function SetDetailScreen(): ReactElement {
   const warning = useTokenColor('--warning')
   const foreground = useTokenColor('--foreground')
   const muted = useTokenColor('--muted-foreground')
+  const primary = useTokenColor('--primary')
 
   const set = useSet(setId)
   const dueCounts = useDueCounts()
@@ -193,6 +199,24 @@ export default function SetDetailScreen(): ReactElement {
     setRenameVisible(false)
   }
 
+  const offlineEntry = useOfflineSetsStore((state) => (setId ? state.sets[setId] : undefined))
+  const isAvailableOffline = offlineEntry?.status === 'available'
+  const isDownloading = offlineEntry?.status === 'downloading'
+
+  const handleSaveOffline = (): void => {
+    if (!setId) return
+    setMenuVisible(false)
+    void downloadSet(setId).catch(() => {
+      Alert.alert('Download Failed', 'Could not save this set for offline use.')
+    })
+  }
+
+  const handleRemoveOffline = (): void => {
+    if (!setId) return
+    setMenuVisible(false)
+    void removeOfflineSet(setId)
+  }
+
   const [composerSession, setComposerSession] = useState(0)
 
   const handlePullToCreate = (): void => {
@@ -258,9 +282,26 @@ export default function SetDetailScreen(): ReactElement {
           )}
 
           <View className="flex-row items-center justify-between">
-            <Text className="flex-1 text-3xl font-extrabold tracking-tight text-foreground">
-              {title ?? (set.isError ? 'Set unavailable' : '…')}
-            </Text>
+            <View className="flex-1">
+              <Text className="text-3xl font-extrabold tracking-tight text-foreground">
+                {title ?? (set.isError ? 'Set unavailable' : '…')}
+              </Text>
+              {(isAvailableOffline || isDownloading) && (
+                <View className="flex-row items-center mt-1">
+                  {isAvailableOffline ? (
+                    <View className="flex-row items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 self-start">
+                      <CloudIcon color={primary} size={12} />
+                      <Text className="text-xs font-semibold text-primary">Available Offline</Text>
+                    </View>
+                  ) : (
+                    <View className="flex-row items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 self-start">
+                      <ActivityIndicator size={12} color={warning} />
+                      <Text className="text-xs font-semibold text-warning">Downloading...</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
             {set.data && (
               <TouchableOpacity
                 onPress={() => {
@@ -450,7 +491,32 @@ export default function SetDetailScreen(): ReactElement {
               <Text className="text-xs text-muted-foreground">Set Actions</Text>
             </View>
 
+            {/* Offline Storage Option */}
+            {isAvailableOffline ? (
+              <TouchableOpacity
+                onPress={handleRemoveOffline}
+                className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
+              >
+                <CloudOffIcon color={foreground} size={20} />
+                <Text className="text-base font-semibold text-foreground">Remove Offline</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={handleSaveOffline}
+                disabled={isDownloading}
+                className={`flex-row items-center gap-3 px-5 py-4 ${isDownloading ? 'opacity-50' : 'active:bg-surface-muted'}`}
+              >
+                <DownloadIcon color={foreground} size={20} />
+                <Text className="text-base font-semibold text-foreground">
+                  {isDownloading ? 'Downloading...' : 'Save Offline'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <View className="h-px bg-border/40" />
+
             {/* Option 1: Edit */}
+
             <TouchableOpacity
               onPress={() => {
                 setMenuVisible(false)

@@ -1,7 +1,10 @@
 import type { AuthResponse, PublicUser, UserSettings } from '@saulado/shared'
 import { create } from 'zustand'
-import { onSessionChange, setAccessToken } from '../services/api'
+import { onSessionChange } from '../services/api'
 import * as authApi from '../services/auth'
+import { queryClient, asyncStoragePersister } from '../lib/query-client'
+import { useOfflineSetsStore } from './offline-sets'
+import { syncEngine } from '../lib/offline/sync'
 
 /**
  * Auth state, ported from `frontend/src/stores/auth.ts` — unchanged, and that is
@@ -24,7 +27,7 @@ import * as authApi from '../services/auth'
  * gate that treats "don't know yet" as "signed out" flashes the login screen at
  * a signed-in user on every cold start.
  */
-export type AuthStatus = 'restoring' | 'authenticated' | 'anonymous'
+export type AuthStatus = 'restoring' | 'authenticated' | 'offline-authenticated' | 'anonymous'
 
 interface AuthState {
   status: AuthStatus
@@ -36,7 +39,7 @@ interface AuthState {
   googleLogin: (idToken: string) => Promise<void>
   logout: () => Promise<void>
   restore: () => Promise<void>
-  applySession: (session: AuthResponse | null) => void
+  applySession: (session: AuthResponse | null, isOffline?: boolean) => void
   updateSettings: (patch: Partial<UserSettings>) => void
 }
 
@@ -45,59 +48,52 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   settings: null,
 
-  /**
-   * Reflects a session into the store. Deliberately touches no storage at all —
-   * not the keychain on the way in, and *especially* not on the way out.
-   *
-   * On the way in: `services/auth`'s register and login already called
-   * `adoptSession`, and the refresh path adopted before notifying. Storing again
-   * here would write a token one rotation out of date, and the server reads a
-   * replayed refresh token as theft and revokes the whole family.
-   *
-   * On the way out: a `null` here does not mean "signed out", it means "no live
-   * session right now" — and on a phone the usual cause is no network, not a
-   * rejected credential. `performRefresh` already distinguishes the two and
-   * clears the keychain only on an explicit server rejection. A `clearSession()`
-   * in this branch would undo that and sign the user out for walking into a lift.
-   */
-  applySession: (session) => {
+  applySession: (session, isOffline = false) => {
     if (!session) {
-      setAccessToken(null)
       set({ status: 'anonymous', user: null, settings: null })
       return
     }
-
-    setAccessToken(session.accessToken)
-    set({ status: 'authenticated', user: session.user, settings: session.settings })
-  },
-
-  register: async (email, password) => {
-    get().applySession(await authApi.register({ email, password }))
+    set({
+      status: isOffline ? 'offline-authenticated' : 'authenticated',
+      user: session.user,
+      settings: session.settings,
+    })
   },
 
   login: async (email, password) => {
     get().applySession(await authApi.login({ email, password }))
   },
 
+  register: async (email, password) => {
+    get().applySession(await authApi.register({ email, password }))
+  },
+
   googleLogin: async (idToken) => {
     get().applySession(await authApi.googleLogin(idToken))
   },
 
-  /**
-   * Signs out, and this is the one path that must reach the keychain.
-   *
-   * `authApi.logout` reads the stored refresh token, sends it for revocation and
-   * clears it whatever the network did — so it runs *before* the local state
-   * change rather than after it, unlike the web version. Reversing the two would
-   * leave the server holding a live token it was never asked to revoke.
-   */
   logout: async () => {
+    // 1. Explicitly stop background sync
+    syncEngine.stop()
+
+    // 2. Revoke session on backend and clear keys
     await authApi.logout()
+
+    // 3. Prevent cross-account leakage by explicitly clearing React Query caches
+    queryClient.clear()
+    await asyncStoragePersister.removeClient()
+
+    // 4. Reset in-memory offline sets state
+    const offlineSets = useOfflineSetsStore.getState()
+    if (offlineSets.reset) offlineSets.reset()
+
+    // 5. Finally, enter anonymous state
     get().applySession(null)
   },
 
   restore: async () => {
-    get().applySession(await authApi.restoreSession())
+    const session = await authApi.restoreSession()
+    get().applySession(session, session?.accessToken === '')
   },
 
   /**
@@ -122,7 +118,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
  * Registered at module scope so it is active before the first render — a
  * refresh racing an effect that has not run yet would otherwise be dropped.
  */
-onSessionChange((session) => {
+onSessionChange((session, isOffline = false) => {
   const { status, applySession } = useAuthStore.getState()
 
   // During `restoring` the restore() call owns the transition. Applying here as
@@ -130,5 +126,5 @@ onSessionChange((session) => {
   // flashing the login screen at a user who is signed in.
   if (status === 'restoring') return
 
-  applySession(session)
+  applySession(session, isOffline)
 })

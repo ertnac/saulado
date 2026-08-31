@@ -22,11 +22,16 @@ import {
 import { useDueCounts } from '../hooks/study'
 import { exportSingleSetAsJson, shareJsonPayload } from '../services/json-transfer'
 import { useTokenColor } from '../stores/theme'
+import { useOfflineSetsStore } from '../stores/offline-sets'
+import { downloadSet, removeOfflineSet } from '../lib/offline/sets'
 import { Button } from './button'
 import {
   ArchiveIcon,
   BookOpenIcon,
   ChevronRightIcon,
+  CloudIcon,
+  CloudOffIcon,
+  DownloadIcon,
   EditIcon,
   ShareIcon,
   TrashIcon,
@@ -151,6 +156,22 @@ function SetRow({
     setRenameVisible(false)
   }
 
+  const offlineEntry = useOfflineSetsStore((state) => state.sets[set.id])
+  const isAvailableOffline = offlineEntry?.status === 'available'
+  const isDownloading = offlineEntry?.status === 'downloading'
+
+  const handleSaveOffline = (): void => {
+    setMenuVisible(false)
+    void downloadSet(set.id).catch(() => {
+      Alert.alert('Download Failed', 'Could not save this set for offline use.')
+    })
+  }
+
+  const handleRemoveOffline = (): void => {
+    setMenuVisible(false)
+    void removeOfflineSet(set.id)
+  }
+
   return (
     <>
       <Pressable
@@ -179,7 +200,21 @@ function SetRow({
             <Text numberOfLines={1} className="text-lg font-bold text-foreground">
               {set.title}
             </Text>
-            <Text className="text-sm font-medium text-muted-foreground">{countLabel(set)}</Text>
+            <View className="flex-row items-center gap-2">
+              <Text className="text-sm font-medium text-muted-foreground">{countLabel(set)}</Text>
+              {isAvailableOffline && (
+                <View className="flex-row items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5">
+                  <CloudIcon color={iconColor} size={12} />
+                  <Text className="text-xs font-semibold text-primary">Offline</Text>
+                </View>
+              )}
+              {isDownloading && (
+                <View className="flex-row items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5">
+                  <ActivityIndicator size={12} color={warning} />
+                  <Text className="text-xs font-semibold text-warning">Downloading...</Text>
+                </View>
+              )}
+            </View>
           </View>
         </View>
 
@@ -239,6 +274,30 @@ function SetRow({
               </Text>
               <Text className="text-xs text-muted-foreground">{countLabel(set)}</Text>
             </View>
+
+            {/* Offline Storage Option */}
+            {isAvailableOffline ? (
+              <TouchableOpacity
+                onPress={handleRemoveOffline}
+                className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
+              >
+                <CloudOffIcon color={foreground} size={20} />
+                <Text className="text-base font-semibold text-foreground">Remove Offline</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={handleSaveOffline}
+                disabled={isDownloading}
+                className={`flex-row items-center gap-3 px-5 py-4 ${isDownloading ? 'opacity-50' : 'active:bg-surface-muted'}`}
+              >
+                <DownloadIcon color={foreground} size={20} />
+                <Text className="text-base font-semibold text-foreground">
+                  {isDownloading ? 'Downloading...' : 'Save Offline'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <View className="h-px bg-border/40" />
 
             {/* Option 1: Edit */}
             <TouchableOpacity
