@@ -20,6 +20,8 @@ import { useTheme, useTokenColor } from '../stores/theme'
  */
 // Removed createQueryClient() call since queryClient is exported directly
 
+import { syncEngine } from '../lib/offline/sync'
+
 /**
  * Restores the session once, on launch.
  *
@@ -34,6 +36,7 @@ import { useTheme, useTokenColor } from '../stores/theme'
  */
 function useSessionRestore(): void {
   useEffect(() => {
+    syncEngine.start()
     void useAuthStore.getState().restore()
     // Phase 5.5: Load offline sets index
     void useOfflineSetsStore.getState().load()

@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native'
+import { useNetInfo } from '@react-native-community/netinfo'
 import { useRouter } from 'expo-router'
 import type { DashboardResponse, RecentSet } from '@saulado/shared'
 import sauladoLogo from '../../assets/saulado.png'
@@ -568,6 +569,9 @@ export default function DashboardScreen(): ReactElement {
   // Fetch settings to update the auth store on mount/focus
   useSettings()
 
+  const netInfo = useNetInfo()
+  const isOffline = netInfo.isConnected === false || netInfo.isInternetReachable === false
+
   const prefetchCards = usePrefetchCards()
 
   const settings = useAuthStore((s) => s.settings)
@@ -578,7 +582,7 @@ export default function DashboardScreen(): ReactElement {
 
   useEffect(() => {
     if (data?.recentSets) {
-      data.recentSets.forEach((set) => prefetchCards(set.id))
+      data.recentSets.forEach((set: RecentSet) => prefetchCards(set.id))
     }
   }, [data?.recentSets, prefetchCards])
 
@@ -660,6 +664,14 @@ export default function DashboardScreen(): ReactElement {
             <Text className="text-base font-bold tracking-tight text-foreground">Saulado</Text>
           </View>
           <View className="flex-row items-center gap-2">
+            {isOffline && (
+              <View className="rounded-full bg-amber-500/10 px-2 py-1 border border-amber-500/20 flex-row items-center gap-1.5">
+                <View className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                <Text className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">
+                  Offline
+                </Text>
+              </View>
+            )}
             <View className="rounded-full bg-surface-muted px-3 py-1 border border-border">
               <Text className="text-xs font-medium text-muted-foreground">{formattedDate}</Text>
             </View>

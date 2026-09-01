@@ -9,10 +9,8 @@ const LEGACY_SESSION_KEY = 'saulado-offline-session'
 
 export const getStateKey = (userId: string) => `saulado-offline-state:${userId}`
 
-function getActiveUserId(): string {
-  const userId = useAuthStore.getState().user?.id
-  if (!userId) throw new Error('Cannot access offline state without an active user')
-  return userId
+function getActiveUserId(): string | null {
+  return useAuthStore.getState().user?.id ?? null
 }
 
 function getDefaultState(userId: string): OfflineState {
@@ -29,6 +27,17 @@ function getDefaultState(userId: string): OfflineState {
 
 export async function loadOfflineState(): Promise<OfflineState> {
   const userId = getActiveUserId()
+  if (!userId) {
+    return {
+      queue: [],
+      activeSession: null,
+      metadata: {
+        userId: '',
+        updatedAt: new Date().toISOString(),
+        schemaVersion: 1,
+      },
+    }
+  }
   const key = getStateKey(userId)
   const DEFAULT_STATE = getDefaultState(userId)
 
@@ -61,11 +70,23 @@ export async function loadOfflineState(): Promise<OfflineState> {
 export async function updateOfflineState(
   updater: (state: OfflineState) => OfflineState | Promise<OfflineState>,
 ): Promise<OfflineState> {
+  const userId = getActiveUserId()
+  if (!userId) {
+    return {
+      queue: [],
+      activeSession: null,
+      metadata: {
+        userId: '',
+        updatedAt: new Date().toISOString(),
+        schemaVersion: 1,
+      },
+    }
+  }
+
   // Read-modify-write within a single function to ensure atomic update of the single key
   const currentState = await loadOfflineState()
   const nextState = await updater(currentState)
 
-  const userId = getActiveUserId()
   const key = getStateKey(userId)
 
   nextState.metadata.userId = userId
@@ -84,6 +105,7 @@ export async function updateOfflineState(
 export async function clearOfflineState(): Promise<void> {
   try {
     const userId = getActiveUserId()
+    if (!userId) return
     const key = getStateKey(userId)
     await AsyncStorage.removeItem(key)
   } catch (error) {

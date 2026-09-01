@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { downloadSet, getOfflineSet, getSetsIndexKey } from '../sets'
+import { downloadSet, getOfflineSet, getOfflineSetIndex, getSetsIndexKey } from '../sets'
 import * as api from '../../../services/cards'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAuthStore } from '../../../stores/auth'
@@ -145,5 +145,15 @@ describe('Offline Sets Engine Phase 5.5', () => {
     expect(payload.cards).toHaveLength(25)
     // api.getCard should have been called 25 times
     expect(vi.mocked(api.getCard)).toHaveBeenCalledTimes(25)
+  })
+
+  it('gracefully returns empty index when user is unauthenticated or restoring', async () => {
+    vi.mocked(useAuthStore.getState).mockReturnValue({ user: null } as any)
+
+    const index = await getOfflineSetIndex()
+    expect(index).toEqual({ sets: {} })
+
+    const set = await getOfflineSet('s1')
+    expect(set).toBeNull()
   })
 })

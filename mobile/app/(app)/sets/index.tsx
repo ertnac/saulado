@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactElement } from 'react'
+import { useRef, useState, useSyncExternalStore, type ReactElement } from 'react'
 import {
   KeyboardAvoidingView,
   Platform,
@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native'
 import { useRouter } from 'expo-router'
+import { onlineManager } from '@tanstack/react-query'
 import {
   DUE_STATES,
   SEARCH_PAGE_SIZE_DEFAULT,
@@ -34,6 +35,7 @@ import { flattenPages, useSets, useTags } from '../../../hooks/cards'
 import { useDueCounts } from '../../../hooks/study'
 import { isSearchable, useSearch } from '../../../hooks/search'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useOfflineSetsStore } from '../../../stores/offline-sets'
 
 const PAGE_SIZE = SEARCH_PAGE_SIZE_DEFAULT
 
@@ -172,10 +174,27 @@ export default function SetsScreen(): ReactElement {
   const muted = useTokenColor('--muted-foreground')
   const listRef = useRef<ScrollView>(null)
 
+  const isOnline = useSyncExternalStore(
+    (onStoreChange) => onlineManager.subscribe(onStoreChange),
+    () => onlineManager.isOnline(),
+  )
+  const isOffline = !isOnline
+  const offlineStore = useOfflineSetsStore()
+
   // Live sets and due counts
   const setsQuery = useSets({ parent: null, archived: false })
   const dueCounts = useDueCounts()
-  const rootSets = flattenPages(setsQuery.data)
+  const rootSets = isOffline
+    ? Object.values(offlineStore.sets)
+        .filter(
+          (entry) =>
+            entry.status === 'available' &&
+            entry.metadata &&
+            !entry.metadata.parentId &&
+            !entry.metadata.archivedAt,
+        )
+        .map((entry) => entry.metadata!)
+    : flattenPages(setsQuery.data)
 
   const totalSubjects = rootSets.length
   const totalCards = rootSets.reduce((sum, s) => sum + s.subtreeCardCount, 0)

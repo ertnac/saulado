@@ -37,6 +37,7 @@ export interface OfflineSetIndexEntry {
   setId: string
   updatedAt: string
   status: 'downloading' | 'available' | 'failed'
+  metadata?: StudySet
 }
 
 export interface OfflineSetIndex {

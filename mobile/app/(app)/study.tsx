@@ -35,6 +35,9 @@ import { useTokenColor } from '../../stores/theme'
 import { getOfflineSet } from '../../lib/offline/sets'
 import { generateOfflineSession } from '../../lib/offline/study-generation'
 import { useAuthStore } from '../../stores/auth'
+import { useOfflineSetsStore } from '../../stores/offline-sets'
+import { updateOfflineState } from '../../lib/offline/state'
+import type { OfflineMutation } from '../../lib/offline/types'
 
 /**
  * The study screen (plan §4.2–4.4), ported from `StudySessionPage.tsx`.
@@ -146,6 +149,7 @@ export default function StudyScreen(): ReactElement {
 
   const dueCounts = useDueCounts()
   const setDetails = useSet(studySetId ?? undefined)
+  const offlineStore = useOfflineSetsStore()
 
   const setEntry = studySetId
     ? dueCounts.data?.counts.find((c) => c.studySetId === studySetId)
@@ -436,7 +440,7 @@ export default function StudyScreen(): ReactElement {
       }
     }
 
-    // 2. BACKGROUND SERVER SYNC
+    // 2. BACKGROUND SERVER SYNC OR OFFLINE QUEUE
     if (
       !isOfflineSession &&
       !sessionId.startsWith('offline-session-') &&
@@ -462,6 +466,23 @@ export default function StudyScreen(): ReactElement {
           },
         },
       )
+    } else {
+      // 3. QUEUE OFFLINE ANSWER MUTATION FOR LATER SYNC
+      const mutation: OfflineMutation = {
+        userId: useAuthStore.getState().user?.id,
+        sessionId,
+        cardId: activeCardId,
+        submittedValues,
+        revealed,
+        durationMs: elapsed(),
+        idempotencyKey: session.idempotencyKey,
+        queuedAt: new Date().toISOString(),
+        status: 'pending',
+      }
+      void updateOfflineState((prev) => ({
+        ...prev,
+        queue: [...prev.queue, mutation],
+      }))
     }
   }
 
@@ -523,6 +544,46 @@ export default function StudyScreen(): ReactElement {
   )
 
   if (picking) {
+    if (!onlineManager.isOnline() && studySetId === null) {
+      const offlineSets = Object.values(offlineStore.sets)
+        .filter((s) => s.status === 'available' && s.metadata)
+        .map((s) => s.metadata!)
+
+      if (offlineSets.length === 0) {
+        return shell(
+          <Notice
+            title="No downloaded sets"
+            body="No downloaded sets are available for offline study. Connect to the internet and save a set for offline use."
+          >
+            <Button label="Back to dashboard" size="lg" onPress={() => router.replace('/')} />
+          </Notice>,
+        )
+      }
+
+      return shell(
+        <View className="gap-4">
+          <Text className="text-xl font-bold text-foreground">Offline Sets</Text>
+          <Text className="text-sm text-muted-foreground">
+            Select a downloaded set to study offline.
+          </Text>
+          <View className="gap-2 mt-2">
+            {offlineSets.map((set) => (
+              <Pressable
+                key={set.id}
+                onPress={() => router.push(`/study?set=${set.id}`)}
+                className="gap-1 rounded-2xl border border-border bg-surface p-4 active:opacity-75"
+              >
+                <Text className="text-lg font-bold text-foreground">{set.title}</Text>
+                <Text className="text-sm font-medium text-muted-foreground">
+                  {set.cardCount} {set.cardCount === 1 ? 'card' : 'cards'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>,
+      )
+    }
+
     return shell(
       <ModePicker
         selected={mode}

@@ -10,10 +10,8 @@ export const getSetsIndexKey = (userId: string) => `saulado-offline-sets-index:$
 export const getSetPayloadKey = (userId: string, setId: string) =>
   `saulado-offline-set:${userId}:${setId}`
 
-function getActiveUserId(): string {
-  const userId = useAuthStore.getState().user?.id
-  if (!userId) throw new Error('Cannot access offline sets without an active user')
-  return userId
+function getActiveUserId(): string | null {
+  return useAuthStore.getState().user?.id ?? null
 }
 
 // In-memory locks for duplicate protection
@@ -27,6 +25,9 @@ export function onOfflineIndexUpdated(listener: () => void): () => void {
 
 export async function getOfflineSetIndex(): Promise<OfflineSetIndex> {
   const userId = getActiveUserId()
+  if (!userId) {
+    return { sets: {} }
+  }
   const key = getSetsIndexKey(userId)
 
   try {
@@ -45,6 +46,9 @@ export async function updateOfflineSetIndex(
   updater: (index: OfflineSetIndex) => void,
 ): Promise<OfflineSetIndex> {
   const userId = getActiveUserId()
+  if (!userId) {
+    throw new Error('Cannot access offline sets without an active user')
+  }
   const key = getSetsIndexKey(userId)
 
   const index = await getOfflineSetIndex()
@@ -79,6 +83,9 @@ export function downloadSet(setId: string): Promise<void> {
 
   const promise = (async () => {
     try {
+      const userId = getActiveUserId()
+      if (!userId) throw new Error('Cannot access offline sets without an active user')
+
       // 1. Mark downloading
       await updateOfflineSetIndex((idx) => {
         idx.sets[setId] = { setId, status: 'downloading', updatedAt: new Date().toISOString() }
@@ -104,7 +111,7 @@ export function downloadSet(setId: string): Promise<void> {
 
       // 5. Construct payload
       const payload: OfflineSetPayload = {
-        userId: getActiveUserId(),
+        userId,
         setId,
         version: 1, // future use
         downloadedAt: new Date().toISOString(),
@@ -114,12 +121,17 @@ export function downloadSet(setId: string): Promise<void> {
       }
 
       // 6. Persist complete payload
-      const payloadKey = getSetPayloadKey(getActiveUserId(), setId)
+      const payloadKey = getSetPayloadKey(userId, setId)
       await AsyncStorage.setItem(payloadKey, JSON.stringify(payload))
 
       // 7. Mark available in index (atomic swap over state)
       await updateOfflineSetIndex((idx) => {
-        idx.sets[setId] = { setId, status: 'available', updatedAt: new Date().toISOString() }
+        idx.sets[setId] = {
+          setId,
+          status: 'available',
+          updatedAt: new Date().toISOString(),
+          metadata: setRes.set,
+        }
       })
     } catch (error) {
       console.warn(`[offline-sets] failed to download set ${setId}`, error)
@@ -137,12 +149,13 @@ export function downloadSet(setId: string): Promise<void> {
 }
 
 export async function getOfflineSet(setId: string): Promise<OfflineSetPayload | null> {
+  const userId = getActiveUserId()
+  if (!userId) return null
   const index = await getOfflineSetIndex()
   const entry = index.sets[setId]
   if (!entry || entry.status !== 'available') return null
 
   try {
-    const userId = getActiveUserId()
     const payloadKey = getSetPayloadKey(userId, setId)
 
     // Check for unscoped legacy payload to discard
@@ -176,8 +189,10 @@ export async function getOfflineSet(setId: string): Promise<OfflineSetPayload | 
 }
 
 export async function removeOfflineSet(setId: string): Promise<void> {
-  // Delete payload first
   const userId = getActiveUserId()
+  if (!userId) return
+
+  // Delete payload first
   const payloadKey = getSetPayloadKey(userId, setId)
   try {
     await AsyncStorage.removeItem(payloadKey)

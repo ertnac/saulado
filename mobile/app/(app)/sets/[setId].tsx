@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from 'react'
+import { useState, useEffect, useSyncExternalStore, type ReactElement } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -14,7 +14,13 @@ import {
   TouchableOpacity,
 } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { cardLabel, SET_TITLE_MAX_LENGTH, type StudyCardSummary } from '@saulado/shared'
+import {
+  cardLabel,
+  SET_TITLE_MAX_LENGTH,
+  type StudyCardSummary,
+  type StudyCard,
+  type DueCount,
+} from '@saulado/shared'
 import { Button } from '../../../components/button'
 import { CardComposer } from '../../../components/card-composer'
 import {
@@ -30,7 +36,9 @@ import {
 } from '../../../components/icons'
 import { SetList } from '../../../components/set-list'
 import { useOfflineSetsStore } from '../../../stores/offline-sets'
-import { downloadSet, removeOfflineSet } from '../../../lib/offline/sets'
+import { downloadSet, removeOfflineSet, getOfflineSet } from '../../../lib/offline/sets'
+import type { OfflineSetPayload } from '../../../lib/offline/types'
+import { onlineManager } from '@tanstack/react-query'
 import {
   flattenPages,
   useArchiveSet,
@@ -109,9 +117,29 @@ export default function SetDetailScreen(): ReactElement {
   const muted = useTokenColor('--muted-foreground')
   const primary = useTokenColor('--primary')
 
+  const isOnline = useSyncExternalStore(
+    (onStoreChange) => onlineManager.subscribe(onStoreChange),
+    () => onlineManager.isOnline(),
+  )
+  const isOffline = !isOnline
+
+  const offlineEntry = useOfflineSetsStore((state) => (setId ? state.sets[setId] : undefined))
+  const isAvailableOffline = offlineEntry?.status === 'available'
+  const isDownloading = offlineEntry?.status === 'downloading'
+
+  const [offlinePayload, setOfflinePayload] = useState<OfflineSetPayload | null>(null)
+
+  useEffect(() => {
+    if (isOffline && isAvailableOffline && setId) {
+      void getOfflineSet(setId).then(setOfflinePayload)
+    } else {
+      setOfflinePayload(null)
+    }
+  }, [isOffline, isAvailableOffline, setId])
+
   const set = useSet(setId)
   const dueCounts = useDueCounts()
-  const countEntry = dueCounts.data?.counts.find((c) => c.studySetId === setId)
+  const countEntry = dueCounts.data?.counts.find((c: DueCount) => c.studySetId === setId)
   const masteredCount = countEntry?.mastered ?? 0
   const parent = useSet(set.data?.set.parentId ?? undefined)
   const cards = useCards(setId)
@@ -120,8 +148,20 @@ export default function SetDetailScreen(): ReactElement {
   const archiveSet = useArchiveSet()
   const renameSet = useRenameSet()
 
-  const items = flattenPages(cards.data)
-  const title = set.data?.set.title
+  const items =
+    isOffline && offlinePayload
+      ? offlinePayload.cards.map((card: StudyCard) => ({
+          id: card.id,
+          studySetId: card.studySetId,
+          paragraph: card.paragraph,
+          tags: card.tags,
+          createdAt: card.createdAt,
+          updatedAt: card.updatedAt,
+          answerCount: card.answers.length,
+        }))
+      : flattenPages(cards.data)
+
+  const title = isOffline && offlinePayload ? offlinePayload.metadata.title : set.data?.set.title
 
   const confirmDelete = (card: StudyCardSummary): void => {
     const blanks = `${String(card.answerCount)} ${card.answerCount === 1 ? 'blank' : 'blanks'}`
@@ -199,10 +239,6 @@ export default function SetDetailScreen(): ReactElement {
     setRenameVisible(false)
   }
 
-  const offlineEntry = useOfflineSetsStore((state) => (setId ? state.sets[setId] : undefined))
-  const isAvailableOffline = offlineEntry?.status === 'available'
-  const isDownloading = offlineEntry?.status === 'downloading'
-
   const handleSaveOffline = (): void => {
     if (!setId) return
     setMenuVisible(false)
@@ -221,19 +257,19 @@ export default function SetDetailScreen(): ReactElement {
 
   const handlePullToCreate = (): void => {
     setEditing(null)
-    setComposerSession((s) => s + 1)
+    setComposerSession((s: number) => s + 1)
     setComposerOpen(true)
   }
 
   const handleOpenCreate = (): void => {
     setEditing(null)
-    setComposerSession((s) => s + 1)
+    setComposerSession((s: number) => s + 1)
     setComposerOpen(true)
   }
 
   const handleEditCard = (cardId: string): void => {
     setEditing(cardId)
-    setComposerSession((s) => s + 1)
+    setComposerSession((s: number) => s + 1)
     setComposerOpen(true)
   }
 
@@ -246,6 +282,32 @@ export default function SetDetailScreen(): ReactElement {
     return (
       <View className="flex-1 items-center justify-center bg-background p-5">
         <Text className="text-sm text-muted-foreground">No set was given.</Text>
+      </View>
+    )
+  }
+
+  const isOfflineUnavailable = isOffline && !isAvailableOffline
+
+  if (isOfflineUnavailable) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background p-5 gap-3">
+        <CloudOffIcon color={muted} size={48} />
+        <Text className="text-lg font-bold text-foreground">Unavailable Offline</Text>
+        <Text className="text-sm text-center text-muted-foreground">
+          This set was not saved for offline use. Reconnect to the internet to view its cards.
+        </Text>
+        <Button
+          label="Back to Sets"
+          variant="outline"
+          className="mt-4"
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back()
+            } else {
+              router.replace('/sets')
+            }
+          }}
+        />
       </View>
     )
   }
@@ -315,11 +377,13 @@ export default function SetDetailScreen(): ReactElement {
             )}
           </View>
 
-          {set.data && (
+          {(set.data || (isOffline && offlinePayload)) && (
             <View className="mt-2 flex-row rounded-2xl border border-border bg-surface shadow-sm shadow-black/5 overflow-hidden">
               <View className="flex-1 items-center border-r border-border p-4">
                 <Text className="text-2xl font-black text-foreground">
-                  {set.data.set.cardCount}
+                  {isOffline && offlinePayload
+                    ? offlinePayload.metadata.cardCount
+                    : set.data?.set.cardCount}
                 </Text>
                 <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   Cards
@@ -370,9 +434,10 @@ export default function SetDetailScreen(): ReactElement {
             )}
           </View>
 
-          {cards.isPending ? (
+          {(!isOffline && cards.isPending) ||
+          (isOffline && !offlinePayload && !isOfflineUnavailable) ? (
             <ActivityIndicator accessibilityLabel="Loading cards" />
-          ) : cards.isError ? (
+          ) : !isOffline && cards.isError ? (
             <View className="gap-3 rounded-xl border border-border bg-surface p-5">
               <Text className="text-sm text-warning">Could not load the cards in this set.</Text>
               <Button
@@ -400,7 +465,7 @@ export default function SetDetailScreen(): ReactElement {
             </View>
           ) : (
             <View className="gap-2">
-              {items.map((card) => (
+              {items.map((card: StudyCardSummary) => (
                 <CardRow
                   key={card.id}
                   card={card}

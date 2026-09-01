@@ -149,10 +149,15 @@ export function useStudySession(): StudySessionController {
       // Use cardAnswers if provided (containing altAnswers), fallback to blankAnswers
       const answersForEval =
         currentCard.cardAnswers ??
-        (currentCard.blankAnswers ?? []).map((text) => ({ answerText: text, altAnswers: [] }))
+        (currentCard.blankAnswers ?? []).map((text: string) => ({
+          answerText: text,
+          altAnswers: [],
+        }))
 
       // Prepare inputs array (e.g. index 0 -> submittedValues[0])
-      const inputs = answersForEval.map((_, i) => (revealed ? '' : (submittedValues[i] ?? '')))
+      const inputs = answersForEval.map((_: unknown, i: number) =>
+        revealed ? '' : (submittedValues[i] ?? ''),
+      )
 
       const rawResults = checkAnswers(inputs, answersForEval, { typoTolerance: true })
       const results = rawResults.map((result, i) => ({
@@ -172,14 +177,18 @@ export function useStudySession(): StudySessionController {
         intervalDays: 0,
         isLeech: false,
         requeued: false,
-        progress: { ...progress, answered: progress.answered + 1 },
+        progress: {
+          ...progress,
+          answered: progress.answered + 1,
+          correct: progress.correct + (correct ? 1 : 0),
+        },
       }
     },
     [progress],
   )
 
   const setValue = useCallback((ordinal: number, value: string) => {
-    setValues((current) => ({ ...current, [ordinal]: value }))
+    setValues((current: Record<number, string>) => ({ ...current, [ordinal]: value }))
   }, [])
 
   const reset = useCallback(() => {

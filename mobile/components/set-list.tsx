@@ -1,4 +1,5 @@
-import { useState, type ReactElement } from 'react'
+import { useState, useSyncExternalStore, type ReactElement } from 'react'
+import { onlineManager } from '@tanstack/react-query'
 import {
   ActivityIndicator,
   Alert,
@@ -421,9 +422,27 @@ export function SetList({
   const sets = useSets({ parent })
   const create = useCreateSet()
 
+  const isOnline = useSyncExternalStore(
+    (onStoreChange) => onlineManager.subscribe(onStoreChange),
+    () => onlineManager.isOnline(),
+  )
+  const isOffline = !isOnline
+
+  const offlineStore = useOfflineSetsStore()
+
   const placeholder = useTokenColor('--muted-foreground')
-  const items = flattenPages(sets.data)
   const trimmed = title.trim()
+
+  const items = isOffline
+    ? Object.values(offlineStore.sets)
+        .filter(
+          (entry) =>
+            entry.status === 'available' &&
+            entry.metadata &&
+            (parent === null ? !entry.metadata.parentId : entry.metadata.parentId === parent),
+        )
+        .map((entry) => entry.metadata!)
+    : flattenPages(sets.data)
 
   const submit = (): void => {
     if (trimmed.length === 0 || create.isPending) return
@@ -482,9 +501,9 @@ export function SetList({
         </Text>
       )}
 
-      {sets.isPending ? (
+      {!isOffline && sets.isPending ? (
         <ActivityIndicator accessibilityLabel="Loading sets" />
-      ) : sets.isError ? (
+      ) : !isOffline && sets.isError ? (
         <View className="gap-3 rounded-xl border border-border bg-surface p-5">
           <Text className="text-sm text-warning">Could not load your sets.</Text>
           <Button

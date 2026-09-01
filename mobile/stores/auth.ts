@@ -51,6 +51,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   applySession: (session, isOffline = false) => {
     if (!session) {
       set({ status: 'anonymous', user: null, settings: null })
+      const offlineSets = useOfflineSetsStore.getState()
+      if (offlineSets.reset) offlineSets.reset()
       return
     }
     set({
@@ -58,6 +60,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user: session.user,
       settings: session.settings,
     })
+    void useOfflineSetsStore.getState().load()
   },
 
   login: async (email, password) => {
