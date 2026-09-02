@@ -51,3 +51,26 @@ export function downloadJsonFile(filename: string, jsonString: string): void {
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
 }
+
+/**
+ * Shares JSON via Web Share API if supported, or downloads file.
+ */
+export async function shareOrDownloadSetJson(setId: string, setTitle: string): Promise<void> {
+  const json = await exportSingleSetAsJson(setId)
+  const cleanTitle = setTitle.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase()
+  const filename = `${cleanTitle}_export.json`
+
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({
+        title: setTitle,
+        text: json,
+      })
+      return
+    } catch {
+      // Fall through to download if cancelled or rejected
+    }
+  }
+
+  downloadJsonFile(filename, json)
+}
