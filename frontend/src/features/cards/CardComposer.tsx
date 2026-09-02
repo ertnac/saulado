@@ -6,10 +6,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { AlertIcon } from '@/components/ui/icons'
 import { useFormErrors } from '@/hooks/useFormErrors'
 import { HighlightEditor } from './HighlightEditor'
-import { TagInput } from './TagInput'
 import { useCardDraft } from './useCardDraft'
 import { clearDraft, readDraft, useCardDraftPersistence } from './useCardDraftPersistence'
-import { useCard, useCreateCard, useTags, useUpdateCard } from './queries'
+import { useCard, useCreateCard, useUpdateCard } from './queries'
 
 /**
  * Writing a card without leaving the set.
@@ -107,11 +106,9 @@ function Composer({ setId, card, onClose, importQueue }: ComposerProps): ReactEl
           answers: restored?.answers ?? card?.answers,
         },
   )
-  const [tags, setTags] = useState<string[]>(restored?.tags ?? card?.tags ?? [])
   const [added, setAdded] = useState(0)
 
   const { errors, setFromError, clear } = useFormErrors()
-  const allTags = useTags()
   const create = useCreateCard(setId)
   const update = useUpdateCard(card?.id ?? '')
 
@@ -137,7 +134,7 @@ function Composer({ setId, card, onClose, importQueue }: ComposerProps): ReactEl
    */
   useCardDraftPersistence(
     scope,
-    { paragraph: draft.paragraph, answers: draft.answers, tags },
+    { paragraph: draft.paragraph, answers: draft.answers },
     !editing && !importing && !pending,
   )
 
@@ -157,7 +154,7 @@ function Composer({ setId, card, onClose, importQueue }: ComposerProps): ReactEl
     clear()
     // `paragraph` and `answers` always travel together: the offsets index into
     // this paragraph and nothing else.
-    const body = { paragraph: draft.paragraph, answers: toAnswerInputs(draft.answers), tags }
+    const body = { paragraph: draft.paragraph, answers: toAnswerInputs(draft.answers) }
 
     try {
       if (editing) {
@@ -173,18 +170,13 @@ function Composer({ setId, card, onClose, importQueue }: ComposerProps): ReactEl
         // No `clearDraft` and no `reset`: persistence is off while importing, so
         // this scope still holds whatever the user was writing before the import
         // started and is not this composer's to delete — and the parent remounts
-        // on the next index, which clears the paragraph, the answers and the
-        // tags in one go.
+        // on the next index, which clears the paragraph and the answers.
         importQueue.onAdvance()
         return
       }
 
       clearDraft(scope)
-      // Emptied rather than collapsed. Tags are cleared with it: they described
-      // the card that was just saved, and carrying them silently onto the next
-      // one is a mistake the user only notices later, in the tag filter.
       draft.reset({ paragraph: '' })
-      setTags([])
       setAdded((count) => count + 1)
     } catch (error) {
       setFromError(error)
@@ -249,12 +241,6 @@ function Composer({ setId, card, onClose, importQueue }: ComposerProps): ReactEl
             {errors.fields.answers ?? errors.fields.paragraph}
           </p>
         )}
-
-        <TagInput
-          value={tags}
-          onChange={setTags}
-          suggestions={allTags.data?.tags.map((entry) => entry.tag)}
-        />
 
         <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" disabled={pending || !ready}>

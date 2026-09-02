@@ -11,6 +11,7 @@ import { ConfirmEmailChangePage } from '@/features/account/ConfirmEmailChangePag
 import { SettingsPage } from '@/features/account/SettingsPage'
 import { AdminDashboardPage } from '@/features/admin/AdminDashboardPage'
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
+import { LandingPage } from '@/features/landing/LandingPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
@@ -61,6 +62,8 @@ export function App(): ReactElement {
           <SessionRestorer>
             <>
               <Routes>
+                <Route path="/welcome" element={<LandingPage />} />
+                <Route path="/landing" element={<LandingPage />} />
                 <Route
                   path="/login"
                   element={

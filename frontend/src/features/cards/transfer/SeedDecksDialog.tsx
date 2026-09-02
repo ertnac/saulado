@@ -127,18 +127,6 @@ export function SeedDecksDialog({ open, onClose }: SeedDecksDialogProps): ReactE
                             {set.cards.length} cards
                           </Badge>
                         </div>
-                        <div className="flex flex-wrap gap-1 pt-0.5">
-                          {Array.from(new Set(set.cards.flatMap((c) => c.tags ?? []))).map(
-                            (tag) => (
-                              <span
-                                key={tag}
-                                className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
-                              >
-                                #{tag}
-                              </span>
-                            ),
-                          )}
-                        </div>
                       </div>
 
                       <div className="flex items-center gap-2">

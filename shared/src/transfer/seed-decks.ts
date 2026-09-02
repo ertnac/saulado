@@ -19,7 +19,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'Binary search',
             },
           ],
-          tags: ['algorithms', 'cs'],
         },
         {
           paragraph:
@@ -31,7 +30,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'hash table',
             },
           ],
-          tags: ['data-structures', 'cs'],
         },
         {
           paragraph:
@@ -43,7 +41,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'stack',
             },
           ],
-          tags: ['data-structures', 'cs'],
         },
         {
           paragraph: 'A queue operates under the First-In First-Out (FIFO) ordering pattern.',
@@ -54,7 +51,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'First-In First-Out',
             },
           ],
-          tags: ['data-structures', 'cs'],
         },
         {
           paragraph:
@@ -66,7 +62,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'QuickSort',
             },
           ],
-          tags: ['algorithms', 'sorting'],
         },
         {
           paragraph:
@@ -78,7 +73,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'left subtree',
             },
           ],
-          tags: ['trees', 'cs'],
         },
         {
           paragraph:
@@ -90,7 +84,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'shortest path',
             },
           ],
-          tags: ['graphs', 'algorithms'],
         },
         {
           paragraph:
@@ -102,7 +95,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'Recursion',
             },
           ],
-          tags: ['programming', 'cs'],
         },
         {
           paragraph: 'A graph without any cycles is formally known as an acyclic graph.',
@@ -113,7 +105,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'acyclic',
             },
           ],
-          tags: ['graphs', 'cs'],
         },
         {
           paragraph:
@@ -125,7 +116,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'Dynamic programming',
             },
           ],
-          tags: ['algorithms', 'dp'],
         },
       ],
     },
@@ -143,7 +133,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'Renaissance',
             },
           ],
-          tags: ['history', 'europe'],
         },
         {
           paragraph:
@@ -155,7 +144,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'Industrial Revolution',
             },
           ],
-          tags: ['history', 'modern'],
         },
         {
           paragraph:
@@ -167,7 +155,6 @@ export const SEED_DECKS_RAW = {
               answerText: '1789',
             },
           ],
-          tags: ['history', 'france'],
         },
         {
           paragraph:
@@ -179,7 +166,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'Magna Carta',
             },
           ],
-          tags: ['history', 'britain'],
         },
         {
           paragraph:
@@ -191,7 +177,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'Silk Road',
             },
           ],
-          tags: ['history', 'asia'],
         },
         {
           paragraph:
@@ -203,7 +188,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'Roman Empire',
             },
           ],
-          tags: ['history', 'rome'],
         },
         {
           paragraph:
@@ -215,7 +199,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'printing press',
             },
           ],
-          tags: ['history', 'inventions'],
         },
         {
           paragraph:
@@ -227,7 +210,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'Cold War',
             },
           ],
-          tags: ['history', '20th-century'],
         },
         {
           paragraph:
@@ -239,7 +221,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'Mesopotamia',
             },
           ],
-          tags: ['history', 'ancient'],
         },
         {
           paragraph:
@@ -251,7 +232,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'Rosetta Stone',
             },
           ],
-          tags: ['history', 'archaeology'],
         },
       ],
     },
@@ -269,7 +249,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'Mitochondria',
             },
           ],
-          tags: ['biology', 'cellular'],
         },
         {
           paragraph: 'The human heart has four chambers: two atria and two ventricles.',
@@ -280,7 +259,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'four chambers',
             },
           ],
-          tags: ['biology', 'cardiovascular'],
         },
         {
           paragraph:
@@ -292,7 +270,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'Hemoglobin',
             },
           ],
-          tags: ['biology', 'blood'],
         },
         {
           paragraph: 'The central nervous system consists of the brain and the spinal cord.',
@@ -303,7 +280,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'spinal cord',
             },
           ],
-          tags: ['biology', 'nervous-system'],
         },
         {
           paragraph:
@@ -315,7 +291,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'pancreas',
             },
           ],
-          tags: ['biology', 'endocrine'],
         },
         {
           paragraph:
@@ -327,7 +302,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'double helix',
             },
           ],
-          tags: ['biology', 'genetics'],
         },
         {
           paragraph:
@@ -339,7 +313,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'alveoli',
             },
           ],
-          tags: ['biology', 'respiratory'],
         },
         {
           paragraph: 'The skeletal system consists of 206 bones in an adult human body.',
@@ -350,7 +323,6 @@ export const SEED_DECKS_RAW = {
               answerText: '206',
             },
           ],
-          tags: ['biology', 'anatomy'],
         },
         {
           paragraph:
@@ -362,7 +334,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'synapses',
             },
           ],
-          tags: ['biology', 'neuroscience'],
         },
         {
           paragraph:
@@ -374,7 +345,6 @@ export const SEED_DECKS_RAW = {
               answerText: 'kidneys',
             },
           ],
-          tags: ['biology', 'renal'],
         },
       ],
     },

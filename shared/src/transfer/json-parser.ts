@@ -1,6 +1,6 @@
 import { normalizeParagraph } from '../cloze/answers.js'
 import { codePointLength } from '../cloze/codepoints.js'
-import { ANSWERS_MAX_PER_CARD, isSetColor, normalizeTags, type SetColor } from '../cards/limits.js'
+import { ANSWERS_MAX_PER_CARD, isSetColor, type SetColor } from '../cards/limits.js'
 import type { AnswerInput } from '../cards/types.js'
 import { extractClozeBrackets } from './cloze-brackets.js'
 import { findStringAnswers } from './string-answers.js'
@@ -8,7 +8,6 @@ import { findStringAnswers } from './string-answers.js'
 export interface ParsedImportCard {
   paragraph: string
   answers: AnswerInput[]
-  tags?: string[]
 }
 
 export interface ParsedImportSet {
@@ -143,20 +142,9 @@ export function parseCard(raw: unknown): ParsedImportCard | null {
 
   const finalAnswers = nonOverlapping.slice(0, ANSWERS_MAX_PER_CARD)
 
-  // Tags
-  let rawTags: string[] = []
-  if (Array.isArray(raw.tags)) {
-    rawTags = raw.tags.filter((t): t is string => typeof t === 'string')
-  } else if (typeof raw.tags === 'string') {
-    rawTags = raw.tags.split(',').map((t) => t.trim())
-  }
-
-  const tags = normalizeTags(rawTags)
-
   return {
     paragraph,
     answers: finalAnswers,
-    tags: tags.length > 0 ? tags : undefined,
   }
 }
 

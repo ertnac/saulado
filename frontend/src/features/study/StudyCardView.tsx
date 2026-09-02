@@ -34,29 +34,15 @@ export function StudyCardView({
   onChange,
   onSubmit,
 }: StudyCardViewProps): ReactElement {
-  const meta = card.isNew || card.isLeech || card.tags.length > 0
+  const meta = card.isNew || card.isLeech
 
   return (
     <Card className="p-5 sm:p-6">
-      {/* ── Status Flags & Tags ── */}
+      {/* ── Status Flags ── */}
       {meta && (
-        <div className="mb-4 space-y-2">
-          {(card.isNew || card.isLeech) && (
-            <div className="flex flex-wrap items-center gap-2">
-              {card.isNew && <Badge tone="accent">New</Badge>}
-              {card.isLeech && <Badge tone="warning">Difficult</Badge>}
-            </div>
-          )}
-
-          {card.tags.length > 0 && (
-            <ul className="flex flex-wrap gap-1.5">
-              {card.tags.map((tag) => (
-                <li key={tag}>
-                  <Badge tone="sand">{tag}</Badge>
-                </li>
-              ))}
-            </ul>
-          )}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {card.isNew && <Badge tone="accent">New</Badge>}
+          {card.isLeech && <Badge tone="warning">Difficult</Badge>}
         </div>
       )}
 

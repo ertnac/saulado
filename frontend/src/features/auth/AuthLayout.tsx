@@ -26,8 +26,8 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-12">
         <header className="mb-6">
           <Link
-            to="/"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
+            to="/welcome"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             <SparkIcon />
             Saulado
@@ -36,7 +36,7 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
           {subtitle && <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>}
         </header>
 
-        <div className="rounded-lg bg-surface p-6 shadow-soft">{children}</div>
+        <div className="clay-card p-6 sm:p-8">{children}</div>
 
         {footer && <div className="mt-6 text-sm text-muted-foreground">{footer}</div>}
       </main>

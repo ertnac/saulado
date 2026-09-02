@@ -193,6 +193,129 @@
       background-position: -800% 0;
     }
   }
+
+  /* ── Claymorphism & Minimalist Utilities ── */
+  .clay-card {
+    background-color: hsl(var(--surface));
+    box-shadow:
+      0 18px 36px -12px hsl(var(--foreground) / 0.08),
+      0 4px 12px -2px hsl(var(--foreground) / 0.04),
+      inset 2px 2px 4px rgba(255, 255, 255, 0.85),
+      inset -2px -2px 5px rgba(0, 0, 0, 0.04);
+    border-radius: 1.5rem;
+    border: 1px solid hsl(var(--border) / 0.6);
+  }
+
+  .dark .clay-card {
+    box-shadow:
+      0 20px 40px -15px rgba(0, 0, 0, 0.5),
+      0 4px 12px -2px rgba(0, 0, 0, 0.3),
+      inset 1.5px 1.5px 3px rgba(255, 255, 255, 0.1),
+      inset -1.5px -1.5px 3px rgba(0, 0, 0, 0.4);
+    border: 1px solid hsl(var(--border) / 0.4);
+  }
+
+  .clay-card-interactive {
+    @apply clay-card transition-all duration-200;
+  }
+
+  .clay-card-interactive:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      0 24px 48px -12px hsl(var(--foreground) / 0.12),
+      0 8px 18px -4px hsl(var(--foreground) / 0.06),
+      inset 2px 2px 4px rgba(255, 255, 255, 0.95),
+      inset -2px -2px 5px rgba(0, 0, 0, 0.04);
+  }
+
+  .dark .clay-card-interactive:hover {
+    box-shadow:
+      0 26px 50px -12px rgba(0, 0, 0, 0.65),
+      0 8px 20px -4px rgba(0, 0, 0, 0.45),
+      inset 1.5px 1.5px 3px rgba(255, 255, 255, 0.15),
+      inset -1.5px -1.5px 3px rgba(0, 0, 0, 0.5);
+  }
+
+  .clay-card-interactive:active {
+    transform: translateY(1px);
+    box-shadow:
+      0 6px 14px -4px hsl(var(--foreground) / 0.06),
+      inset 2px 2px 5px rgba(0, 0, 0, 0.06),
+      inset -2px -2px 5px rgba(255, 255, 255, 0.4);
+  }
+
+  .clay-btn-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(158 48% 20%));
+    color: hsl(var(--primary-foreground));
+    box-shadow:
+      0 10px 24px -6px hsl(var(--primary) / 0.4),
+      0 2px 6px -1px hsl(var(--primary) / 0.2),
+      inset 1.5px 1.5px 3px rgba(255, 255, 255, 0.35),
+      inset -1.5px -1.5px 3px rgba(0, 0, 0, 0.25);
+    border-radius: 9999px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .clay-btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 14px 28px -6px hsl(var(--primary) / 0.5),
+      0 4px 10px -1px hsl(var(--primary) / 0.25),
+      inset 1.5px 1.5px 3px rgba(255, 255, 255, 0.45),
+      inset -1.5px -1.5px 3px rgba(0, 0, 0, 0.25);
+  }
+
+  .clay-btn-primary:active {
+    transform: translateY(1px);
+    box-shadow:
+      0 4px 10px -2px hsl(var(--primary) / 0.3),
+      inset 2px 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .clay-btn-accent {
+    background: linear-gradient(135deg, hsl(var(--accent)), hsl(14 82% 50%));
+    color: hsl(var(--accent-foreground));
+    box-shadow:
+      0 10px 24px -6px hsl(var(--accent) / 0.45),
+      0 2px 6px -1px hsl(var(--accent) / 0.25),
+      inset 1.5px 1.5px 3px rgba(255, 255, 255, 0.4),
+      inset -1.5px -1.5px 3px rgba(0, 0, 0, 0.2);
+    border-radius: 9999px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .clay-btn-accent:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 14px 28px -6px hsl(var(--accent) / 0.55),
+      0 4px 10px -1px hsl(var(--accent) / 0.3),
+      inset 1.5px 1.5px 3px rgba(255, 255, 255, 0.5),
+      inset -1.5px -1.5px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .clay-btn-accent:active {
+    transform: translateY(1px);
+    box-shadow:
+      0 4px 10px -2px hsl(var(--accent) / 0.35),
+      inset 2px 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .clay-pill {
+    background-color: hsl(var(--surface));
+    box-shadow:
+      0 4px 12px -2px hsl(var(--foreground) / 0.06),
+      inset 1px 1px 2px rgba(255, 255, 255, 0.8),
+      inset -1px -1px 2px rgba(0, 0, 0, 0.04);
+    border-radius: 9999px;
+    border: 1px solid hsl(var(--border) / 0.7);
+  }
+
+  .dark .clay-pill {
+    box-shadow:
+      0 4px 12px -2px rgba(0, 0, 0, 0.4),
+      inset 1px 1px 2px rgba(255, 255, 255, 0.1),
+      inset -1px -1px 2px rgba(0, 0, 0, 0.3);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -85,13 +85,11 @@ describe('transfer module (shared)', () => {
     it('parses card with bracket clozes', () => {
       const card = parseCard({
         paragraph: 'France has capital [Paris].',
-        tags: ['geography', 'capitals'],
       })
 
       expect(card).not.toBeNull()
       expect(card?.paragraph).toBe('France has capital Paris.')
       expect(card?.answers).toHaveLength(1)
-      expect(card?.tags).toEqual(['geography', 'capitals'])
     })
 
     it('parses QA format card with front and back', () => {
@@ -118,7 +116,6 @@ describe('transfer module (shared)', () => {
             {
               paragraph: 'Plants use [chlorophyll] to absorb light.',
               answers: [],
-              tags: ['bio'],
             },
           ],
         },
