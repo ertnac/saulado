@@ -70,7 +70,9 @@ export function LoginPage(): ReactElement {
         window.google.accounts.id.renderButton(googleBtnRef.current, {
           theme: 'outline',
           size: 'large',
-          width: 320,
+          shape: 'pill',
+          text: 'continue_with',
+          width: 280,
         })
       } else if (typeof window !== 'undefined') {
         timer = setTimeout(initGoogle, 100)
@@ -104,36 +106,8 @@ export function LoginPage(): ReactElement {
       title="Sign in"
       subtitle="Welcome back. Continue your learning journey."
       activeTab="login"
-      footer={
-        <div className="space-y-3 text-center">
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            Don&apos;t have an account?{' '}
-            <Link
-              to="/register"
-              className="font-bold text-foreground underline hover:text-primary transition-colors"
-            >
-              Create an account
-            </Link>
-          </p>
-        </div>
-      }
     >
       {errors.general && <FormAlert message={errors.general} />}
-
-      {/* Google Auth Container */}
-      <div className="flex justify-center mb-5" ref={googleBtnRef}></div>
-
-      {/* Divider */}
-      <div className="relative mb-5">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t border-border/70" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-surface px-3 font-bold text-muted-foreground tracking-wider">
-            Or continue with email
-          </span>
-        </div>
-      </div>
 
       <form
         onSubmit={(e) => {
@@ -162,6 +136,14 @@ export function LoginPage(): ReactElement {
 
         <FormField
           label="Password"
+          labelAction={
+            <Link
+              to="/forgot-password"
+              className="text-xs font-semibold text-muted-foreground hover:text-primary transition-colors underline"
+            >
+              Forgot password?
+            </Link>
+          }
           type={showPassword ? 'text' : 'password'}
           value={password}
           onChange={(e) => {
@@ -194,16 +176,22 @@ export function LoginPage(): ReactElement {
         >
           {submitting ? 'Signing in…' : 'Sign in'}
         </Button>
-
-        <p className="text-center text-xs sm:text-sm pt-1">
-          <Link
-            to="/forgot-password"
-            className="text-muted-foreground hover:text-foreground underline transition-colors"
-          >
-            Forgot your password?
-          </Link>
-        </p>
       </form>
+
+      {/* Sleek Minimalist Divider */}
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-border/60" />
+        </div>
+        <div className="relative flex justify-center text-xs">
+          <span className="bg-surface px-3 font-semibold text-muted-foreground">
+            or continue with
+          </span>
+        </div>
+      </div>
+
+      {/* Pill-shaped Google Auth Container at bottom */}
+      <div className="flex justify-center" ref={googleBtnRef}></div>
     </AuthLayout>
   )
 }

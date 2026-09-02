@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type FormEvent, type ReactElement } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { checkPassword, PASSWORD_MIN_LENGTH } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
 import { FormField } from '@/components/ui/form-field'
@@ -63,7 +63,9 @@ export function RegisterPage(): ReactElement {
         window.google.accounts.id.renderButton(googleBtnRef.current, {
           theme: 'outline',
           size: 'large',
-          width: 320,
+          shape: 'pill',
+          text: 'continue_with',
+          width: 280,
         })
       } else if (typeof window !== 'undefined') {
         timer = setTimeout(initGoogle, 100)
@@ -113,47 +115,20 @@ export function RegisterPage(): ReactElement {
       subtitle="Start turning your notes into long-term recall."
       activeTab="register"
       footer={
-        <div className="space-y-4 text-center">
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            Already have an account?{' '}
-            <Link
-              to="/login"
-              className="font-bold text-foreground underline hover:text-primary transition-colors"
-            >
-              Sign in
-            </Link>
-          </p>
-
-          <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-1">
-            <span className="flex items-center gap-1">
-              <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> Free Forever
-            </span>
-            <span className="flex items-center gap-1">
-              <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> SM-2 Spaced
-            </span>
-            <span className="flex items-center gap-1">
-              <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> No Credit Card
-            </span>
-          </div>
+        <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-1">
+          <span className="flex items-center gap-1">
+            <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> Free Forever
+          </span>
+          <span className="flex items-center gap-1">
+            <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> SM-2 Spaced
+          </span>
+          <span className="flex items-center gap-1">
+            <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> No Credit Card
+          </span>
         </div>
       }
     >
       {errors.general && <FormAlert message={errors.general} />}
-
-      {/* Google Auth Container */}
-      <div className="flex justify-center mb-5" ref={googleBtnRef}></div>
-
-      {/* Divider */}
-      <div className="relative mb-5">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t border-border/70" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-surface px-3 font-bold text-muted-foreground tracking-wider">
-            Or continue with email
-          </span>
-        </div>
-      </div>
 
       <form
         onSubmit={(e) => {
@@ -233,9 +208,24 @@ export function RegisterPage(): ReactElement {
           className="clay-btn-primary w-full py-3 text-sm font-bold mt-2 shadow-md"
           size="lg"
         >
-          {submitting ? 'Creating account…' : 'Create Account'}
+          {submitting ? 'Creating account…' : 'Create account'}
         </Button>
       </form>
+
+      {/* Sleek Minimalist Divider */}
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-border/60" />
+        </div>
+        <div className="relative flex justify-center text-xs">
+          <span className="bg-surface px-3 font-semibold text-muted-foreground">
+            or continue with
+          </span>
+        </div>
+      </div>
+
+      {/* Pill-shaped Google Auth Container at bottom */}
+      <div className="flex justify-center" ref={googleBtnRef}></div>
     </AuthLayout>
   )
 }

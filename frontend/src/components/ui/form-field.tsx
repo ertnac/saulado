@@ -9,6 +9,7 @@ interface FormFieldProps extends Omit<InputProps, 'id' | 'aria-invalid' | 'aria-
   error?: string
   /** Persistent guidance shown under the field, e.g. the password rule. */
   hint?: ReactNode
+  labelAction?: ReactNode
   leftIcon?: ReactNode
   rightElement?: ReactNode
 }
@@ -16,12 +17,13 @@ interface FormFieldProps extends Omit<InputProps, 'id' | 'aria-invalid' | 'aria-
 /**
  * A labelled input with its error and hint wired for screen readers.
  *
- * Supports left icon and right action adornments (e.g. show/hide password).
+ * Supports left icon, right action adornments (e.g. show/hide password), and top label actions.
  */
 export function FormField({
   label,
   error,
   hint,
+  labelAction,
   leftIcon,
   rightElement,
   className,
@@ -35,13 +37,16 @@ export function FormField({
 
   return (
     <div className="space-y-1.5 text-left">
-      <label htmlFor={id} className="block text-xs sm:text-sm font-semibold text-foreground/90">
-        {label}
-      </label>
+      <div className="flex items-center justify-between">
+        <label htmlFor={id} className="block text-xs sm:text-sm font-bold text-foreground">
+          {label}
+        </label>
+        {labelAction}
+      </div>
 
       <div className="relative flex items-center">
         {leftIcon && (
-          <div className="pointer-events-none absolute left-3.5 text-muted-foreground">
+          <div className="pointer-events-none absolute left-3.5 text-muted-foreground flex items-center justify-center">
             {leftIcon}
           </div>
         )}
@@ -53,7 +58,7 @@ export function FormField({
           className={cn(
             leftIcon ? 'pl-10' : '',
             rightElement ? 'pr-10' : '',
-            'rounded-2xl border-border/80 bg-surface/90 focus:bg-surface transition-all text-sm',
+            'rounded-2xl border-border/80 bg-surface focus:bg-surface transition-all text-sm h-11',
             className,
           )}
           {...props}
