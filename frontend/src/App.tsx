@@ -1,5 +1,5 @@
 import { useEffect, type ReactElement } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { AppShell } from '@/components/layout/AppShell'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -54,6 +54,12 @@ function SessionRestorer({ children }: { children: ReactElement }): ReactElement
   return children
 }
 
+/**
+ * Root home route:
+ * - If anonymous / not logged in: renders the Landing Page (Claymorphism & Minimalism)
+ * - If authenticated: renders the personalized student Dashboard within the AppShell
+ * - If restoring session: renders the loading skeleton without bouncing to login
+ */
 export function App(): ReactElement {
   return (
     <ErrorBoundary>
@@ -62,8 +68,22 @@ export function App(): ReactElement {
           <SessionRestorer>
             <>
               <Routes>
+                {/* ── Public Static Landing Pages ── */}
                 <Route path="/welcome" element={<LandingPage />} />
                 <Route path="/landing" element={<LandingPage />} />
+
+                {/* ── Root Route: Dashboard if logged in, LandingPage if logged out ── */}
+                <Route
+                  element={
+                    <ProtectedRoute fallback={<LandingPage />}>
+                      <AppShell />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route path="/" element={<DashboardPage />} />
+                </Route>
+
+                {/* ── Auth Routes ── */}
                 <Route
                   path="/login"
                   element={
@@ -105,6 +125,7 @@ export function App(): ReactElement {
                 */}
                 <Route path="/account/email/confirm" element={<ConfirmEmailChangePage />} />
 
+                {/* ── Authenticated App Routes ── */}
                 <Route
                   element={
                     <ProtectedRoute>
@@ -112,7 +133,7 @@ export function App(): ReactElement {
                     </ProtectedRoute>
                   }
                 >
-                  <Route path="/" element={<DashboardPage />} />
+                  <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/sets" element={<SetsPage />} />
                   <Route path="/progress" element={<ProgressPage />} />
                   {/*
@@ -140,9 +161,6 @@ export function App(): ReactElement {
                     }
                   />
                 </Route>
-
-                {/* Alias, so an early bookmark still lands somewhere real. */}
-                <Route path="/dashboard" element={<Navigate to="/" replace />} />
 
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>

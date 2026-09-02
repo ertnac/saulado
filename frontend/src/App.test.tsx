@@ -115,7 +115,19 @@ describe('session restore', () => {
     expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument()
   })
 
-  it('redirects to sign in when there is no session', async () => {
+  it('lands on the landing page when visiting root with no session', async () => {
+    mockFetch(unauthorized())
+    render(<App />)
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /Remember what you learn/i, level: 1 }),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('redirects to sign in when visiting a protected route with no session', async () => {
+    window.history.pushState({}, '', '/sets')
     mockFetch(unauthorized())
     render(<App />)
 

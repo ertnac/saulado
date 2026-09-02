@@ -14,7 +14,13 @@ import { useAuthStore } from '@/stores/auth'
  * bounce them back a beat later — which is exactly the bug the Phase 2
  * done-when criterion is written to catch.
  */
-export function ProtectedRoute({ children }: { children: ReactElement }): ReactElement {
+export function ProtectedRoute({
+  children,
+  fallback,
+}: {
+  children: ReactElement
+  fallback?: ReactElement
+}): ReactElement {
   const status = useAuthStore((s) => s.status)
   const location = useLocation()
 
@@ -32,6 +38,7 @@ export function ProtectedRoute({ children }: { children: ReactElement }): ReactE
   }
 
   if (status === 'anonymous') {
+    if (fallback) return fallback
     /**
      * Carries the attempted path so login can return the user to it. Without
      * this, following a deep link while signed out silently drops it and lands
