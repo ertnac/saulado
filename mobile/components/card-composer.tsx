@@ -71,24 +71,14 @@ function Composer({
   const advance = useImportQueue((state) => state.advance)
   const clearQueue = useImportQueue((state) => state.clear)
 
-  // Seeded through the initializer rather than a `reset` in an effect — a reset
-  // landing after mount races the user's typing and discards it. Every value is
-  // already resolved by the time this component exists, which is the whole point
-  // of the gate in `CardComposer` below.
-  //
-  // An imported card wins over a restored draft: it is the thing the user is
-  // looking at, and its answers are offsets into *its* paragraph, so pairing
-  // them with any other one puts every blank over the wrong words.
   const seed = imported ?? restored ?? card
   const draft = useCardDraft({
     paragraph: seed?.paragraph,
     answers: seed?.answers,
-    // A draft that arrives with blanks already placed opens on the surface that
-    // shows them. Landing on the text input would render a paragraph with no
-    // visible highlights, which reads as the work having been thrown away.
     mode: seed !== undefined && seed.answers.length > 0 ? 'highlight' : 'compose',
   })
   const [tags] = useState<string[]>(card?.tags ?? restored?.tags ?? [])
+  const [createdCount, setCreatedCount] = useState(0)
 
   const { errors, setFromError, clear } = useFormErrors()
   const create = useCreateCard(setId)
@@ -97,24 +87,8 @@ function Composer({
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const pending = create.isPending || update.isPending || isSubmitting
-  // The committed paragraph, not `draftText`: an uncommitted edit is not what
-  // would be sent, and enabling Save on it would store the committed text while
-  // the user is looking at something else.
-  const ready = draft.paragraph.trim().length > 0
+  const ready = draft.paragraph.trim().length > 0 || draft.draftText.trim().length > 0
 
-  /**
-   * Disabled while a save is in flight, not only after it succeeds.
-   *
-   * The debounce writes 500ms after the last keystroke, so a timer queued just
-   * before Save would otherwise fire once the composer has cleared and reset —
-   * restoring the paragraph of a card that now exists. Flipping `enabled`
-   * cancels the pending timer through the effect's own cleanup.
-   *
-   * Off entirely while importing. The scope key is `set:${setId}:new` for every
-   * new card, so a queue of scanned cards would all write to one key and
-   * overwrite each other — and the survivor would then be restored into the
-   * user's own next card as if they had written it.
-   */
   useCardDraftPersistence(
     scope,
     { paragraph: draft.paragraph, answers: draft.answers, tags },
@@ -126,11 +100,17 @@ function Composer({
     onClose()
   }
 
-  const submit = async (): Promise<void> => {
+  const submit = async (addAnother = true): Promise<void> => {
     clear()
-    // `paragraph` and `answers` always travel together: the offsets index into
-    // this paragraph and nothing else.
-    const body = { paragraph: draft.paragraph, answers: toAnswerInputs(draft.answers), tags }
+    draft.commitParagraph()
+    const text = draft.draftText.trim().length > 0 ? draft.draftText : draft.paragraph
+    if (text.trim().length === 0) return
+
+    const body = {
+      paragraph: draft.paragraph.trim().length > 0 ? draft.paragraph : text,
+      answers: toAnswerInputs(draft.answers),
+      tags,
+    }
 
     setIsSubmitting(true)
 
@@ -146,14 +126,15 @@ function Composer({
       clearDraft(scope)
 
       if (imported !== undefined) {
-        // The parent remounts this on the new index, so there is nothing to
-        // reset — resetting here would clear the draft the next card seeds from.
         advance()
         return
       }
 
       draft.reset({ paragraph: '' })
-      onClose()
+      setCreatedCount((c) => c + 1)
+      if (!addAnother) {
+        onClose()
+      }
     } catch (error) {
       setFromError(error)
     } finally {
@@ -168,6 +149,15 @@ function Composer({
       accessibilityLabel={editing ? 'Edit card' : 'New card'}
       className="gap-5 bg-surface pb-10"
     >
+      {!editing && createdCount > 0 && (
+        <View className="flex-row items-center justify-between rounded-xl border border-primary/20 bg-primary/10 px-4 py-2.5">
+          <Text className="text-xs font-bold text-primary">
+            ✓ {createdCount} {createdCount === 1 ? 'card' : 'cards'} added to this set
+          </Text>
+          <Button label="Done" size="md" variant="outline" onPress={handleClose} />
+        </View>
+      )}
+
       {imported !== undefined && (
         <Text className="text-sm font-medium text-muted-foreground">
           {`From your scan — card ${String(imported.index + 1)} of ${String(imported.total)}`}
@@ -190,25 +180,19 @@ function Composer({
           loading={pending}
           disabled={!ready}
           onPress={() => {
-            void submit()
+            void submit(true)
           }}
         />
 
         {imported === undefined ? (
           <Button
-            label={editing ? 'Cancel' : 'Cancel'}
+            label={editing ? 'Cancel' : createdCount > 0 ? 'Done adding cards' : 'Cancel'}
             variant="ghost"
             disabled={pending}
             onPress={handleClose}
           />
         ) : (
           <>
-            {/*
-              Skip appears here as well as in the scan review, and that is not
-              redundancy: there it drops a question before any blanks are placed,
-              here it drops a card the user has looked at properly. Without it
-              they back out of the whole scan to discard one.
-            */}
             <Button label="Skip this one" variant="ghost" disabled={pending} onPress={advance} />
             <Button
               label="Stop importing"

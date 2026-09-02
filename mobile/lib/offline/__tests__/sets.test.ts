@@ -1,9 +1,14 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { downloadSet, getOfflineSet, getOfflineSetIndex, getSetsIndexKey } from '../sets'
+import { downloadSet, getOfflineSet, getOfflineSetIndex, removeOfflineSet } from '../sets'
 import * as api from '../../../services/cards'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAuthStore } from '../../../stores/auth'
+import { mockDbInstance } from './mock-db'
+
+vi.mock('expo-sqlite', () => ({
+  openDatabaseAsync: vi.fn(async () => mockDbInstance),
+}))
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
   default: {
@@ -33,11 +38,12 @@ vi.mock('../../../stores/auth', () => ({
   },
 }))
 
-describe('Offline Sets Engine Phase 5.5', () => {
+describe('Offline Sets SQLite Engine', () => {
   let mockStorage: Record<string, string> = {}
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockDbInstance.reset()
     mockStorage = {}
 
     vi.mocked(useAuthStore.getState).mockReturnValue({ user: { id: 'test-user' } } as any)
@@ -51,13 +57,23 @@ describe('Offline Sets Engine Phase 5.5', () => {
     })
   })
 
-  it('safely commits download (payload first, then index)', async () => {
-    vi.mocked(api.getSet).mockResolvedValue({ set: { id: 's1', title: 'Test Set' } } as any)
+  it('safely commits download into SQLite database and provides offline set', async () => {
+    vi.mocked(api.getSet).mockResolvedValue({
+      set: {
+        id: 's1',
+        title: 'Test Set',
+        cardCount: 1,
+        subtreeCardCount: 1,
+        tags: [],
+        createdAt: '2026-09-01T00:00:00Z',
+        updatedAt: '2026-09-01T00:00:00Z',
+      },
+    } as any)
     vi.mocked(api.listCards).mockResolvedValue({
       items: [
         {
           id: 'c1',
-          paragraph: 'Q',
+          paragraph: 'Question about biology',
           answerCount: 1,
           studySetId: 's1',
           tags: [],
@@ -68,44 +84,46 @@ describe('Offline Sets Engine Phase 5.5', () => {
       nextCursor: null,
     })
     vi.mocked(api.getCard).mockResolvedValue({
-      card: { id: 'c1', paragraph: 'Q', answers: [] },
+      card: {
+        id: 'c1',
+        studySetId: 's1',
+        prompt: 'Q',
+        body: 'Question about biology',
+        blanks: [{ ordinal: 0, text: 'biology' }],
+        tags: [],
+        cardType: 'cloze',
+        orderIndex: 0,
+        createdAt: '2026-09-01T00:00:00Z',
+        updatedAt: '2026-09-01T00:00:00Z',
+      },
     } as any)
 
     await downloadSet('s1')
 
-    // Expect payload to exist
-    const payloadRaw = mockStorage[`saulado-offline-set:test-user:s1`]!
-    expect(payloadRaw).toBeDefined()
-    const payload = JSON.parse(payloadRaw)
-    expect(payload.cards).toHaveLength(1)
+    // Expect set to be in SQLite
+    const setPayload = await getOfflineSet('s1')
+    expect(setPayload).not.toBeNull()
+    expect(setPayload?.metadata.title).toBe('Test Set')
+    expect(setPayload?.cards).toHaveLength(1)
+    expect(setPayload?.cards[0]!.id).toBe('c1')
 
-    // Expect index to be updated
-    const indexRaw = mockStorage[getSetsIndexKey('test-user')]!
-    const index = JSON.parse(indexRaw)
-    expect(index.sets['s1']!.status).toBe('available')
+    // Expect index to include s1 as available with syncStatus synced
+    const index = await getOfflineSetIndex()
+    expect(index.sets['s1']?.status).toBe('available')
+    expect(index.sets['s1']?.syncStatus).toBe('synced')
   })
 
-  it('quarantines and removes corrupted set payload', async () => {
-    // 1. Manually insert bad payload and valid index
-    mockStorage[getSetsIndexKey('test-user')] = JSON.stringify({
-      sets: { bad1: { setId: 'bad1', status: 'available', updatedAt: '2026' } },
-    })
-    mockStorage['saulado-offline-set:test-user:bad1'] = JSON.stringify({
-      userId: 'test-user',
-      setId: 'bad1',
-      metadata: null, // corrupted
-      cards: [],
-    })
+  it('removes offline set from SQLite', async () => {
+    vi.mocked(api.getSet).mockResolvedValue({
+      set: { id: 's1', title: 'Test Set', cardCount: 0, subtreeCardCount: 0, tags: [] },
+    } as any)
+    vi.mocked(api.listCards).mockResolvedValue({ items: [], nextCursor: null })
 
-    // 2. Fetching it should return null and auto-remove
-    const set = await getOfflineSet('bad1')
-    expect(set).toBeNull()
+    await downloadSet('s1')
+    expect(await getOfflineSet('s1')).not.toBeNull()
 
-    // 3. Ensure it was removed
-    expect(mockStorage['saulado-offline-set:test-user:bad1']).toBeUndefined()
-    const indexRaw = mockStorage[getSetsIndexKey('test-user')]
-    const index = indexRaw ? JSON.parse(indexRaw) : { sets: {} }
-    expect(index.sets['bad1']).toBeUndefined()
+    await removeOfflineSet('s1')
+    expect(await getOfflineSet('s1')).toBeNull()
   })
 
   it('cancels duplicate concurrent downloads using single-flight lock', async () => {
@@ -113,7 +131,9 @@ describe('Offline Sets Engine Phase 5.5', () => {
     vi.mocked(api.getSet).mockImplementation(async () => {
       apiCallCount++
       await new Promise((r) => setTimeout(r, 10))
-      return { set: { id: 's1', title: 'Test Set' } } as any
+      return {
+        set: { id: 's1', title: 'Test Set', cardCount: 0, subtreeCardCount: 0, tags: [] },
+      } as any
     })
     vi.mocked(api.listCards).mockResolvedValue({ items: [], nextCursor: null })
 
@@ -128,26 +148,7 @@ describe('Offline Sets Engine Phase 5.5', () => {
     expect(apiCallCount).toBe(1)
   })
 
-  it('handles bounded concurrency automatically', async () => {
-    vi.mocked(api.getSet).mockResolvedValue({ set: { id: 's1', title: 'Test Set' } } as any)
-
-    // Return 25 cards to test batching of 10
-    const summaries = Array.from({ length: 25 }, (_, i) => ({ id: `c${i}` }) as any)
-    vi.mocked(api.listCards).mockResolvedValue({ items: summaries, nextCursor: null })
-    vi.mocked(api.getCard).mockImplementation(
-      async (id: any) => ({ card: { id, paragraph: 'Q' } }) as any,
-    )
-
-    await downloadSet('s1')
-
-    const payloadRaw = mockStorage[`saulado-offline-set:test-user:s1`]!
-    const payload = JSON.parse(payloadRaw)
-    expect(payload.cards).toHaveLength(25)
-    // api.getCard should have been called 25 times
-    expect(vi.mocked(api.getCard)).toHaveBeenCalledTimes(25)
-  })
-
-  it('gracefully returns empty index when user is unauthenticated or restoring', async () => {
+  it('gracefully returns empty index when user is unauthenticated', async () => {
     vi.mocked(useAuthStore.getState).mockReturnValue({ user: null } as any)
 
     const index = await getOfflineSetIndex()

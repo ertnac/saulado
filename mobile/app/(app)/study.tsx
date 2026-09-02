@@ -151,13 +151,18 @@ export default function StudyScreen(): ReactElement {
   const setDetails = useSet(studySetId ?? undefined)
   const offlineStore = useOfflineSetsStore()
 
+  const isOffline = !onlineManager.isOnline()
+  const offlineSetEntry = studySetId ? offlineStore.sets[studySetId] : undefined
+  const totalCardsCount =
+    setDetails.data?.set.cardCount ?? offlineSetEntry?.metadata?.cardCount ?? 0
   const setEntry = studySetId
     ? dueCounts.data?.counts.find((c) => c.studySetId === studySetId)
     : undefined
-  const dueCardsCount = studySetId
-    ? (setEntry?.due ?? 0) + (setEntry?.newCards ?? 0)
-    : (dueCounts.data?.totalDue ?? 0) + (dueCounts.data?.totalNew ?? 0)
-  const totalCardsCount = setDetails.data?.set.cardCount
+  const dueCardsCount = isOffline
+    ? (offlineSetEntry?.metadata?.cardCount ?? 0)
+    : studySetId
+      ? (setEntry?.due ?? 0) + (setEntry?.newCards ?? 0)
+      : (dueCounts.data?.totalDue ?? 0) + (dueCounts.data?.totalNew ?? 0)
 
   useEffect(() => {
     // If no cards are due and user hasn't explicitly specified a mode query param,
@@ -219,7 +224,10 @@ export default function StudyScreen(): ReactElement {
       const isOfflineOrLocal =
         !onlineManager.isOnline() ||
         (typeof resumeId === 'string' && resumeId.startsWith('offline-session-'))
-      setPicking(studySetId !== null && !initialMode && (resumeId === null || isOfflineOrLocal))
+      setPicking(
+        (!onlineManager.isOnline() && studySetId === null) ||
+          (studySetId !== null && !initialMode && (resumeId === null || isOfflineOrLocal)),
+      )
     }
   }, [resumeId, studySetId, initialMode])
 
@@ -326,7 +334,11 @@ export default function StudyScreen(): ReactElement {
 
     if (resumeId === null || isOfflineOrLocal) {
       if (studySetId === null) {
-        void begin('spaced')
+        if (!onlineManager.isOnline()) {
+          setPicking(true)
+        } else {
+          void begin('spaced')
+        }
       } else if (initialMode) {
         void begin(initialMode)
       }

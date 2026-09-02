@@ -18,7 +18,6 @@ import {
   cardLabel,
   SET_TITLE_MAX_LENGTH,
   type StudyCardSummary,
-  type StudyCard,
   type DueCount,
 } from '@saulado/shared'
 import { Button } from '../../../components/button'
@@ -36,8 +35,8 @@ import {
 } from '../../../components/icons'
 import { SetList } from '../../../components/set-list'
 import { useOfflineSetsStore } from '../../../stores/offline-sets'
-import { downloadSet, removeOfflineSet, getOfflineSet } from '../../../lib/offline/sets'
-import type { OfflineSetPayload } from '../../../lib/offline/types'
+import { downloadSet, removeOfflineSet } from '../../../lib/offline/sets'
+import { onEntityRemapped, resolveEntityId } from '../../../lib/offline/id-remap'
 import { onlineManager } from '@tanstack/react-query'
 import {
   flattenPages,
@@ -53,15 +52,6 @@ import { exportSingleSetAsJson, shareJsonPayload } from '../../../services/json-
 import { useTokenColor } from '../../../stores/theme'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-/**
- * One set: what is in it, what is under it, and the composer for adding to it.
- *
- * The composer sits **above** the card list and is always mounted. Writing a card
- * used to be a route of its own, which meant the set you were writing against
- * disappeared the moment you started; here the list you are adding to stays on
- * screen and stays the thing you are looking at.
- */
-
 /** One card in the list, with its delete button. */
 function CardRow({
   card,
@@ -74,6 +64,7 @@ function CardRow({
 }): ReactElement {
   const warning = useTokenColor('--warning')
   const blanks = `${String(card.answerCount)} ${card.answerCount === 1 ? 'blank' : 'blanks'}`
+  const isUnsynced = card.id.startsWith('temp-card-')
 
   return (
     <View className="flex-row items-start justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm shadow-black/5">
@@ -86,7 +77,15 @@ function CardRow({
         <Text numberOfLines={2} className="text-base font-semibold text-foreground">
           {cardLabel(card.paragraph)}
         </Text>
-        <Text className="text-xs font-bold uppercase tracking-wider text-primary">{blanks}</Text>
+        <View className="flex-row items-center gap-2">
+          <Text className="text-xs font-bold uppercase tracking-wider text-primary">{blanks}</Text>
+          {isUnsynced && (
+            <View className="flex-row items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5">
+              <CloudOffIcon color="#d97706" size={10} />
+              <Text className="text-[10px] font-bold uppercase text-amber-600">Unsynced</Text>
+            </View>
+          )}
+        </View>
       </Pressable>
 
       <Pressable
@@ -123,19 +122,25 @@ export default function SetDetailScreen(): ReactElement {
   )
   const isOffline = !isOnline
 
+  // Dynamic route parameter remapping when temp setId is synced
+  useEffect(() => {
+    if (!setId) return
+    const unsubscribe = onEntityRemapped((tempId, serverId) => {
+      if (tempId === setId) {
+        router.setParams({ setId: serverId })
+      }
+    })
+    return unsubscribe
+  }, [setId, router])
+
   const offlineEntry = useOfflineSetsStore((state) => (setId ? state.sets[setId] : undefined))
   const isAvailableOffline = offlineEntry?.status === 'available'
   const isDownloading = offlineEntry?.status === 'downloading'
-
-  const [offlinePayload, setOfflinePayload] = useState<OfflineSetPayload | null>(null)
-
-  useEffect(() => {
-    if (isOffline && isAvailableOffline && setId) {
-      void getOfflineSet(setId).then(setOfflinePayload)
-    } else {
-      setOfflinePayload(null)
-    }
-  }, [isOffline, isAvailableOffline, setId])
+  const isUnsyncedSet =
+    (setId?.startsWith('temp-set-') ?? false) ||
+    offlineEntry?.syncStatus === 'pending_create' ||
+    offlineEntry?.syncStatus === 'pending_update' ||
+    offlineEntry?.syncStatus === 'pending_delete'
 
   const set = useSet(setId)
   const dueCounts = useDueCounts()
@@ -148,20 +153,16 @@ export default function SetDetailScreen(): ReactElement {
   const archiveSet = useArchiveSet()
   const renameSet = useRenameSet()
 
-  const items =
-    isOffline && offlinePayload
-      ? offlinePayload.cards.map((card: StudyCard) => ({
-          id: card.id,
-          studySetId: card.studySetId,
-          paragraph: card.paragraph,
-          tags: card.tags,
-          createdAt: card.createdAt,
-          updatedAt: card.updatedAt,
-          answerCount: card.answers.length,
-        }))
-      : flattenPages(cards.data)
-
-  const title = isOffline && offlinePayload ? offlinePayload.metadata.title : set.data?.set.title
+  const rawItems = flattenPages(cards.data)
+  const cardsMap = new Map<string, StudyCardSummary>()
+  for (const c of rawItems) {
+    const canonicalId = resolveEntityId(c.id)
+    if (!cardsMap.has(canonicalId)) {
+      cardsMap.set(canonicalId, c.id === canonicalId ? c : { ...c, id: canonicalId })
+    }
+  }
+  const items = Array.from(cardsMap.values())
+  const title = set.data?.set.title ?? offlineEntry?.metadata?.title
 
   const confirmDelete = (card: StudyCardSummary): void => {
     const blanks = `${String(card.answerCount)} ${card.answerCount === 1 ? 'blank' : 'blanks'}`
@@ -286,7 +287,7 @@ export default function SetDetailScreen(): ReactElement {
     )
   }
 
-  const isOfflineUnavailable = isOffline && !isAvailableOffline
+  const isOfflineUnavailable = isOffline && !isAvailableOffline && !set.data?.set
 
   if (isOfflineUnavailable) {
     return (
@@ -311,6 +312,8 @@ export default function SetDetailScreen(): ReactElement {
       </View>
     )
   }
+
+  const currentSet = set.data?.set ?? offlineEntry?.metadata
 
   return (
     <View className="flex-1 bg-background">
@@ -348,9 +351,14 @@ export default function SetDetailScreen(): ReactElement {
               <Text className="text-3xl font-extrabold tracking-tight text-foreground">
                 {title ?? (set.isError ? 'Set unavailable' : '…')}
               </Text>
-              {(isAvailableOffline || isDownloading) && (
+              {(isUnsyncedSet || isAvailableOffline || isDownloading) && (
                 <View className="flex-row items-center mt-1">
-                  {isAvailableOffline ? (
+                  {isUnsyncedSet ? (
+                    <View className="flex-row items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/15 px-2.5 py-0.5 self-start">
+                      <CloudOffIcon color="#d97706" size={12} />
+                      <Text className="text-xs font-semibold text-amber-600">Unsynced</Text>
+                    </View>
+                  ) : isAvailableOffline ? (
                     <View className="flex-row items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 self-start">
                       <CloudIcon color={primary} size={12} />
                       <Text className="text-xs font-semibold text-primary">Available Offline</Text>
@@ -364,7 +372,7 @@ export default function SetDetailScreen(): ReactElement {
                 </View>
               )}
             </View>
-            {set.data && (
+            {(set.data || offlineEntry) && (
               <TouchableOpacity
                 onPress={() => {
                   setNewTitle(title ?? '')
@@ -377,14 +385,10 @@ export default function SetDetailScreen(): ReactElement {
             )}
           </View>
 
-          {(set.data || (isOffline && offlinePayload)) && (
+          {currentSet && (
             <View className="mt-2 flex-row rounded-2xl border border-border bg-surface shadow-sm shadow-black/5 overflow-hidden">
               <View className="flex-1 items-center border-r border-border p-4">
-                <Text className="text-2xl font-black text-foreground">
-                  {isOffline && offlinePayload
-                    ? offlinePayload.metadata.cardCount
-                    : set.data?.set.cardCount}
-                </Text>
+                <Text className="text-2xl font-black text-foreground">{currentSet.cardCount}</Text>
                 <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   Cards
                 </Text>
@@ -398,7 +402,7 @@ export default function SetDetailScreen(): ReactElement {
             </View>
           )}
 
-          {set.isError && (
+          {set.isError && !offlineEntry && (
             <Text className="text-sm font-medium text-warning">
               Could not load this set. Its cards may still be listed below.
             </Text>
@@ -412,7 +416,7 @@ export default function SetDetailScreen(): ReactElement {
               size="lg"
               disabled={items.length === 0}
               onPress={() => {
-                router.push(`/study?set=${setId}`)
+                router.push(`/study?set=${setId}&mode=spaced`)
               }}
             />
           </View>
@@ -434,10 +438,9 @@ export default function SetDetailScreen(): ReactElement {
             )}
           </View>
 
-          {(!isOffline && cards.isPending) ||
-          (isOffline && !offlinePayload && !isOfflineUnavailable) ? (
+          {cards.isPending && !isOffline ? (
             <ActivityIndicator accessibilityLabel="Loading cards" />
-          ) : !isOffline && cards.isError ? (
+          ) : cards.isError && !isOffline ? (
             <View className="gap-3 rounded-xl border border-border bg-surface p-5">
               <Text className="text-sm text-warning">Could not load the cards in this set.</Text>
               <Button
@@ -514,10 +517,10 @@ export default function SetDetailScreen(): ReactElement {
         >
           <View className="flex-row items-center justify-between border-b border-border px-4 pb-4">
             <Text className="text-lg font-bold text-foreground">
-              {editing ? 'Edit Card' : 'Create Card'}
+              {editing ? 'Edit Card' : 'Create Cards'}
             </Text>
             <TouchableOpacity onPress={handleCloseComposer}>
-              <Text className="font-medium text-primary">Cancel</Text>
+              <Text className="font-medium text-primary">{editing ? 'Cancel' : 'Done'}</Text>
             </TouchableOpacity>
           </View>
           <ScrollView contentContainerClassName="p-4 pb-20" keyboardShouldPersistTaps="always">
@@ -581,7 +584,6 @@ export default function SetDetailScreen(): ReactElement {
             <View className="h-px bg-border/40" />
 
             {/* Option 1: Edit */}
-
             <TouchableOpacity
               onPress={() => {
                 setMenuVisible(false)

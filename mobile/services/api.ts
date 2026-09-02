@@ -188,7 +188,17 @@ async function toApiError(res: Response): Promise<ApiError> {
 }
 
 async function dispatch(path: string, options: RequestOptions): Promise<Response> {
-  const { method = 'GET', body, signal, authorized } = options
+  const { method = 'GET', body, authorized } = options
+  let signal = options.signal
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+
+  if (!signal) {
+    const controller = new AbortController()
+    timeoutId = setTimeout(() => {
+      controller.abort()
+    }, 5000)
+    signal = controller.signal
+  }
 
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -202,13 +212,17 @@ async function dispatch(path: string, options: RequestOptions): Promise<Response
 
   // No `credentials: 'include'` — there is no cookie jar to include. The web
   // client needs it because its refresh token is a cross-site cookie.
-  return fetch(apiUrl(path), {
-    method,
-    headers,
-    keepalive: true,
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    ...(signal ? { signal } : {}),
-  })
+  try {
+    return await fetch(apiUrl(path), {
+      method,
+      headers,
+      keepalive: true,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal,
+    })
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
 }
 
 async function parse<T>(res: Response): Promise<T> {

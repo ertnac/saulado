@@ -184,17 +184,18 @@ export default function SetsScreen(): ReactElement {
   // Live sets and due counts
   const setsQuery = useSets({ parent: null, archived: false })
   const dueCounts = useDueCounts()
-  const rootSets = isOffline
-    ? Object.values(offlineStore.sets)
-        .filter(
-          (entry) =>
-            entry.status === 'available' &&
-            entry.metadata &&
-            !entry.metadata.parentId &&
-            !entry.metadata.archivedAt,
-        )
-        .map((entry) => entry.metadata!)
-    : flattenPages(setsQuery.data)
+  const offlineSets = Object.values(offlineStore.sets)
+    .filter(
+      (entry) =>
+        entry.status === 'available' &&
+        entry.metadata &&
+        !entry.metadata.parentId &&
+        !entry.metadata.archivedAt,
+    )
+    .map((entry) => entry.metadata!)
+
+  const setsFromQuery = flattenPages(setsQuery.data)
+  const rootSets = setsFromQuery.length > 0 ? setsFromQuery : isOffline ? offlineSets : []
 
   const totalSubjects = rootSets.length
   const totalCards = rootSets.reduce((sum, s) => sum + s.subtreeCardCount, 0)
@@ -384,7 +385,7 @@ export default function SetsScreen(): ReactElement {
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Study ${prioritySet.title}`}
-                        onPress={() => router.push(`/study?set=${prioritySet.id}`)}
+                        onPress={() => router.push(`/study?set=${prioritySet.id}&mode=spaced`)}
                         className="items-center justify-center rounded-full bg-white px-5 py-2.5 active:opacity-90 shadow-sm"
                       >
                         <Text className="text-sm font-bold text-primary">Study Now</Text>
