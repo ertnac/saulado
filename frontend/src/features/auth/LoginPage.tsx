@@ -108,12 +108,15 @@ export function LoginPage(): ReactElement {
       title="Sign in"
       subtitle="Welcome back."
       footer={
-        <>
+        <p className="text-center text-sm text-muted-foreground">
           New here?{' '}
-          <Link to="/register" className="font-medium text-foreground underline">
+          <Link
+            to="/register"
+            className="font-semibold text-foreground underline hover:text-primary transition-colors"
+          >
             Create an account
           </Link>
-        </>
+        </p>
       }
     >
       {errors.general && <FormAlert message={errors.general} />}
@@ -122,10 +125,12 @@ export function LoginPage(): ReactElement {
 
       <div className="relative mb-6">
         <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
+          <span className="w-full border-t border-border/80" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">Or continue with email</span>
+          <span className="bg-surface px-3 font-semibold text-muted-foreground tracking-wider">
+            Or continue with email
+          </span>
         </div>
       </div>
 
@@ -133,8 +138,6 @@ export function LoginPage(): ReactElement {
         onSubmit={(e) => {
           void onSubmit(e)
         }}
-        // Browser validation bubbles are unstyled, untranslatable and vanish on
-        // blur; every message here is rendered beside its field instead.
         noValidate
         className="space-y-4"
       >
@@ -151,8 +154,6 @@ export function LoginPage(): ReactElement {
           autoCorrect="off"
           spellCheck={false}
           required
-          // Only on the first field, so a password manager or a returning user
-          // lands in the right place without the page stealing focus later.
           autoFocus
         />
 
@@ -168,12 +169,20 @@ export function LoginPage(): ReactElement {
           required
         />
 
-        <Button type="submit" disabled={submitting} className="w-full" size="lg">
+        <Button
+          type="submit"
+          disabled={submitting}
+          className="clay-btn-primary w-full py-3 text-sm font-semibold mt-2"
+          size="lg"
+        >
           {submitting ? 'Signing in…' : 'Sign in'}
         </Button>
 
-        <p className="text-center text-sm">
-          <Link to="/forgot-password" className="text-muted-foreground underline">
+        <p className="text-center text-sm pt-1">
+          <Link
+            to="/forgot-password"
+            className="text-muted-foreground hover:text-foreground underline transition-colors"
+          >
             Forgot your password?
           </Link>
         </p>

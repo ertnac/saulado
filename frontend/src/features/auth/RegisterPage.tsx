@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { checkPassword, PASSWORD_MIN_LENGTH } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
 import { FormField } from '@/components/ui/form-field'
+import { CheckIcon, SparklesIcon } from '@/components/ui/icons'
 import { useFormErrors } from '@/hooks/useFormErrors'
 import { useAuthStore } from '@/stores/auth'
 import { AuthLayout, FormAlert } from './AuthLayout'
@@ -86,12 +87,6 @@ export function RegisterPage(): ReactElement {
     clear()
     setLocalPasswordError(null)
 
-    /**
-     * Same `checkPassword` the API enforces, from `@saulado/shared`. Running it
-     * here is purely to save a round trip and a rate-limit slot — the server
-     * check is the control, this is the courtesy. Because both sides call one
-     * function, the form cannot accept something the API will reject.
-     */
     const problem = checkPassword(password)
     if (problem) {
       setLocalPasswordError(problem.message)
@@ -114,24 +109,51 @@ export function RegisterPage(): ReactElement {
       title="Create your account"
       subtitle="Learn in context. Remember for life."
       footer={
-        <>
-          Already have an account?{' '}
-          <Link to="/login" className="font-medium text-foreground underline">
-            Sign in
-          </Link>
-        </>
+        <div className="space-y-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            Already have an account?{' '}
+            <Link
+              to="/login"
+              className="font-semibold text-foreground underline hover:text-primary transition-colors"
+            >
+              Sign in
+            </Link>
+          </p>
+
+          <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-2">
+            <span className="flex items-center gap-1">
+              <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> Free forever
+            </span>
+            <span className="flex items-center gap-1">
+              <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> SM-2 Spaced Recall
+            </span>
+            <span className="flex items-center gap-1">
+              <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> No credit card
+            </span>
+          </div>
+        </div>
       }
     >
+      {/* Eyebrow badge */}
+      <div className="mb-5 flex justify-center">
+        <div className="clay-pill px-3.5 py-1 inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
+          <SparklesIcon className="h-3.5 w-3.5 text-accent" />
+          <span>Active Recall & Spaced Repetition</span>
+        </div>
+      </div>
+
       {errors.general && <FormAlert message={errors.general} />}
 
       <div className="flex justify-center mb-6" ref={googleBtnRef}></div>
 
       <div className="relative mb-6">
         <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
+          <span className="w-full border-t border-border/80" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">Or continue with email</span>
+          <span className="bg-surface px-3 font-semibold text-muted-foreground tracking-wider">
+            Or continue with email
+          </span>
         </div>
       </div>
 
@@ -167,13 +189,17 @@ export function RegisterPage(): ReactElement {
             if (localPasswordError) setLocalPasswordError(null)
           }}
           error={localPasswordError ?? errors.fields.password}
-          // States the rule up front instead of failing the user after submit.
           hint={`At least ${String(PASSWORD_MIN_LENGTH)} characters. A memorable phrase beats a short, complicated one.`}
           autoComplete="new-password"
           required
         />
 
-        <Button type="submit" disabled={submitting} className="w-full" size="lg">
+        <Button
+          type="submit"
+          disabled={submitting}
+          className="clay-btn-primary w-full py-3 text-sm font-semibold mt-2"
+          size="lg"
+        >
           {submitting ? 'Creating account…' : 'Create account'}
         </Button>
       </form>
