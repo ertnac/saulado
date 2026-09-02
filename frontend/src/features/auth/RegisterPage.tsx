@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { checkPassword, PASSWORD_MIN_LENGTH } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
 import { FormField } from '@/components/ui/form-field'
-import { CheckIcon, SparklesIcon } from '@/components/ui/icons'
+import { CheckIcon, EyeIcon, EyeOffIcon, LockIcon, MailIcon } from '@/components/ui/icons'
 import { useFormErrors } from '@/hooks/useFormErrors'
 import { useAuthStore } from '@/stores/auth'
 import { AuthLayout, FormAlert } from './AuthLayout'
@@ -79,8 +79,11 @@ export function RegisterPage(): ReactElement {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [localPasswordError, setLocalPasswordError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  const isLengthValid = password.length >= PASSWORD_MIN_LENGTH
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
@@ -107,51 +110,46 @@ export function RegisterPage(): ReactElement {
   return (
     <AuthLayout
       title="Create your account"
-      subtitle="Learn in context. Remember for life."
+      subtitle="Start turning your notes into long-term recall."
+      activeTab="register"
       footer={
         <div className="space-y-4 text-center">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs sm:text-sm text-muted-foreground">
             Already have an account?{' '}
             <Link
               to="/login"
-              className="font-semibold text-foreground underline hover:text-primary transition-colors"
+              className="font-bold text-foreground underline hover:text-primary transition-colors"
             >
               Sign in
             </Link>
           </p>
 
-          <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-2">
+          <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-1">
             <span className="flex items-center gap-1">
-              <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> Free forever
+              <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> Free Forever
             </span>
             <span className="flex items-center gap-1">
-              <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> SM-2 Spaced Recall
+              <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> SM-2 Spaced
             </span>
             <span className="flex items-center gap-1">
-              <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> No credit card
+              <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> No Credit Card
             </span>
           </div>
         </div>
       }
     >
-      {/* Eyebrow badge */}
-      <div className="mb-5 flex justify-center">
-        <div className="clay-pill px-3.5 py-1 inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
-          <SparklesIcon className="h-3.5 w-3.5 text-accent" />
-          <span>Active Recall & Spaced Repetition</span>
-        </div>
-      </div>
-
       {errors.general && <FormAlert message={errors.general} />}
 
-      <div className="flex justify-center mb-6" ref={googleBtnRef}></div>
+      {/* Google Auth Container */}
+      <div className="flex justify-center mb-5" ref={googleBtnRef}></div>
 
-      <div className="relative mb-6">
+      {/* Divider */}
+      <div className="relative mb-5">
         <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t border-border/80" />
+          <span className="w-full border-t border-border/70" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-surface px-3 font-semibold text-muted-foreground tracking-wider">
+          <span className="bg-surface px-3 font-bold text-muted-foreground tracking-wider">
             Or continue with email
           </span>
         </div>
@@ -171,7 +169,9 @@ export function RegisterPage(): ReactElement {
           onChange={(e) => {
             setEmail(e.target.value)
           }}
+          placeholder="learner@example.com"
           error={errors.fields.email}
+          leftIcon={<MailIcon className="h-4 w-4" />}
           autoComplete="email"
           autoCapitalize="off"
           autoCorrect="off"
@@ -180,27 +180,60 @@ export function RegisterPage(): ReactElement {
           autoFocus
         />
 
-        <FormField
-          label="Password"
-          type="password"
-          value={password}
-          onChange={(e) => {
-            setPassword(e.target.value)
-            if (localPasswordError) setLocalPasswordError(null)
-          }}
-          error={localPasswordError ?? errors.fields.password}
-          hint={`At least ${String(PASSWORD_MIN_LENGTH)} characters. A memorable phrase beats a short, complicated one.`}
-          autoComplete="new-password"
-          required
-        />
+        <div className="space-y-1.5">
+          <FormField
+            label="Password"
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value)
+              if (localPasswordError) setLocalPasswordError(null)
+            }}
+            placeholder="Choose a secure password"
+            error={localPasswordError ?? errors.fields.password}
+            leftIcon={<LockIcon className="h-4 w-4" />}
+            rightElement={
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPassword(!showPassword)
+                }}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? (
+                  <EyeOffIcon className="h-4 w-4" />
+                ) : (
+                  <EyeIcon className="h-4 w-4" />
+                )}
+              </button>
+            }
+            autoComplete="new-password"
+            required
+          />
+
+          {/* Password Live Requirement Pill */}
+          <div className="flex items-center gap-2 pt-1 text-xs">
+            <span
+              className={`flex items-center gap-1 font-medium transition-colors ${
+                isLengthValid ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
+              }`}
+            >
+              <CheckIcon
+                className={`h-3.5 w-3.5 ${isLengthValid ? 'text-emerald-500' : 'text-muted-foreground/50'}`}
+              />
+              At least {PASSWORD_MIN_LENGTH} characters
+            </span>
+          </div>
+        </div>
 
         <Button
           type="submit"
           disabled={submitting}
-          className="clay-btn-primary w-full py-3 text-sm font-semibold mt-2"
+          className="clay-btn-primary w-full py-3 text-sm font-bold mt-2 shadow-md"
           size="lg"
         >
-          {submitting ? 'Creating account…' : 'Create account'}
+          {submitting ? 'Creating account…' : 'Create Account'}
         </Button>
       </form>
     </AuthLayout>

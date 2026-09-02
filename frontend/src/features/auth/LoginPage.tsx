@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type FormEvent, type ReactElement } from '
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { FormField } from '@/components/ui/form-field'
+import { EyeIcon, EyeOffIcon, LockIcon, MailIcon } from '@/components/ui/icons'
 import { useFormErrors } from '@/hooks/useFormErrors'
 import { useAuthStore } from '@/stores/auth'
 import { AuthLayout, FormAlert } from './AuthLayout'
@@ -37,12 +38,9 @@ export function LoginPage(): ReactElement {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  /**
-   * Where the user was headed before the guard bounced them here. Sending them
-   * to the dashboard instead would silently discard the link they clicked.
-   */
   const from = (location.state as { from?: string } | null)?.from ?? '/'
 
   useEffect(() => {
@@ -93,8 +91,6 @@ export function LoginPage(): ReactElement {
 
     try {
       await login(email, password)
-      // `replace` so Back does not return to the login form of a session the
-      // user is now inside.
       void navigate(from, { replace: true })
     } catch (err) {
       setFromError(err)
@@ -106,29 +102,34 @@ export function LoginPage(): ReactElement {
   return (
     <AuthLayout
       title="Sign in"
-      subtitle="Welcome back."
+      subtitle="Welcome back. Continue your learning journey."
+      activeTab="login"
       footer={
-        <p className="text-center text-sm text-muted-foreground">
-          New here?{' '}
-          <Link
-            to="/register"
-            className="font-semibold text-foreground underline hover:text-primary transition-colors"
-          >
-            Create an account
-          </Link>
-        </p>
+        <div className="space-y-3 text-center">
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Don&apos;t have an account?{' '}
+            <Link
+              to="/register"
+              className="font-bold text-foreground underline hover:text-primary transition-colors"
+            >
+              Create an account
+            </Link>
+          </p>
+        </div>
       }
     >
       {errors.general && <FormAlert message={errors.general} />}
 
-      <div className="flex justify-center mb-6" ref={googleBtnRef}></div>
+      {/* Google Auth Container */}
+      <div className="flex justify-center mb-5" ref={googleBtnRef}></div>
 
-      <div className="relative mb-6">
+      {/* Divider */}
+      <div className="relative mb-5">
         <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t border-border/80" />
+          <span className="w-full border-t border-border/70" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-surface px-3 font-semibold text-muted-foreground tracking-wider">
+          <span className="bg-surface px-3 font-bold text-muted-foreground tracking-wider">
             Or continue with email
           </span>
         </div>
@@ -148,7 +149,9 @@ export function LoginPage(): ReactElement {
           onChange={(e) => {
             setEmail(e.target.value)
           }}
+          placeholder="learner@example.com"
           error={errors.fields.email}
+          leftIcon={<MailIcon className="h-4 w-4" />}
           autoComplete="email"
           autoCapitalize="off"
           autoCorrect="off"
@@ -159,12 +162,26 @@ export function LoginPage(): ReactElement {
 
         <FormField
           label="Password"
-          type="password"
+          type={showPassword ? 'text' : 'password'}
           value={password}
           onChange={(e) => {
             setPassword(e.target.value)
           }}
+          placeholder="Enter your password"
           error={errors.fields.password}
+          leftIcon={<LockIcon className="h-4 w-4" />}
+          rightElement={
+            <button
+              type="button"
+              onClick={() => {
+                setShowPassword(!showPassword)
+              }}
+              className="text-muted-foreground hover:text-foreground transition-colors p-1"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+            </button>
+          }
           autoComplete="current-password"
           required
         />
@@ -172,13 +189,13 @@ export function LoginPage(): ReactElement {
         <Button
           type="submit"
           disabled={submitting}
-          className="clay-btn-primary w-full py-3 text-sm font-semibold mt-2"
+          className="clay-btn-primary w-full py-3 text-sm font-bold mt-2 shadow-md"
           size="lg"
         >
           {submitting ? 'Signing in…' : 'Sign in'}
         </Button>
 
-        <p className="text-center text-sm pt-1">
+        <p className="text-center text-xs sm:text-sm pt-1">
           <Link
             to="/forgot-password"
             className="text-muted-foreground hover:text-foreground underline transition-colors"
