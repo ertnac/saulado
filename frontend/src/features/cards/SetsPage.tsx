@@ -14,6 +14,7 @@ import {
   ShareIcon,
   SparklesIcon,
   UploadIcon,
+  ZapIcon,
 } from '@/components/ui/icons'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { useDueCounts } from '@/features/study/queries'
@@ -23,6 +24,7 @@ import { cardCountLabel, childCountLabel } from './counts'
 import { SetDialog } from './SetDialog'
 import { UniversalImportDialog } from './transfer/UniversalImportDialog'
 import { SeedDecksDialog } from './transfer/SeedDecksDialog'
+import { QuickLearnDialog } from '@/features/study/QuickLearnDialog'
 import { shareOrDownloadSetJson } from '@/services/transfer/json-export'
 import { flattenPages, useCreateSet, useDeleteSet, useSets, useUpdateSet } from './queries'
 
@@ -175,6 +177,8 @@ export function SetsPage(): ReactElement {
   const [creating, setCreating] = useState(false)
   const [importing, setImporting] = useState(false)
   const [seedDecksOpen, setSeedDecksOpen] = useState(false)
+  const [quickLearnOpen, setQuickLearnOpen] = useState(false)
+  const [quickLearnSetId, setQuickLearnSetId] = useState<string | null>(null)
   const [editing, setEditing] = useState<StudySet | null>(null)
   const [deleting, setDeleting] = useState<StudySet | null>(null)
 
@@ -241,6 +245,16 @@ export function SetsPage(): ReactElement {
         description="A set groups cards on one subject. Open one to add cards or nest a sub-set inside it."
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setQuickLearnSetId(null)
+                setQuickLearnOpen(true)
+              }}
+            >
+              <ZapIcon />
+              Quick Learn
+            </Button>
             <Button
               variant="outline"
               onClick={() => {
@@ -554,6 +568,15 @@ export function SetsPage(): ReactElement {
         onClose={() => {
           setSeedDecksOpen(false)
         }}
+      />
+
+      <QuickLearnDialog
+        open={quickLearnOpen}
+        onClose={() => {
+          setQuickLearnOpen(false)
+          setQuickLearnSetId(null)
+        }}
+        initialSetId={quickLearnSetId}
       />
     </div>
   )

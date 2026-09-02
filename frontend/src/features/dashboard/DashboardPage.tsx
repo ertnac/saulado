@@ -25,6 +25,7 @@ import { SetDialog } from '@/features/cards/SetDialog'
 import { FileImportDialog } from '@/features/cards/import/FileImportDialog'
 import { UniversalImportDialog } from '@/features/cards/transfer/UniversalImportDialog'
 import { SeedDecksDialog } from '@/features/cards/transfer/SeedDecksDialog'
+import { QuickLearnDialog } from '@/features/study/QuickLearnDialog'
 import { useCreateSet } from '@/features/cards/queries'
 import { useAuthStore } from '@/stores/auth'
 import { useSettings } from '@/features/account/queries'
@@ -507,6 +508,7 @@ export function DashboardPage(): ReactElement {
   const [importingOcr, setImportingOcr] = useState(false)
   const [seedDecksOpen, setSeedDecksOpen] = useState(false)
   const [universalImportOpen, setUniversalImportOpen] = useState(false)
+  const [quickLearnOpen, setQuickLearnOpen] = useState(false)
 
   const nickname = settings?.nickname ?? ''
   const profileImage = settings?.profileImage ?? null
@@ -583,9 +585,7 @@ export function DashboardPage(): ReactElement {
 
       {/* ── Quick Action Shortcuts ── */}
       <QuickActions
-        onQuickLearn={() => {
-          void navigate('/study')
-        }}
+        onQuickLearn={() => setQuickLearnOpen(true)}
         onImportOcr={() => setImportingOcr(true)}
         onSeedDecks={() => setSeedDecksOpen(true)}
         onImportDeck={() => setUniversalImportOpen(true)}
@@ -637,6 +637,8 @@ export function DashboardPage(): ReactElement {
         open={universalImportOpen}
         onClose={() => setUniversalImportOpen(false)}
       />
+
+      <QuickLearnDialog open={quickLearnOpen} onClose={() => setQuickLearnOpen(false)} />
     </div>
   )
 }
