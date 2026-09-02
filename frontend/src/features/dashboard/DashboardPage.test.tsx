@@ -81,6 +81,7 @@ function renderPage(): ReactElement {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  localStorage.setItem('saulado_onboarding_done', 'true')
 })
 
 describe('when reviews are waiting', () => {
