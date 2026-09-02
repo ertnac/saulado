@@ -15,6 +15,7 @@ import { setAccentClass } from './colors'
 import { cardCountLabel, childCountLabel } from './counts'
 import { CARD_PARAM } from './links'
 import { SetDialog } from './SetDialog'
+import { ExportButton } from './transfer/ExportButton'
 import {
   flattenPages,
   useCards,
@@ -397,6 +398,7 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
           }
           actions={
             <>
+              <ExportButton setId={setId} setTitle={current.title} />
               <Button
                 variant="soft"
                 onClick={() => {

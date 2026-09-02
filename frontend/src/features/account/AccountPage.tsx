@@ -17,6 +17,7 @@ import {
   useUpdateSettings,
 } from './queries'
 import { Section } from './SettingsControls'
+import { ArchivedSetsSection } from './ArchivedSetsSection'
 
 /**
  * Account and data (plan §6.5).
@@ -47,6 +48,7 @@ export function AccountPage(): ReactElement {
       />
 
       <ProfileSection />
+      <ArchivedSetsSection />
       <ChangeEmailSection currentEmail={email} />
       <ChangePasswordSection />
       <ExportSection />

@@ -1,51 +1,220 @@
-import { useState, type ReactElement } from 'react'
+import { useState, useMemo, type ReactElement } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { DashboardResponse, RecentSet } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardFigure, CardLabel } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ChevronRightIcon, PlusIcon, SparkIcon } from '@/components/ui/icons'
+import {
+  BookOpenIcon,
+  ChartIcon,
+  ChevronRightIcon,
+  ClockIcon,
+  FileTextIcon,
+  FlameIcon,
+  PlusIcon,
+  SparklesIcon,
+  TrophyIcon,
+  UploadIcon,
+  ZapIcon,
+} from '@/components/ui/icons'
 import { OnboardingModal } from '@/features/onboarding/OnboardingModal'
-import { PageHeader } from '@/components/layout/PageHeader'
 import { GoalRing } from '@/components/charts/GoalRing'
 import { Sparkline } from '@/components/charts/Sparkline'
 import { SetDialog } from '@/features/cards/SetDialog'
+import { FileImportDialog } from '@/features/cards/import/FileImportDialog'
+import { UniversalImportDialog } from '@/features/cards/transfer/UniversalImportDialog'
+import { SeedDecksDialog } from '@/features/cards/transfer/SeedDecksDialog'
+import { QuickLearnDialog } from '@/features/study/QuickLearnDialog'
 import { useCreateSet } from '@/features/cards/queries'
 import { useAuthStore } from '@/stores/auth'
 import { useSettings } from '@/features/account/queries'
 import { useDashboard } from './queries'
 import { StreakCard } from './StreakCard'
+import { cn } from '@/lib/utils'
 
 /**
- * The dashboard (plan §5.2).
- *
- * One request, not six — everything below comes from `GET /api/dashboard`, so
- * the page arrives in one piece rather than shifting four times as separate
- * queries land.
- *
- * The structure is unchanged from Phase 4 and deliberately so: **one dominant
- * call to action**, and four honest states beneath it rather than one number
- * that means four different things. What Phase 5 adds — streak, goal, sparkline,
- * recent sets — is strictly secondary, sits *below* the CTA, and is hidden
- * entirely from a user who has never studied. A brand-new account showing a
- * 0-day streak, an empty ring and a flat sparkline is three pieces of evidence
- * that they have failed at something they have not yet been offered
- * (saulado-ux §5).
+ * Returns a warm, time-aware greeting and icon based on client local time.
  */
+function getGreeting(name: string): { greeting: string; icon: string } {
+  const hour = new Date().getHours()
+  const displayName = name.trim() || 'there'
+  if (hour >= 5 && hour < 12) return { greeting: `Good morning, ${displayName}`, icon: '☀️' }
+  if (hour >= 12 && hour < 17) return { greeting: `Good afternoon, ${displayName}`, icon: '🌤️' }
+  if (hour >= 17 && hour < 22) return { greeting: `Good evening, ${displayName}`, icon: '🌆' }
+  return { greeting: `Good night, ${displayName}`, icon: '🌙' }
+}
 
-// ── The hero: exactly one of these, and it owns the only large CTA ───────────
+function getFormattedDate(): string {
+  try {
+    return new Date().toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+    })
+  } catch {
+    return 'Today'
+  }
+}
+
+// ── Glance Metric Chip ───────────────────────────────────────────────────────
+
+interface MetricChipProps {
+  icon: ReactElement
+  label: string
+  value: string | number
+  sublabel?: string
+  accent?: boolean
+  to?: string
+}
+
+function MetricChip({
+  icon,
+  label,
+  value,
+  sublabel,
+  accent = false,
+  to,
+}: MetricChipProps): ReactElement {
+  const content = (
+    <Card
+      className={cn(
+        'p-4 transition-all',
+        accent && 'border-accent/50 bg-accent/10',
+        to && 'hover:shadow-lift cursor-pointer',
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-muted text-foreground">
+          {icon}
+        </span>
+        {sublabel && (
+          <span className="text-[11px] font-semibold text-muted-foreground">{sublabel}</span>
+        )}
+      </div>
+      <div className="mt-3">
+        <p className="text-2xl font-bold tabular-nums tracking-tight text-foreground">{value}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+      </div>
+    </Card>
+  )
+
+  if (to) {
+    return <Link to={to}>{content}</Link>
+  }
+  return content
+}
+
+// ── Quick Action Shortcuts ───────────────────────────────────────────────────
+
+interface QuickActionsProps {
+  onQuickLearn: () => void
+  onImportOcr: () => void
+  onSeedDecks: () => void
+  onImportDeck: () => void
+  onNewSet: () => void
+}
+
+function QuickActions({
+  onQuickLearn,
+  onImportOcr,
+  onSeedDecks,
+  onImportDeck,
+  onNewSet,
+}: QuickActionsProps): ReactElement {
+  return (
+    <div className="space-y-2.5">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Quick Actions
+      </h3>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <Button
+          variant="outline"
+          className="h-auto flex-col items-center justify-center py-3.5 gap-2"
+          onClick={onQuickLearn}
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <ZapIcon className="h-5 w-5" />
+          </span>
+          <span className="text-xs font-semibold">Quick Learn</span>
+        </Button>
+
+        <Button
+          variant="outline"
+          className="h-auto flex-col items-center justify-center py-3.5 gap-2"
+          onClick={onImportOcr}
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/15 text-accent-strong">
+            <FileTextIcon className="h-5 w-5" />
+          </span>
+          <span className="text-xs font-semibold">Import & OCR</span>
+        </Button>
+
+        <Button
+          variant="outline"
+          className="h-auto flex-col items-center justify-center py-3.5 gap-2"
+          onClick={onSeedDecks}
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <SparklesIcon className="h-5 w-5" />
+          </span>
+          <span className="text-xs font-semibold">Starter Decks</span>
+        </Button>
+
+        <Button
+          variant="outline"
+          className="h-auto flex-col items-center justify-center py-3.5 gap-2"
+          onClick={onImportDeck}
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-muted text-foreground">
+            <UploadIcon className="h-5 w-5" />
+          </span>
+          <span className="text-xs font-semibold">Import Deck</span>
+        </Button>
+
+        <Button
+          variant="outline"
+          className="h-auto flex-col items-center justify-center py-3.5 gap-2 col-span-2 sm:col-span-1"
+          onClick={onNewSet}
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-muted text-foreground">
+            <PlusIcon className="h-5 w-5" />
+          </span>
+          <span className="text-xs font-semibold">New Set</span>
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ── Hero Study Panels ────────────────────────────────────────────────────────
 
 function DuePanel({ due }: { due: number }): ReactElement {
+  const estMins = Math.max(1, Math.ceil(due * 0.4))
+
   return (
-    // The one accent-toned panel on the page, and the one filled CTA. The tint
-    // is what makes "you have work waiting" legible before a word is read.
     <Card tone="accent" className="p-6 sm:p-8">
-      <CardLabel>Due today</CardLabel>
-      <CardFigure>{due}</CardFigure>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {due === 1 ? 'One card is ready for review.' : `${String(due)} cards are ready for review.`}
+      <div className="flex items-center justify-between">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1 text-xs font-semibold text-accent-strong">
+          <ClockIcon className="h-3.5 w-3.5" />~{estMins} min review
+        </span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-accent-strong">
+          Due Today
+        </span>
+      </div>
+
+      <div className="my-3 flex items-baseline gap-2">
+        <CardFigure>{due}</CardFigure>
+        <span className="text-sm text-muted-foreground">
+          {due === 1 ? 'card ready for review' : 'cards ready for review'}
+        </span>
+      </div>
+
+      <p className="text-sm text-muted-foreground">
+        Review your highlighted blanks in context to reinforce retention and keep your streak
+        active.
       </p>
+
       <Link className={buttonClass({ size: 'lg', className: 'mt-5' })} to="/study">
         Start studying
         <ChevronRightIcon />
@@ -54,23 +223,30 @@ function DuePanel({ due }: { due: number }): ReactElement {
   )
 }
 
-/**
- * Nothing due, but there are cards the user has never seen.
- *
- * Kept apart from "caught up" because it is also the state of a user who has
- * built a set and not yet studied it — for them "every review is done" would be
- * a claim about work they have not started.
- */
 function ReadyToLearn({ newCards }: { newCards: number }): ReactElement {
   return (
     <Card className="p-6 sm:p-8">
-      <CardLabel>New cards</CardLabel>
-      <CardFigure>{newCards}</CardFigure>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {newCards === 1
-          ? 'One card is waiting to be learned.'
-          : `${String(newCards)} cards are waiting to be learned.`}
+      <div className="flex items-center justify-between">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+          <BookOpenIcon className="h-3.5 w-3.5" />
+          New Cards
+        </span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Ready to Learn
+        </span>
+      </div>
+
+      <div className="my-3 flex items-baseline gap-2">
+        <CardFigure>{newCards}</CardFigure>
+        <span className="text-sm text-muted-foreground">
+          {newCards === 1 ? 'card waiting to be learned' : 'cards waiting to be learned'}
+        </span>
+      </div>
+
+      <p className="text-sm text-muted-foreground">
+        Start your first learning session to place these cards into your spaced recall queue.
       </p>
+
       <Link className={buttonClass({ size: 'lg', className: 'mt-5' })} to="/study">
         Start learning
         <ChevronRightIcon />
@@ -79,17 +255,11 @@ function ReadyToLearn({ newCards }: { newCards: number }): ReactElement {
   )
 }
 
-/**
- * Shown when the day's reviews are finished and there is nothing new left.
- *
- * Distinct from the never-studied empty state on purpose: "caught up" is an
- * achievement and should not look like "nothing here".
- */
 function CaughtUp(): ReactElement {
   return (
     <Card className="flex items-start gap-4 p-6 sm:p-8">
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-success/15 text-xl text-success">
-        <SparkIcon />
+        <TrophyIcon className="h-5 w-5 text-success" />
       </span>
       <div>
         <p className="font-medium">Caught up for today</p>
@@ -108,11 +278,6 @@ function ExampleCard(): ReactElement {
 
       <p className="mt-3 text-base leading-relaxed">
         The{' '}
-        {/*
-          Fixed-width blank (saulado-ux §1.1): 8ch regardless of the answer, so
-          the gap never hints at the length of the word. Even in a static
-          illustration — this is the shape the real thing has to keep.
-        */}
         <span
           className="mx-0.5 inline-block border-b-2 border-foreground align-baseline"
           style={{ width: '8ch' }}
@@ -131,58 +296,37 @@ function ExampleCard(): ReactElement {
   )
 }
 
-/**
- * Shown when the dashboard could not be fetched.
- *
- * Not an error page. Studying does not depend on this request, and a failed
- * background query should not stand between the user and their reviews.
- */
-function DashboardUnavailable(): ReactElement {
-  return (
-    <Card tone="dashed" className="p-5 sm:p-6">
-      <p className="text-sm text-muted-foreground">
-        Could not load today&apos;s summary. Studying still works.
-      </p>
-      <Link className={buttonClass({ className: 'mt-4' })} to="/study">
-        Go to study
-      </Link>
-    </Card>
-  )
-}
-
-/** The never-studied state: teach what a card is instead of showing a zero. */
-function GettingStarted({ onCreate }: { onCreate: () => void }): ReactElement {
+function GettingStarted({
+  onCreate,
+  onSeedDecks,
+}: {
+  onCreate: () => void
+  onSeedDecks: () => void
+}): ReactElement {
   return (
     <>
       <ExampleCard />
 
-      <Card tone="dashed" className="p-6 sm:p-8">
-        <p className="text-sm text-muted-foreground">
-          A set holds cards on one subject. Each card is a paragraph of your own notes with the
-          words worth recalling blanked out.
+      <Card tone="dashed" className="p-6 sm:p-8 text-center space-y-3">
+        <p className="font-semibold text-foreground">Get Started with Saulado</p>
+        <p className="mx-auto max-w-md text-sm text-muted-foreground">
+          Create a study set from your notes or jumpstart your library with pre-built starter decks.
         </p>
-        <Button size="lg" className="mt-5" onClick={onCreate}>
-          <PlusIcon />
-          Create your first set
-        </Button>
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-3">
+          <Button variant="accent" size="lg" onClick={onSeedDecks}>
+            <SparklesIcon />
+            Explore Starter Decks
+          </Button>
+          <Button size="lg" variant="outline" onClick={onCreate}>
+            <PlusIcon />
+            Create your first set
+          </Button>
+        </div>
       </Card>
     </>
   )
 }
 
-/**
- * Sets exist, but nothing in them can be studied yet.
- *
- * Split out from `GettingStarted` because that one says "create your first set",
- * which is plainly false for a user whose own set list renders directly below
- * it. Two routes land here — a set with no cards, and a card whose words have
- * not been highlighted — and both end in the same place, so this points into the
- * set rather than guessing which of the two the user is in.
- *
- * The highlighting half is the one worth naming: a card saves without blanks, is
- * listed on its set page, and is still not a question. Nothing else on the
- * dashboard would ever say so.
- */
 function NothingReady({ set }: { set: RecentSet }): ReactElement {
   return (
     <Card tone="dashed" className="p-5 sm:p-6">
@@ -201,15 +345,26 @@ function NothingReady({ set }: { set: RecentSet }): ReactElement {
   )
 }
 
-// ── Secondary: only ever rendered for a user who has studied ────────────────
+function DashboardUnavailable(): ReactElement {
+  return (
+    <Card tone="dashed" className="p-5 sm:p-6">
+      <p className="text-sm text-muted-foreground">
+        Could not load today&apos;s summary. Studying still works.
+      </p>
+      <Link className={buttonClass({ className: 'mt-4' })} to="/study">
+        Go to study
+      </Link>
+    </Card>
+  )
+}
+
+// ── Recent Sets Section ──────────────────────────────────────────────────────
 
 function RecentSetRow({ set }: { set: RecentSet }): ReactElement {
   function detail(): string {
     if (set.dueCount > 0) {
       return set.dueCount === 1 ? '1 card due' : `${String(set.dueCount)} cards due`
     }
-    // Falls back to size rather than to "0 due" — the row is a way back into a
-    // set, not a scorecard for it.
     return set.cardCount === 1 ? '1 card' : `${String(set.cardCount)} cards`
   }
 
@@ -217,13 +372,20 @@ function RecentSetRow({ set }: { set: RecentSet }): ReactElement {
     <li>
       <Link
         to={`/sets/${set.id}`}
-        className="flex min-h-[44px] items-center justify-between gap-3 rounded-md bg-surface px-5 py-4 shadow-soft transition-shadow duration-150 hover:shadow-lift"
+        className="flex min-h-[48px] items-center justify-between gap-3 rounded-xl border border-border bg-surface px-5 py-4 transition-all hover:border-primary/40 hover:shadow-sm"
       >
-        <span className="min-w-0 truncate font-medium">{set.title}</span>
-        <span className="flex shrink-0 items-center gap-2 text-sm tabular-nums text-muted-foreground">
-          {detail()}
-          <ChevronRightIcon />
-        </span>
+        <div className="min-w-0 space-y-0.5">
+          <p className="min-w-0 truncate font-semibold text-foreground text-sm">{set.title}</p>
+          <p className="text-xs text-muted-foreground tabular-nums">{detail()}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {set.dueCount > 0 && (
+            <Badge tone="accent" className="text-xs">
+              {set.dueCount} due
+            </Badge>
+          )}
+          <ChevronRightIcon className="text-muted-foreground h-4 w-4" />
+        </div>
       </Link>
     </li>
   )
@@ -237,13 +399,8 @@ function RecentSets({ sets, onCreate }: { sets: RecentSet[]; onCreate: () => voi
           <h2 id="recent-heading" className="text-lg font-semibold tracking-tight">
             Your sets
           </h2>
-          {/* Outside the heading — see the note in PageHeader. */}
-          <Badge>{sets.length}</Badge>
+          <Badge tone="muted">{sets.length}</Badge>
         </div>
-        {/*
-          Secondary styling, not another primary button. The plan asks for a
-          single dominant CTA, and two filled buttons on one screen is two.
-        */}
         <Button variant="soft" size="sm" onClick={onCreate}>
           <PlusIcon />
           New set
@@ -283,6 +440,38 @@ function TodaySection({ data }: { data: DashboardResponse }): ReactElement {
         </Link>
       </div>
 
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <MetricChip
+          icon={<ClockIcon className="h-4 w-4" />}
+          label="Due Cards"
+          value={`${data.totalDue} due`}
+          accent={data.totalDue > 0}
+          sublabel={data.totalDue > 0 ? 'Ready' : 'None'}
+          to="/study"
+        />
+        <MetricChip
+          icon={<BookOpenIcon className="h-4 w-4" />}
+          label="New Cards"
+          value={`${data.newCards} new`}
+          sublabel="Unstudied"
+          to="/sets"
+        />
+        <MetricChip
+          icon={<FlameIcon className="h-4 w-4 text-accent" />}
+          label="Current Streak"
+          value={`${data.streak.current}d`}
+          sublabel={data.streak.current > 0 ? 'Active 🔥' : 'Inactive'}
+          to="/progress"
+        />
+        <MetricChip
+          icon={<ChartIcon className="h-4 w-4 text-primary" />}
+          label="Daily Goal"
+          value={`${data.today.reviews}/${data.today.goal}`}
+          sublabel={data.today.goalMet ? 'Done ✓' : 'In progress'}
+          to="/progress"
+        />
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <StreakCard streak={data.streak} />
 
@@ -304,20 +493,30 @@ function TodaySection({ data }: { data: DashboardResponse }): ReactElement {
   )
 }
 
+// ── Main Dashboard Page ──────────────────────────────────────────────────────
+
 export function DashboardPage(): ReactElement {
   const user = useAuthStore((s) => s.user)
-
-  // Fetch settings to update the auth store on mount
   useSettings()
 
   const settings = useAuthStore((s) => s.settings)
   const dashboard = useDashboard()
   const createSet = useCreateSet()
   const navigate = useNavigate()
+
   const [creating, setCreating] = useState(false)
+  const [importingOcr, setImportingOcr] = useState(false)
+  const [seedDecksOpen, setSeedDecksOpen] = useState(false)
+  const [universalImportOpen, setUniversalImportOpen] = useState(false)
+  const [quickLearnOpen, setQuickLearnOpen] = useState(false)
 
   const nickname = settings?.nickname ?? ''
   const profileImage = settings?.profileImage ?? null
+  const userGreeting = useMemo(
+    () => getGreeting(nickname || user?.email.split('@')[0] || ''),
+    [nickname, user?.email],
+  )
+  const formattedDate = useMemo(() => getFormattedDate(), [])
 
   const data = dashboard.data
 
@@ -330,61 +529,71 @@ export function DashboardPage(): ReactElement {
   }
 
   function hero(): ReactElement {
-    // Sized to the due panel rather than a generic bar: a skeleton that is the
-    // wrong height shifts the page exactly once, on arrival (saulado-ux §5).
-    if (dashboard.isPending) return <Skeleton className="h-[188px]" />
+    if (dashboard.isPending) return <Skeleton className="h-[188px] rounded-2xl" />
     if (dashboard.isError || data === undefined) return <DashboardUnavailable />
     if (data.totalDue > 0) return <DuePanel due={data.totalDue} />
     if (data.newCards > 0) return <ReadyToLearn newCards={data.newCards} />
     if (data.hasStudied) return <CaughtUp />
 
-    // Sets exist, but nothing in them is studiable yet. Checked before the
-    // never-started state so the dashboard never tells a user to create their
-    // first set while that set is listed further down the same page.
     const [firstSet] = data.recentSets
     if (firstSet) return <NothingReady set={firstSet} />
 
     return (
       <GettingStarted
-        onCreate={() => {
-          setCreating(true)
-        }}
+        onCreate={() => setCreating(true)}
+        onSeedDecks={() => setSeedDecksOpen(true)}
       />
     )
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-8">
       <OnboardingModal />
-      <div className="flex items-center justify-between gap-4">
+
+      {/* ── Student Portal Greeting & Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-6">
         <div className="flex items-center gap-4 min-w-0 flex-1">
-          <PageHeader
-            title={
-              nickname
+          {profileImage ? (
+            <img
+              src={profileImage}
+              alt=""
+              className="h-16 w-16 rounded-2xl object-cover border-2 border-primary/20 shrink-0 shadow-sm"
+            />
+          ) : (
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-2xl shrink-0 border border-primary/20">
+              {userGreeting.icon}
+            </div>
+          )}
+
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {userGreeting.greeting} {userGreeting.icon} · {formattedDate}
+            </p>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground truncate">
+              {nickname
                 ? `Welcome, ${nickname}`
                 : user
                   ? `Welcome, ${user.email.split('@')[0] ?? 'there'}`
-                  : 'Welcome'
-            }
-            description="Build a set, highlight what matters, and study it in context."
-            className="mb-0 min-w-0 flex-1"
-          />
+                  : 'Welcome'}
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              Build a set, highlight what matters, and study it in context.
+            </p>
+          </div>
         </div>
-        {profileImage && (
-          <img
-            src={profileImage}
-            alt=""
-            className="h-14 w-14 rounded-full object-cover border border-border shrink-0 shadow-sm"
-          />
-        )}
       </div>
 
-      <section aria-labelledby="study-heading" className="space-y-6">
-        {/*
-          No count badge beside this heading, though the pattern is used
-          elsewhere: the hero directly below already shows the figure, and the
-          same number twice in adjacent lines reads as two different numbers.
-        */}
+      {/* ── Quick Action Shortcuts ── */}
+      <QuickActions
+        onQuickLearn={() => setQuickLearnOpen(true)}
+        onImportOcr={() => setImportingOcr(true)}
+        onSeedDecks={() => setSeedDecksOpen(true)}
+        onImportDeck={() => setUniversalImportOpen(true)}
+        onNewSet={() => setCreating(true)}
+      />
+
+      {/* ── Primary Study Hero Section ── */}
+      <section aria-labelledby="study-heading" className="space-y-4">
         <h2 id="study-heading" className="text-lg font-semibold tracking-tight">
           {heading()}
         </h2>
@@ -392,39 +601,44 @@ export function DashboardPage(): ReactElement {
         {hero()}
       </section>
 
-      {/*
-        Both gated on `hasStudied`, not on the data being present. A streak of 0,
-        a ring at 0/20 and a flat sparkline are all *accurate* for a new user and
-        all read as failure. There is nothing to show until there is something to
-        show.
-      */}
+      {/* ── Progress Section ── */}
       {data?.hasStudied === true && <TodaySection data={data} />}
 
+      {/* ── Recent Sets Section ── */}
       {data !== undefined && data.recentSets.length > 0 && (
-        <RecentSets
-          sets={data.recentSets}
-          onCreate={() => {
-            setCreating(true)
-          }}
-        />
+        <RecentSets sets={data.recentSets} onCreate={() => setCreating(true)} />
       )}
 
+      {/* ── Dialogs & Modals ── */}
       {creating && (
         <SetDialog
           open
-          onClose={() => {
-            setCreating(false)
-          }}
+          onClose={() => setCreating(false)}
           pending={createSet.isPending}
           onSubmit={async (values) => {
             const created = await createSet.mutateAsync(values)
-            // Straight into the new set. A create that leaves the user back on
-            // the dashboard makes them hunt for the thing they just made, and
-            // the next step is always "add a card".
             void navigate(`/sets/${created.set.id}`)
           }}
         />
       )}
+
+      <FileImportDialog
+        open={importingOcr}
+        onClose={() => setImportingOcr(false)}
+        onImport={() => {
+          setImportingOcr(false)
+          void navigate('/sets')
+        }}
+      />
+
+      <SeedDecksDialog open={seedDecksOpen} onClose={() => setSeedDecksOpen(false)} />
+
+      <UniversalImportDialog
+        open={universalImportOpen}
+        onClose={() => setUniversalImportOpen(false)}
+      />
+
+      <QuickLearnDialog open={quickLearnOpen} onClose={() => setQuickLearnOpen(false)} />
     </div>
   )
 }

@@ -327,3 +327,44 @@ describe('delete', () => {
     expect(mocked.deleteSet).not.toHaveBeenCalled()
   })
 })
+
+describe('search, filter, sort, and mastery', () => {
+  it('renders mastery progress bar for each set', async () => {
+    mocked.listSets.mockResolvedValue(
+      page([set({ id: 'set-1', title: 'Biology', subtreeCardCount: 4 })]),
+    )
+    mockedStudy.getDueCounts.mockResolvedValue({
+      counts: [{ studySetId: 'set-1', due: 0, newCards: 0, mastered: 2 }],
+      totalDue: 0,
+      totalNew: 0,
+      scheduledCards: 0,
+    })
+    render(renderPage())
+
+    await waitFor(() => {
+      expect(screen.getByText('50%')).toBeInTheDocument()
+    })
+    expect(
+      screen.getByRole('progressbar', { name: /Biology mastery progress/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('filters sets by search query input', async () => {
+    const user = userEvent.setup()
+    mocked.listSets.mockResolvedValue(
+      page([set({ id: 'set-1', title: 'Biology' }), set({ id: 'set-2', title: 'Calculus' })]),
+    )
+    render(renderPage())
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Biology' })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Calculus' })).toBeInTheDocument()
+    })
+
+    const searchInput = screen.getByRole('textbox', { name: /Search sets by title/i })
+    await user.type(searchInput, 'Bio')
+
+    expect(screen.getByRole('link', { name: 'Biology' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Calculus' })).not.toBeInTheDocument()
+  })
+})
