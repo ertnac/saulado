@@ -7,7 +7,14 @@ import { Card } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { segmentClass } from '@/components/ui/segmented'
-import { CloseIcon, PlusIcon, SearchIcon, ShareIcon, UploadIcon } from '@/components/ui/icons'
+import {
+  CloseIcon,
+  PlusIcon,
+  SearchIcon,
+  ShareIcon,
+  SparklesIcon,
+  UploadIcon,
+} from '@/components/ui/icons'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { useDueCounts } from '@/features/study/queries'
 import { cn } from '@/lib/utils'
@@ -15,6 +22,7 @@ import { setAccentClass, setColorClass } from './colors'
 import { cardCountLabel, childCountLabel } from './counts'
 import { SetDialog } from './SetDialog'
 import { UniversalImportDialog } from './transfer/UniversalImportDialog'
+import { SeedDecksDialog } from './transfer/SeedDecksDialog'
 import { shareOrDownloadSetJson } from '@/services/transfer/json-export'
 import { flattenPages, useCreateSet, useDeleteSet, useSets, useUpdateSet } from './queries'
 
@@ -166,6 +174,7 @@ export function SetsPage(): ReactElement {
   const [sortBy, setSortBy] = useState<SetSortOption>('title-asc')
   const [creating, setCreating] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [seedDecksOpen, setSeedDecksOpen] = useState(false)
   const [editing, setEditing] = useState<StudySet | null>(null)
   const [deleting, setDeleting] = useState<StudySet | null>(null)
 
@@ -232,6 +241,15 @@ export function SetsPage(): ReactElement {
         description="A set groups cards on one subject. Open one to add cards or nest a sub-set inside it."
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSeedDecksOpen(true)
+              }}
+            >
+              <SparklesIcon />
+              Starter Decks
+            </Button>
             <Button
               variant="outline"
               onClick={() => {
@@ -397,15 +415,26 @@ export function SetsPage(): ReactElement {
               : 'Start with one paragraph of your notes. Highlight the words worth recalling and Saulado keeps the sentence around them.'}
           </p>
           {!archived && (
-            <Button
-              className="mt-5"
-              onClick={() => {
-                setCreating(true)
-              }}
-            >
-              <PlusIcon />
-              Create your first set
-            </Button>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+              <Button
+                variant="accent"
+                onClick={() => {
+                  setSeedDecksOpen(true)
+                }}
+              >
+                <SparklesIcon />
+                Explore Starter Decks
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCreating(true)
+                }}
+              >
+                <PlusIcon />
+                Create your first set
+              </Button>
+            </div>
           )}
         </Card>
       ) : filteredAndSortedItems.length === 0 ? (
@@ -517,6 +546,13 @@ export function SetsPage(): ReactElement {
         open={importing}
         onClose={() => {
           setImporting(false)
+        }}
+      />
+
+      <SeedDecksDialog
+        open={seedDecksOpen}
+        onClose={() => {
+          setSeedDecksOpen(false)
         }}
       />
     </div>

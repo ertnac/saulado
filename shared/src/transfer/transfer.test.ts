@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { extractClozeBrackets } from './cloze-brackets.js'
 import { findStringAnswers } from './string-answers.js'
 import { parseAndValidateJson, parseCard } from './json-parser.js'
+import { getSeedDecks } from './seed-decks.js'
 
 describe('transfer module (shared)', () => {
   describe('extractClozeBrackets', () => {
@@ -169,6 +170,17 @@ describe('transfer module (shared)', () => {
       expect(parseAndValidateJson('').success).toBe(false)
       expect(parseAndValidateJson('{ broken json').success).toBe(false)
       expect(parseAndValidateJson('{"randomKey": 123}').success).toBe(false)
+    })
+
+    it('successfully parses and validates the bundled seed decks', () => {
+      const seedDecks = getSeedDecks()
+      expect(seedDecks.sets).toHaveLength(3)
+      expect(seedDecks.totalCards).toBe(30)
+      expect(seedDecks.sets.map((s) => s.title)).toEqual([
+        'Computer Science & Algorithms',
+        'World History & Civilizations',
+        'Human Biology & Physiology',
+      ])
     })
   })
 })
