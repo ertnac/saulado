@@ -212,3 +212,34 @@ export function UsersIcon(props: IconProps): ReactElement {
     </Icon>
   )
 }
+
+export function PencilIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+      <path d="m15 5 4 4" />
+    </Icon>
+  )
+}
+
+export function ListIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <path d="M8 6h13" />
+      <path d="M8 12h13" />
+      <path d="M8 18h13" />
+      <path d="M3 6h.01" />
+      <path d="M3 12h.01" />
+      <path d="M3 18h.01" />
+    </Icon>
+  )
+}
+
+export function CardsIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <rect x="2" y="7" width="16" height="14" rx="2" />
+      <path d="M6 3h14a2 2 0 0 1 2 2v12" />
+    </Icon>
+  )
+}

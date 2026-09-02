@@ -14,6 +14,7 @@ import { ApiError } from '@/services/api'
 import { FeedbackPanel } from './FeedbackPanel'
 import { SessionSummaryView } from './SessionSummaryView'
 import { StudyCardView } from './StudyCardView'
+import { StudyModeSwitcher } from './StudyModeSwitcher'
 import { ModePicker } from './ModePicker'
 import { forgetSession, readResumableSession, rememberSession } from './resume'
 import { useCompleteSession, useSession, useStartSession, useSubmitAnswer } from './queries'
@@ -65,10 +66,22 @@ export function StudySessionPage(): ReactElement {
   const [startError, setStartError] = useState<Error | null>(null)
 
   const [mode, setMode] = useState<StartableMode>(modeParam ?? 'spaced')
-  const [answeringType] = useState<AnsweringType>(typeParam ?? 'identification')
+  const [answeringType, setAnsweringType] = useState<AnsweringType>(typeParam ?? 'identification')
   const [picking, setPicking] = useState(
     studySetId !== null && modeParam === null && resumeId === null,
   )
+
+  const handleAnsweringTypeChange = (nextType: AnsweringType): void => {
+    if (session.answer !== null || submit.isPending) return
+    setAnsweringType(nextType)
+    setParams(
+      (prev) => {
+        prev.set('type', nextType)
+        return prev
+      },
+      { replace: true },
+    )
+  }
 
   const resumed = useSession(sessionId === null ? resumeId : null)
   const elapsed = useCardTimer(session.card?.cardId)
@@ -369,24 +382,34 @@ export function StudySessionPage(): ReactElement {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
-      <header className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
+      <header className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm tabular-nums text-muted-foreground">
             {/* Progress is the server's count, so a re-queued card is honest about
                 having been answered rather than silently rewinding the bar. */}
             {answered} of {session.progress.total} answered
           </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={complete.isPending}
-            onClick={() => {
-              if (sessionId) finish(sessionId)
-            }}
-          >
-            End session
-          </Button>
+
+          <div className="flex flex-wrap items-center justify-between gap-2.5 sm:justify-end">
+            <StudyModeSwitcher
+              value={answeringType}
+              onChange={handleAnsweringTypeChange}
+              disabled={session.answer !== null || submit.isPending}
+            />
+
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={complete.isPending}
+              onClick={() => {
+                if (sessionId) finish(sessionId)
+              }}
+            >
+              End session
+            </Button>
+          </div>
         </div>
+
         {/*
           Native progress element rather than a styled div: it is announced with a
           value, and it degrades to something meaningful if styles fail to load.

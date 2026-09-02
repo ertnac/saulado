@@ -734,4 +734,45 @@ describe('study modes selector', () => {
       blanks: [{ ordinal: 0, submitted: 'CPU' }],
     })
   })
+
+  it('allows switching answering modes mid-session without resetting the card or queue', async () => {
+    const user = userEvent.setup()
+    mocked.startSession.mockResolvedValue({
+      session: session({
+        queue: [
+          card({
+            blankOptions: [['CPU', 'GPU', 'RAM', 'SSD']],
+            blankAnswers: ['CPU'],
+          }),
+        ],
+      }),
+    })
+    mocked.submitAnswer.mockResolvedValue(graded())
+
+    render(renderPage('/study?set=set-1&mode=spaced'))
+
+    // Starts in Type-In mode
+    expect(await screen.findByRole('textbox', { name: 'Blank 1 of 1' })).toBeInTheDocument()
+
+    // Switch to Multiple Choice
+    const mcRadio = screen.getByRole('radio', { name: 'Multiple Choice' })
+    await user.click(mcRadio)
+
+    // Verify Multiple Choice mode is active
+    expect(screen.queryByRole('textbox', { name: 'Blank 1 of 1' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Option A: CPU' })).toBeInTheDocument()
+
+    // Switch to Flashcards
+    const flashcardRadio = screen.getByRole('radio', { name: 'Flashcards' })
+    await user.click(flashcardRadio)
+
+    // Verify Flashcard mode is active
+    expect(screen.getByRole('button', { name: /Reveal Answer/i })).toBeInTheDocument()
+
+    // Switch back to Type-In
+    const typeInRadio = screen.getByRole('radio', { name: 'Type-In' })
+    await user.click(typeInRadio)
+
+    expect(screen.getByRole('textbox', { name: 'Blank 1 of 1' })).toBeInTheDocument()
+  })
 })
