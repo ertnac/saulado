@@ -11,6 +11,7 @@ import type {
   UpdateSetRequest,
 } from '@saulado/shared'
 import {
+  onlineManager,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -20,40 +21,53 @@ import {
   type UseMutationResult,
 } from '@tanstack/react-query'
 import * as api from '../services/cards'
+import * as offlineData from '../lib/offline/data-source'
+import { useAuthStore } from '../stores/auth'
+import { loadAuthCache } from '../services/auth-cache'
 
-/**
- * Caching, invalidation and optimistic updates for sets and cards — a port of
- * `frontend/src/features/cards/queries.ts`.
- *
- * Only the import path differs. Every key, every patch and every invalidation
- * rule is the same as the web's, deliberately: the two clients talk to one API
- * and one of them being cleverer about staleness only produces two different
- * sets of bugs.
- *
- * It lives in `hooks/` rather than a new `features/` tree because that is where
- * this app keeps its hooks, and it is a file of hooks.
- *
- * Which mutations are optimistic is a choice, not a policy. Renames, archive
- * toggles and deletes are: the server cannot tell the client anything it does
- * not already know. Creates are not: the server assigns the id and derives every
- * `answerText` from the paragraph, so an optimistic card would be a guess at
- * data the client is specifically not trusted to produce.
- */
+async function resolveUserId(): Promise<string> {
+  const storeUser = useAuthStore.getState().user
+  if (storeUser?.id) return storeUser.id
+  const cached = await loadAuthCache()
+  if (cached?.user?.id) return cached.user.id
+  try {
+    const db = await offlineData.getDatabase()
+    const row = await db.getFirstAsync<{ user_id: string }>(
+      'SELECT user_id FROM study_sets WHERE user_id IS NOT NULL LIMIT 1',
+    )
+    if (row?.user_id) return row.user_id
+  } catch {
+    // Database may not be initialized yet
+  }
+  return 'local-user'
+}
+
+function isNetworkError(error: unknown): boolean {
+  if (!onlineManager.isOnline()) return true
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase()
+    return (
+      msg.includes('network') ||
+      msg.includes('failed to fetch') ||
+      msg.includes('network request failed') ||
+      msg.includes('connection refused') ||
+      msg.includes('timeout') ||
+      msg.includes('aborted') ||
+      msg.includes('abort') ||
+      msg.includes('transient') ||
+      msg.includes('offline') ||
+      msg.includes('unauthorized') ||
+      msg.includes('authentication required')
+    )
+  }
+  return true
+}
 
 // ── Keys ────────────────────────────────────────────────────────────────────
 
 export const setKeys = {
   all: ['sets'] as const,
   lists: () => [...setKeys.all, 'list'] as const,
-  /**
-   * One entry per *request*, not one list filtered several ways. Archived sets
-   * and a set's children come from different requests; sharing an entry would
-   * flash a parent's children into the root list on refetch.
-   *
-   * Both dimensions ride in one object at the same position, so `lists()` stays
-   * a two-element prefix matching every variant — which is what lets the
-   * optimistic patches reach a set wherever it happens to be cached.
-   */
   list: (options: { archived: boolean; parent: string | null }) =>
     [...setKeys.lists(), options] as const,
   details: () => [...setKeys.all, 'detail'] as const,
@@ -63,11 +77,6 @@ export const setKeys = {
 export const cardKeys = {
   all: ['cards'] as const,
   lists: () => [...cardKeys.all, 'list'] as const,
-  /**
-   * Tags are sorted into the key so `?tag=a&tag=b` and `?tag=b&tag=a` — the same
-   * request, since the server uses `hasEvery` — share one entry. Copied before
-   * sorting: sorting the caller's array would reorder their UI as a side effect.
-   */
   list: (setId: string, tags: readonly string[] = []) =>
     [...cardKeys.lists(), setId, [...tags].sort()] as const,
   details: () => [...cardKeys.all, 'detail'] as const,
@@ -80,12 +89,6 @@ export const tagKeys = {
 
 // ── Cache helpers ───────────────────────────────────────────────────────────
 
-/**
- * Rewrites every page of every matching infinite list.
- *
- * Optimistic edits have to reach into pages: a card the user renames may sit on
- * page three, and replacing only `pages[0]` leaves the old text on screen.
- */
 function patchPages<T>(
   client: QueryClient,
   queryKey: readonly unknown[],
@@ -100,7 +103,6 @@ function patchPages<T>(
   )
 }
 
-/** Applies `patch` to the set with `id` wherever it is cached — lists and detail. */
 function patchSet(client: QueryClient, id: string, patch: (set: StudySet) => StudySet): void {
   patchPages<StudySet>(client, setKeys.lists(), (items) =>
     items.map((item) => (item.id === id ? patch(item) : item)),
@@ -111,17 +113,6 @@ function patchSet(client: QueryClient, id: string, patch: (set: StudySet) => Stu
   )
 }
 
-/**
- * Adjusts a set's denormalised card counts.
- *
- * They live on the set row so the list need not fetch them per set, which means
- * adding or removing a card leaves them stale in a way the user sees at once —
- * delete the last card and the set still claims "1 card". Clamped at zero.
- *
- * Ancestors' subtree totals move too and are deliberately not patched: the
- * client would have to know the chain, and the screen showing those numbers is
- * one navigation and a refetch away.
- */
 function shiftCardCount(client: QueryClient, setId: string, delta: number): void {
   patchSet(client, setId, (set) => ({
     ...set,
@@ -132,26 +123,55 @@ function shiftCardCount(client: QueryClient, setId: string, delta: number): void
 
 // ── Set queries ─────────────────────────────────────────────────────────────
 
-/**
- * A page of sets, with "Load more" driven by the server's cursor.
- *
- * `parent` defaults to the roots, matching the API. Passing a set id lists that
- * set's direct children, which is how the set screen renders its sub-sets.
- */
 export function useSets(options: { archived?: boolean; parent?: string | null } = {}) {
   const archived = options.archived ?? false
   const parent = options.parent ?? null
 
   return useInfiniteQuery({
     queryKey: setKeys.list({ archived, parent }),
-    queryFn: ({ pageParam }) =>
-      api.listSets({
-        cursor: pageParam,
-        archived: archived ? true : undefined,
-        parent: parent ?? undefined,
-      }),
-    // `undefined` rather than `null`: react-query treats `undefined` as "no more
-    // pages" and `hasNextPage` stays true for any other value, including null.
+    queryFn: async ({ pageParam }) => {
+      const userId = await resolveUserId()
+      if (!onlineManager.isOnline() && userId) {
+        const offlineSets = await offlineData.getSets(userId, parent)
+        return {
+          items: offlineSets,
+          nextCursor: null,
+        }
+      }
+
+      try {
+        const res = await api.listSets({
+          cursor: pageParam,
+          archived: archived ? true : undefined,
+          parent: parent ?? undefined,
+        })
+        if (userId) {
+          for (const s of res.items) {
+            void offlineData.mirrorSetToSQLite(userId, s)
+          }
+          const localSets = await offlineData.getSets(userId, parent)
+          const unsyncedSets = localSets.filter(
+            (ls) => ls.id.startsWith('temp-set-') || !res.items.some((s) => s.id === ls.id),
+          )
+          if (unsyncedSets.length > 0) {
+            return {
+              ...res,
+              items: [...unsyncedSets, ...res.items],
+            }
+          }
+        }
+        return res
+      } catch (error) {
+        if (userId && isNetworkError(error)) {
+          const offlineSets = await offlineData.getSets(userId, parent)
+          return {
+            items: offlineSets,
+            nextCursor: null,
+          }
+        }
+        throw error
+      }
+    },
     getNextPageParam: (last: SetsResponse) => last.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
   })
@@ -160,101 +180,117 @@ export function useSets(options: { archived?: boolean; parent?: string | null } 
 export function useSet(id: string | undefined) {
   return useQuery({
     queryKey: setKeys.detail(id ?? ''),
-    queryFn: () => api.getSet(id as string),
-    // Guards the route-param case: `/sets/[setId]` can render for one frame with
-    // the param still undefined, and `/api/sets/undefined` is a 404 the user
-    // would read as "set not found".
+    queryFn: async () => {
+      const userId = await resolveUserId()
+      const isTemp = id?.startsWith('temp-set-')
+      if ((isTemp || !onlineManager.isOnline()) && userId && id) {
+        const offlineSet = await offlineData.getSet(userId, id)
+        if (offlineSet) return { set: offlineSet }
+      }
+
+      try {
+        const res = await api.getSet(id as string)
+        if (userId && res.set) {
+          void offlineData.mirrorSetToSQLite(userId, res.set)
+        }
+        return res
+      } catch (error) {
+        if (userId && id && isNetworkError(error)) {
+          const offlineSet = await offlineData.getSet(userId, id)
+          if (offlineSet) return { set: offlineSet }
+        }
+        throw error
+      }
+    },
     enabled: id !== undefined && id.length > 0,
   })
 }
 
 // ── Set mutations ───────────────────────────────────────────────────────────
 
-/**
- * Creates a set.
- *
- * Not optimistic: the id comes from the server and the UI navigates to it. An
- * invented id would have to be swapped out mid-navigation, and getting that
- * wrong strands the user on a route for a set that never existed.
- *
- * Every list is invalidated, not only the one the new set lands in: creating a
- * child changes its parent's `childCount` and `subtreeCardCount`, and the parent
- * sits in a different list from the child.
- */
 export function useCreateSet(): UseMutationResult<SetResponse, Error, CreateSetRequest> {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: (body: CreateSetRequest) => api.createSet(body),
+    mutationFn: async (body: CreateSetRequest) => {
+      const userId = await resolveUserId()
+      if (!onlineManager.isOnline() && userId) {
+        const created = await offlineData.createSet(userId, body)
+        return { set: created }
+      }
+
+      try {
+        const res = await api.createSet(body)
+        if (userId && res.set) {
+          void offlineData.mirrorSetToSQLite(userId, res.set)
+        }
+        return res
+      } catch (error) {
+        if (userId && isNetworkError(error)) {
+          const created = await offlineData.createSet(userId, body)
+          return { set: created }
+        }
+        throw error
+      }
+    },
     onSuccess: (data) => {
-      // Seed the detail cache so navigating straight to the new set renders
-      // immediately instead of spinning for data we are holding.
       client.setQueryData<SetResponse>(setKeys.detail(data.set.id), data)
+      client.setQueriesData<InfiniteData<SetsResponse>>({ queryKey: setKeys.lists() }, (old) => {
+        if (!old || old.pages.length === 0) {
+          return {
+            pageParams: [undefined],
+            pages: [{ items: [data.set], nextCursor: null }],
+          }
+        }
+        const firstPage = old.pages[0]
+        if (!firstPage) return old
+        return {
+          ...old,
+          pages: [
+            {
+              ...firstPage,
+              items: [data.set, ...firstPage.items.filter((item) => item.id !== data.set.id)],
+            },
+            ...old.pages.slice(1),
+          ],
+        }
+      })
       void client.invalidateQueries({ queryKey: setKeys.lists() })
     },
   })
 }
 
-/**
- * Renames a set — optimistically.
- *
- * The id travels in the variables rather than being bound at hook creation,
- * because a list needs one mutation for every row and hooks cannot be called in
- * a loop. Callers pass `{ id, body }`.
- *
- * The rollback keeps the *whole* previous cache rather than inverting the patch:
- * an inverse edit assumes nothing else changed in between, and a background
- * refetch landing mid-flight breaks that assumption quietly.
- *
- * ponytail: the web version also patches `parentId`, `color` and `archivedAt`
- * because its UI can move, recolour and archive a set. This one cannot yet, so
- * it patches the one field it can change. Widen it alongside that UI, and copy
- * the web's `'parentId' in body` test when you do — the API distinguishes moving
- * a set to the root (null) from leaving it alone (absent), and `??` would treat
- * an intentional null as the second.
- */
 export function useRenameSet() {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: UpdateSetRequest }) => api.updateSet(id, body),
+    mutationFn: async ({ id, body }: { id: string; body: UpdateSetRequest }) => {
+      const userId = await resolveUserId()
+      const isTemp = id.startsWith('temp-set-')
+      if ((isTemp || !onlineManager.isOnline()) && userId) {
+        const updated = await offlineData.updateSet(userId, id, body)
+        return { set: updated }
+      }
+
+      try {
+        const res = await api.updateSet(id, body)
+        if (userId && res.set) {
+          void offlineData.mirrorSetToSQLite(userId, res.set)
+        }
+        return res
+      } catch (error) {
+        if (userId && isNetworkError(error)) {
+          const updated = await offlineData.updateSet(userId, id, body)
+          return { set: updated }
+        }
+        throw error
+      }
+    },
 
     onMutate: async ({ id, body }) => {
-      // In-flight refetches are cancelled first: one resolving after the patch
-      // would overwrite it with pre-edit server state, and the user would watch
-      // their rename undo itself.
       await client.cancelQueries({ queryKey: setKeys.all })
       const previous = client.getQueriesData({ queryKey: setKeys.all })
-
       patchSet(client, id, (set) => ({ ...set, title: body.title ?? set.title }))
-
-      return { previous }
-    },
-
-    onError: (_error, _variables, context) => {
-      for (const [key, data] of context?.previous ?? []) client.setQueryData(key, data)
-    },
-
-    onSettled: () => {
-      void client.invalidateQueries({ queryKey: setKeys.all })
-    },
-  })
-}
-
-export function useDeleteSet() {
-  const client = useQueryClient()
-
-  return useMutation({
-    mutationFn: (id: string) => api.deleteSet(id),
-
-    onMutate: async (id: string) => {
-      await client.cancelQueries({ queryKey: setKeys.all })
-      const previous = client.getQueriesData({ queryKey: setKeys.all })
-
-      patchPages<StudySet>(client, setKeys.lists(), (items) =>
-        items.filter((item) => item.id !== id),
-      )
-
       return { previous }
     },
 
@@ -272,8 +308,28 @@ export function useArchiveSet() {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, archive }: { id: string; archive: boolean }) =>
-      api.updateSet(id, { archived: archive }),
+    mutationFn: async ({ id, archive }: { id: string; archive: boolean }) => {
+      const userId = await resolveUserId()
+      const isTemp = id.startsWith('temp-set-')
+      if ((isTemp || !onlineManager.isOnline()) && userId) {
+        const updated = await offlineData.updateSet(userId, id, { archived: archive })
+        return { set: updated }
+      }
+
+      try {
+        const res = await api.updateSet(id, { archived: archive })
+        if (userId && res.set) {
+          void offlineData.mirrorSetToSQLite(userId, res.set)
+        }
+        return res
+      } catch (error) {
+        if (userId && isNetworkError(error)) {
+          const updated = await offlineData.updateSet(userId, id, { archived: archive })
+          return { set: updated }
+        }
+        throw error
+      }
+    },
 
     onMutate: async ({ id, archive }) => {
       await client.cancelQueries({ queryKey: setKeys.all })
@@ -295,18 +351,139 @@ export function useArchiveSet() {
   })
 }
 
+export function useDeleteSet() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const userId = await resolveUserId()
+      const isTemp = id.startsWith('temp-set-')
+      if ((isTemp || !onlineManager.isOnline()) && userId) {
+        await offlineData.deleteSet(userId, id)
+        return { success: true }
+      }
+
+      try {
+        await api.deleteSet(id)
+        if (userId) {
+          await offlineData.deleteSet(userId, id)
+        }
+        return { success: true }
+      } catch (error) {
+        if (userId && isNetworkError(error)) {
+          await offlineData.deleteSet(userId, id)
+          return { success: true }
+        }
+        throw error
+      }
+    },
+
+    onMutate: async (id: string) => {
+      await client.cancelQueries({ queryKey: setKeys.all })
+      const previous = client.getQueriesData({ queryKey: setKeys.all })
+
+      patchPages<StudySet>(client, setKeys.lists(), (items) =>
+        items.filter((item) => item.id !== id),
+      )
+      client.removeQueries({ queryKey: setKeys.detail(id) })
+
+      return { previous }
+    },
+
+    onError: (_error, _variables, context) => {
+      for (const [key, data] of context?.previous ?? []) client.setQueryData(key, data)
+    },
+
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: setKeys.all })
+    },
+  })
+}
+
 // ── Card queries ────────────────────────────────────────────────────────────
 
 export function useCards(setId: string | undefined, tags: readonly string[] = []) {
   return useInfiniteQuery({
     queryKey: cardKeys.list(setId ?? '', tags),
-    queryFn: ({ pageParam }) =>
-      api.listCards(setId as string, {
-        cursor: pageParam,
-        // An empty array serialises to no query params anyway, but `undefined`
-        // keeps the request byte-identical to an unfiltered one.
-        tag: tags.length > 0 ? [...tags] : undefined,
-      }),
+    queryFn: async ({ pageParam }) => {
+      const userId = await resolveUserId()
+      const isTemp = setId?.startsWith('temp-set-')
+      if ((isTemp || !onlineManager.isOnline()) && userId && setId) {
+        const offlineCards = await offlineData.getCards(userId, setId)
+        const summaries: StudyCardSummary[] = offlineCards.map((c) => ({
+          id: c.id,
+          studySetId: c.studySetId,
+          paragraph: c.paragraph,
+          tags: c.tags,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+          answerCount: c.answers?.length ?? 0,
+        }))
+        return {
+          items: summaries,
+          nextCursor: null,
+        }
+      }
+
+      try {
+        const res = await api.listCards(setId as string, {
+          cursor: pageParam,
+          tag: tags.length > 0 ? [...tags] : undefined,
+        })
+        if (userId && setId && res.items) {
+          for (const c of res.items) {
+            void offlineData.mirrorCardToSQLite(userId, setId, {
+              id: c.id,
+              studySetId: c.studySetId,
+              paragraph: c.paragraph,
+              answers: [],
+              tags: c.tags,
+              createdAt: c.createdAt,
+              updatedAt: c.updatedAt,
+            })
+          }
+          const localCards = await offlineData.getCards(userId, setId)
+          const unsyncedCards: StudyCardSummary[] = localCards
+            .filter(
+              (lc) => lc.id.startsWith('temp-card-') || !res.items.some((c) => c.id === lc.id),
+            )
+            .map((c) => ({
+              id: c.id,
+              studySetId: c.studySetId,
+              paragraph: c.paragraph,
+              tags: c.tags,
+              createdAt: c.createdAt,
+              updatedAt: c.updatedAt,
+              answerCount: c.answers?.length ?? 0,
+            }))
+          if (unsyncedCards.length > 0) {
+            return {
+              ...res,
+              items: [...unsyncedCards, ...res.items],
+            }
+          }
+        }
+        return res
+      } catch (error) {
+        if (userId && setId && isNetworkError(error)) {
+          const offlineCards = await offlineData.getCards(userId, setId)
+          const summaries: StudyCardSummary[] = offlineCards.map((c) => ({
+            id: c.id,
+            studySetId: c.studySetId,
+            paragraph: c.paragraph,
+            tags: c.tags,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+            answerCount: c.answers?.length ?? 0,
+          }))
+          return {
+            items: summaries,
+            nextCursor: null,
+          }
+        }
+        throw error
+      }
+    },
     getNextPageParam: (last: CardsResponse) => last.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
     enabled: setId !== undefined && setId.length > 0,
@@ -329,12 +506,6 @@ export function usePrefetchCards() {
   }
 }
 
-/**
- * Every tag the user has, with counts.
- *
- * Tag counts drift constantly and nothing depends on them being exact — the
- * filter row is a navigation aid, not a report.
- */
 export function useTags() {
   return useQuery({
     queryKey: tagKeys.all,
@@ -343,40 +514,69 @@ export function useTags() {
   })
 }
 
-/**
- * One card, with its answers.
- *
- * The list carries `StudyCardSummary` — no answers — so this is the fetch the
- * editor needs before it can render highlights. Seeding it from a list entry
- * would produce a card whose `answers` array is missing, which the editor would
- * faithfully render as a paragraph with no blanks.
- */
 export function useCard(id: string | undefined) {
   return useQuery({
     queryKey: cardKeys.detail(id ?? ''),
-    queryFn: () => api.getCard(id as string),
+    queryFn: async () => {
+      const userId = await resolveUserId()
+      const isTemp = id?.startsWith('temp-card-')
+      if ((isTemp || !onlineManager.isOnline()) && userId && id) {
+        const offlineCard = await offlineData.getCard(userId, id)
+        if (offlineCard) {
+          return { card: offlineCard }
+        }
+      }
+
+      try {
+        const res = await api.getCard(id as string)
+        if (userId && res.card) {
+          void offlineData.mirrorCardToSQLite(userId, res.card.studySetId, res.card)
+        }
+        return res
+      } catch (error) {
+        if (userId && id && isNetworkError(error)) {
+          const offlineCard = await offlineData.getCard(userId, id)
+          if (offlineCard) {
+            return { card: offlineCard }
+          }
+        }
+        throw error
+      }
+    },
     enabled: id !== undefined && id.length > 0,
   })
 }
 
 // ── Card mutations ──────────────────────────────────────────────────────────
 
-/**
- * Creates a card.
- *
- * Not optimistic, for a reason specific to this app: the server slices every
- * `answerText` out of the paragraph itself, and the client deliberately does not
- * send it (see `AnswerInput`). An optimistic card would have to invent that
- * text, which is exactly the client-supplied answer the offset model exists to
- * reject.
- */
 export function useCreateCard(
   setId: string,
 ): UseMutationResult<CardResponse, Error, CreateCardRequest> {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: (body: CreateCardRequest) => api.createCard(setId, body),
+    mutationFn: async (body: CreateCardRequest) => {
+      const userId = await resolveUserId()
+      const isTemp = setId.startsWith('temp-set-')
+      if ((isTemp || !onlineManager.isOnline()) && userId) {
+        const card = await offlineData.createCard(userId, setId, body)
+        return { card }
+      }
+
+      try {
+        const res = await api.createCard(setId, body)
+        if (userId && res.card) {
+          void offlineData.mirrorCardToSQLite(userId, setId, res.card)
+        }
+        return res
+      } catch (error) {
+        if (userId && isNetworkError(error)) {
+          const card = await offlineData.createCard(userId, setId, body)
+          return { card }
+        }
+        throw error
+      }
+    },
     onSuccess: (data) => {
       client.setQueryData<CardResponse>(cardKeys.detail(data.card.id), data)
 
@@ -387,44 +587,64 @@ export function useCreateCard(
         tags: data.card.tags,
         createdAt: data.card.createdAt,
         updatedAt: data.card.updatedAt,
-        answerCount: data.card.answers.length,
+        answerCount: data.card.answers?.length ?? 0,
       }
 
       client.setQueriesData<
         InfiniteData<{ items: StudyCardSummary[]; nextCursor?: string | null }>
       >({ queryKey: cardKeys.list(setId) }, (oldData) => {
-        if (!oldData || oldData.pages.length === 0) return oldData
+        if (!oldData || oldData.pages.length === 0) {
+          return {
+            pageParams: [undefined],
+            pages: [{ items: [summary], nextCursor: null }],
+          }
+        }
         const newPages = [...oldData.pages]
         const firstPage = newPages[0]
         if (!firstPage) return oldData
 
         newPages[0] = {
           ...firstPage,
-          items: [summary, ...firstPage.items],
+          items: [summary, ...firstPage.items.filter((c) => c.id !== summary.id)],
         }
         return { ...oldData, pages: newPages }
       })
 
       shiftCardCount(client, setId, 1)
+      void client.invalidateQueries({ queryKey: cardKeys.lists() })
+      void client.invalidateQueries({ queryKey: setKeys.all })
       if (data.card.tags.length > 0) void client.invalidateQueries({ queryKey: tagKeys.all })
     },
   })
 }
 
-/**
- * Edits a card.
- *
- * Optimistic on the summary fields only. `paragraph` is patched because it is
- * what the row is labelled with (`cardLabel` derives the label from it), but
- * `answers` are left to the server response: they come back with server-derived
- * text, so patching them from the request would briefly show text that is not
- * what was stored.
- */
 export function useUpdateCard(id: string) {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: (body: UpdateCardRequest) => api.updateCard(id, body),
+    mutationFn: async (body: UpdateCardRequest) => {
+      const userId = await resolveUserId()
+      const isTemp =
+        id.startsWith('temp-card-') || (body.studySetId?.startsWith('temp-set-') ?? false)
+      if ((isTemp || !onlineManager.isOnline()) && userId) {
+        const card = await offlineData.updateCard(userId, body.studySetId ?? '', id, body)
+        return { card }
+      }
+
+      try {
+        const res = await api.updateCard(id, body)
+        if (userId && res.card) {
+          void offlineData.mirrorCardToSQLite(userId, res.card.studySetId, res.card)
+        }
+        return res
+      } catch (error) {
+        if (userId && isNetworkError(error)) {
+          const card = await offlineData.updateCard(userId, body.studySetId ?? '', id, body)
+          return { card }
+        }
+        throw error
+      }
+    },
 
     onMutate: async (body: UpdateCardRequest) => {
       await client.cancelQueries({ queryKey: cardKeys.all })
@@ -461,33 +681,44 @@ export function useUpdateCard(id: string) {
   })
 }
 
-/**
- * Deletes a card.
- *
- * `setId` is a parameter rather than read from the cache, because the row it
- * would be read from is the one being removed — and after an optimistic delete
- * there is nothing left to ask which set the card belonged to.
- */
 export function useDeleteCard(setId: string) {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: (id: string) => api.deleteCard(id),
+    mutationFn: async (cardId: string) => {
+      const userId = await resolveUserId()
+      const isTemp = cardId.startsWith('temp-card-') || setId.startsWith('temp-set-')
+      if ((isTemp || !onlineManager.isOnline()) && userId) {
+        await offlineData.deleteCard(userId, setId, cardId)
+        return { success: true }
+      }
 
-    onMutate: async (id: string) => {
+      try {
+        await api.deleteCard(cardId)
+        if (userId) {
+          await offlineData.deleteCard(userId, setId, cardId)
+        }
+        return { success: true }
+      } catch (error) {
+        if (userId && isNetworkError(error)) {
+          await offlineData.deleteCard(userId, setId, cardId)
+          return { success: true }
+        }
+        throw error
+      }
+    },
+
+    onMutate: async (cardId: string) => {
       await client.cancelQueries({ queryKey: cardKeys.all })
-      // The set caches are captured too, because `shiftCardCount` edits them and
-      // a rollback restoring only the card caches would leave the set claiming
-      // one card fewer than it has.
       const previous = [
         ...client.getQueriesData({ queryKey: cardKeys.all }),
         ...client.getQueriesData({ queryKey: setKeys.all }),
       ]
 
       patchPages<StudyCardSummary>(client, cardKeys.lists(), (items) =>
-        items.filter((item) => item.id !== id),
+        items.filter((item) => item.id !== cardId),
       )
-      client.removeQueries({ queryKey: cardKeys.detail(id) })
+      client.removeQueries({ queryKey: cardKeys.detail(cardId) })
       shiftCardCount(client, setId, -1)
 
       return { previous }
@@ -507,13 +738,6 @@ export function useDeleteCard(setId: string) {
   })
 }
 
-/**
- * Flattens an infinite query's pages into one list.
- *
- * Components render a list, not a paginated structure — every consumer would
- * otherwise write the same `data?.pages.flatMap(...)` and the `?? []` that stops
- * it being undefined on first render.
- */
 export function flattenPages<T>(
   data:
     InfiniteData<{ items: T[]; nextCursor: string | null }> | { items: T[] }[] | undefined | null,

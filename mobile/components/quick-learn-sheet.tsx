@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactElement,
+} from 'react'
 import {
   ActivityIndicator,
   Animated,
@@ -11,8 +18,10 @@ import {
   ScrollView,
 } from 'react-native'
 import { useRouter } from 'expo-router'
+import { onlineManager } from '@tanstack/react-query'
 import type { StudySet } from '@saulado/shared'
 import { flattenPages, useSets } from '../hooks/cards'
+import { useOfflineSetsStore } from '../stores/offline-sets'
 import { useTokenColor } from '../stores/theme'
 import { Button } from './button'
 import { BookOpenIcon, ChevronLeftIcon, ChevronRightIcon, ZapIcon } from './icons'
@@ -72,13 +81,42 @@ export function QuickLearnSheet({
   const foreground = useTokenColor('--foreground')
   const primary = useTokenColor('--primary')
 
+  const isOnline = useSyncExternalStore(
+    (onStoreChange) => onlineManager.subscribe(onStoreChange),
+    () => onlineManager.isOnline(),
+  )
+  const isOffline = !isOnline
+  const offlineStore = useOfflineSetsStore()
+
   const [parent, setParent] = useState<StudySet | null>(null)
 
   const rootSets = useSets({ parent: null })
   const childSets = useSets({ parent: parent?.id ?? null })
 
-  const rootItems = flattenPages(rootSets.data)
-  const childItems = flattenPages(childSets.data)
+  const offlineRootSets: StudySet[] = Object.values(offlineStore.sets)
+    .filter(
+      (s) =>
+        s.status === 'available' && s.metadata && !s.metadata.parentId && !s.metadata.archivedAt,
+    )
+    .map((s) => s.metadata!)
+
+  const offlineChildSets: StudySet[] = parent
+    ? Object.values(offlineStore.sets)
+        .filter(
+          (s) =>
+            s.status === 'available' &&
+            s.metadata &&
+            s.metadata.parentId === parent.id &&
+            !s.metadata.archivedAt,
+        )
+        .map((s) => s.metadata!)
+    : []
+
+  const rootFromQuery = flattenPages(rootSets.data)
+  const childFromQuery = flattenPages(childSets.data)
+
+  const rootItems = rootFromQuery.length > 0 ? rootFromQuery : isOffline ? offlineRootSets : []
+  const childItems = childFromQuery.length > 0 ? childFromQuery : isOffline ? offlineChildSets : []
 
   // ── React Native standard Animated ──────────────────────────────────────
   const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current
@@ -163,8 +201,8 @@ export function QuickLearnSheet({
 
   const isDrilled = parent !== null
   const sets = isDrilled ? childItems : rootItems
-  const loading = isDrilled ? childSets.isPending : rootSets.isPending
-  const error = isDrilled ? childSets.isError : rootSets.isError
+  const loading = isOffline ? false : isDrilled ? childSets.isPending : rootSets.isPending
+  const error = isOffline ? false : isDrilled ? childSets.isError : rootSets.isError
   const refetch = isDrilled ? childSets.refetch : rootSets.refetch
 
   return (

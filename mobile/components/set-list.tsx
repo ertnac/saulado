@@ -25,6 +25,7 @@ import { exportSingleSetAsJson, shareJsonPayload } from '../services/json-transf
 import { useTokenColor } from '../stores/theme'
 import { useOfflineSetsStore } from '../stores/offline-sets'
 import { downloadSet, removeOfflineSet } from '../lib/offline/sets'
+import { resolveEntityId } from '../lib/offline/id-remap'
 import { Button } from './button'
 import {
   ArchiveIcon,
@@ -160,6 +161,11 @@ function SetRow({
   const offlineEntry = useOfflineSetsStore((state) => state.sets[set.id])
   const isAvailableOffline = offlineEntry?.status === 'available'
   const isDownloading = offlineEntry?.status === 'downloading'
+  const isUnsynced =
+    set.id.startsWith('temp-set-') ||
+    offlineEntry?.syncStatus === 'pending_create' ||
+    offlineEntry?.syncStatus === 'pending_update' ||
+    offlineEntry?.syncStatus === 'pending_delete'
 
   const handleSaveOffline = (): void => {
     setMenuVisible(false)
@@ -203,12 +209,17 @@ function SetRow({
             </Text>
             <View className="flex-row items-center gap-2">
               <Text className="text-sm font-medium text-muted-foreground">{countLabel(set)}</Text>
-              {isAvailableOffline && (
+              {isUnsynced ? (
+                <View className="flex-row items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5">
+                  <CloudOffIcon color="#d97706" size={12} />
+                  <Text className="text-xs font-semibold text-amber-600">Unsynced</Text>
+                </View>
+              ) : isAvailableOffline ? (
                 <View className="flex-row items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5">
                   <CloudIcon color={iconColor} size={12} />
                   <Text className="text-xs font-semibold text-primary">Offline</Text>
                 </View>
-              )}
+              ) : null}
               {isDownloading && (
                 <View className="flex-row items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5">
                   <ActivityIndicator size={12} color={warning} />
@@ -433,34 +444,45 @@ export function SetList({
   const placeholder = useTokenColor('--muted-foreground')
   const trimmed = title.trim()
 
-  const items = isOffline
-    ? Object.values(offlineStore.sets)
-        .filter(
-          (entry) =>
-            entry.status === 'available' &&
-            entry.metadata &&
-            (parent === null ? !entry.metadata.parentId : entry.metadata.parentId === parent),
-        )
-        .map((entry) => entry.metadata!)
-    : flattenPages(sets.data)
+  const offlineSets = Object.values(offlineStore.sets)
+    .filter(
+      (entry) =>
+        entry.status === 'available' &&
+        entry.metadata &&
+        (parent === null ? !entry.metadata.parentId : entry.metadata.parentId === parent),
+    )
+    .map((entry) => entry.metadata!)
+
+  const setsFromQuery = flattenPages(sets.data)
+  const itemsMap = new Map<string, StudySet>()
+  for (const s of setsFromQuery) {
+    const canonicalId = resolveEntityId(s.id)
+    if (!itemsMap.has(canonicalId)) {
+      itemsMap.set(canonicalId, s.id === canonicalId ? s : { ...s, id: canonicalId })
+    }
+  }
+  for (const os of offlineSets) {
+    const canonicalId = resolveEntityId(os.id)
+    if (!itemsMap.has(canonicalId) && !itemsMap.has(os.id)) {
+      itemsMap.set(canonicalId, os)
+    }
+  }
+  const items = Array.from(itemsMap.values())
 
   const submit = (): void => {
     if (trimmed.length === 0 || create.isPending) return
+    const textToCreate = trimmed
     setError(null)
+    setTitle('')
 
     create.mutate(
-      { title: trimmed, parentId: parent },
+      { title: textToCreate, parentId: parent },
       {
         onSuccess: (data) => {
-          setTitle('')
-          // In pick mode the new set *is* the choice — typing a title and then
-          // hunting for the row that just appeared is a step with no decision in
-          // it.
           if (onPick) onPick(data.set)
         },
-        // The depth cap and the duplicate-title rule are both server-side, so the
-        // message has to come from there rather than be guessed at here.
         onError: (cause: Error) => {
+          setTitle(textToCreate)
           setError(cause.message)
         },
       },

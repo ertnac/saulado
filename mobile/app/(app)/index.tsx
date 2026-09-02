@@ -1,4 +1,4 @@
-import { useState, type ReactElement, useEffect, useRef } from 'react'
+import { useState, type ReactElement, useEffect, useRef, useSyncExternalStore } from 'react'
 import {
   Animated,
   Easing,
@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native'
-import { useNetInfo } from '@react-native-community/netinfo'
+import { onlineManager } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import type { DashboardResponse, RecentSet } from '@saulado/shared'
 import sauladoLogo from '../../assets/saulado.png'
@@ -22,6 +22,7 @@ import {
   CheckIcon,
   ChevronRightIcon,
   ClockIcon,
+  CloudOffIcon,
   FlameIcon,
   PlusIcon,
   ScanIcon,
@@ -40,6 +41,7 @@ import { useDashboard } from '../../hooks/progress'
 import { useSettings } from '../../hooks/settings'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuthStore } from '../../stores/auth'
+import { useOfflineSetsStore } from '../../stores/offline-sets'
 import { useTokenColor } from '../../stores/theme'
 
 /**
@@ -476,6 +478,7 @@ function StudentSetCard({
   const muted = useTokenColor('--muted-foreground')
 
   const hasDue = set.dueCount > 0
+  const isUnsynced = set.id.startsWith('temp-set-')
 
   return (
     <Pressable
@@ -492,9 +495,17 @@ function StudentSetCard({
         <Text numberOfLines={1} className="text-base font-semibold text-foreground">
           {set.title}
         </Text>
-        <Text className="text-xs text-muted-foreground mt-0.5">
-          {set.cardCount === 1 ? '1 card' : `${String(set.cardCount)} cards`}
-        </Text>
+        <View className="flex-row items-center gap-2 mt-0.5">
+          <Text className="text-xs text-muted-foreground">
+            {set.cardCount === 1 ? '1 card' : `${String(set.cardCount)} cards`}
+          </Text>
+          {isUnsynced && (
+            <View className="flex-row items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5">
+              <CloudOffIcon color="#d97706" size={10} />
+              <Text className="text-[10px] font-bold uppercase text-amber-600">Unsynced</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {hasDue ? (
@@ -569,8 +580,28 @@ export default function DashboardScreen(): ReactElement {
   // Fetch settings to update the auth store on mount/focus
   useSettings()
 
-  const netInfo = useNetInfo()
-  const isOffline = netInfo.isConnected === false || netInfo.isInternetReachable === false
+  const isOnline = useSyncExternalStore(
+    (onStoreChange) => onlineManager.subscribe(onStoreChange),
+    () => onlineManager.isOnline(),
+  )
+  const isOffline = !isOnline
+  const offlineStore = useOfflineSetsStore()
+
+  const offlineSets = Object.values(offlineStore.sets)
+    .filter((s) => s.status === 'available' && s.metadata && !s.metadata.archivedAt)
+    .map((s) => s.metadata!)
+
+  const totalOfflineCards = offlineSets.reduce((sum, s) => sum + s.cardCount, 0)
+
+  const effectiveRecentSets: RecentSet[] = isOffline
+    ? offlineSets.map((s) => ({
+        id: s.id,
+        title: s.title,
+        cardCount: s.cardCount,
+        dueCount: s.cardCount,
+        lastStudiedAt: s.updatedAt,
+      }))
+    : (dashboard.data?.recentSets ?? [])
 
   const prefetchCards = usePrefetchCards()
 
@@ -581,24 +612,83 @@ export default function DashboardScreen(): ReactElement {
   const data = dashboard.data
 
   useEffect(() => {
-    if (data?.recentSets) {
+    if (!isOffline && data?.recentSets) {
       data.recentSets.forEach((set: RecentSet) => prefetchCards(set.id))
     }
-  }, [data?.recentSets, prefetchCards])
+  }, [isOffline, data?.recentSets, prefetchCards])
 
   const displayName = nickname || (user?.email.split('@')[0] ?? 'there')
   const greeting = getGreeting(displayName)
   const formattedDate = getFormattedDate()
 
   function study(setId?: string): void {
+    const firstOfflineSet = offlineSets[0]
     if (setId) {
-      router.push({ pathname: '/study', params: { set: setId } })
+      router.push({ pathname: '/study', params: { set: setId, mode: 'spaced' } })
+    } else if (isOffline && firstOfflineSet) {
+      router.push({ pathname: '/study', params: { set: firstOfflineSet.id, mode: 'spaced' } })
     } else {
       router.push('/study')
     }
   }
 
   function hero(): ReactElement {
+    if (isOffline) {
+      const featuredSet = offlineSets[0]
+      if (!featuredSet) {
+        return (
+          <Card tone="dashed">
+            <Text className="text-sm text-muted-foreground">
+              No downloaded sets available offline. Connect to the internet and save sets to study
+              offline.
+            </Text>
+            <Button
+              label="Browse study sets"
+              variant="outline"
+              className="mt-4"
+              onPress={() => router.push('/sets')}
+            />
+          </Card>
+        )
+      }
+
+      return (
+        <Card tone="accent">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1">
+              <ZapIcon color={accent} size={14} />
+              <Text className="text-xs font-semibold text-accent-strong">Offline Ready</Text>
+            </View>
+            <Text className="text-xs font-semibold uppercase tracking-wider text-accent-strong">
+              Downloaded Set
+            </Text>
+          </View>
+
+          <View className="my-3">
+            <Text numberOfLines={2} className="text-xl font-bold text-foreground">
+              {featuredSet.title}
+            </Text>
+            <Text className="text-sm text-muted-foreground mt-0.5">
+              {featuredSet.cardCount} {featuredSet.cardCount === 1 ? 'card' : 'cards'} ready for
+              recall
+            </Text>
+          </View>
+
+          <Text className="text-sm leading-relaxed text-muted-foreground">
+            Study your downloaded cards offline. All progress will automatically sync to your
+            database when reconnected.
+          </Text>
+
+          <Button
+            label={`Study ${featuredSet.title}`}
+            size="lg"
+            className="mt-5"
+            onPress={() => router.push(`/study?set=${featuredSet.id}&mode=spaced`)}
+          />
+        </Card>
+      )
+    }
+
     if (dashboard.isPending) {
       return (
         <Card tone="muted">
@@ -651,7 +741,9 @@ export default function DashboardScreen(): ReactElement {
           <RefreshControl
             refreshing={dashboard.isRefetching}
             onRefresh={() => {
-              void dashboard.refetch()
+              if (!isOffline) {
+                void dashboard.refetch()
+              }
             }}
             tintColor={primary}
           />
@@ -703,19 +795,21 @@ export default function DashboardScreen(): ReactElement {
               {greeting.text} {greeting.emoji}
             </Text>
             <Text className="text-xs text-muted-foreground mt-1 leading-relaxed">
-              {data && data.totalDue > 0
-                ? `${String(data.totalDue)} ${data.totalDue === 1 ? 'card' : 'cards'} ready for review today.`
-                : data && data.newCards > 0
-                  ? `${String(data.newCards)} new ${data.newCards === 1 ? 'card' : 'cards'} waiting to be learned.`
-                  : data?.hasStudied
-                    ? 'All scheduled reviews completed for today.'
-                    : 'Recall in context, not from a bare flashcard.'}
+              {isOffline
+                ? `${totalOfflineCards} downloaded ${totalOfflineCards === 1 ? 'card' : 'cards'} across ${offlineSets.length} ${offlineSets.length === 1 ? 'set' : 'sets'} available offline.`
+                : data && data.totalDue > 0
+                  ? `${String(data.totalDue)} ${data.totalDue === 1 ? 'card' : 'cards'} ready for review today.`
+                  : data && data.newCards > 0
+                    ? `${String(data.newCards)} new ${data.newCards === 1 ? 'card' : 'cards'} waiting to be learned.`
+                    : data?.hasStudied
+                      ? 'All scheduled reviews completed for today.'
+                      : 'Recall in context, not from a bare flashcard.'}
             </Text>
           </View>
         </View>
 
         {/* Glance Metric Chips (Student Portal Badges) */}
-        {data !== undefined && (
+        {!isOffline && data !== undefined ? (
           <View className="flex-row gap-2.5">
             <MetricChip
               icon={<FlameIcon color={accent} size={16} />}
@@ -744,7 +838,30 @@ export default function DashboardScreen(): ReactElement {
               onPress={() => router.push('/sets')}
             />
           </View>
-        )}
+        ) : isOffline ? (
+          <View className="flex-row gap-2.5">
+            <MetricChip
+              icon={<BookOpenIcon color={primary} size={16} />}
+              label="Offline Sets"
+              value={offlineSets.length}
+              onPress={() => router.push('/sets')}
+            />
+            <MetricChip
+              icon={<ZapIcon color={accent} size={16} />}
+              label="Ready Cards"
+              value={totalOfflineCards}
+              onPress={() => {
+                const firstOfflineSet = offlineSets[0]
+                if (firstOfflineSet) {
+                  router.push(`/study?set=${firstOfflineSet.id}&mode=spaced`)
+                } else {
+                  router.push('/sets')
+                }
+              }}
+              accent={totalOfflineCards > 0}
+            />
+          </View>
+        ) : null}
 
         {/* 1-Tap Quick Action Row */}
         <QuickActionRow
@@ -763,7 +880,7 @@ export default function DashboardScreen(): ReactElement {
         </View>
 
         {/* Habit & Progress (Gated on hasStudied) */}
-        {data?.hasStudied === true && (
+        {!isOffline && data?.hasStudied === true && (
           <TodaySection
             data={data}
             onProgress={() => {
@@ -773,14 +890,18 @@ export default function DashboardScreen(): ReactElement {
         )}
 
         {/* Your Sets (Rich Task Cards) */}
-        {data !== undefined && data.recentSets.length > 0 && (
+        {effectiveRecentSets.length > 0 && (
           <RecentSets
-            sets={data.recentSets}
+            sets={effectiveRecentSets}
             onOpen={(id) => {
               router.push(`/sets/${id}`)
             }}
             onStudySet={(id) => {
-              study(id)
+              if (isOffline) {
+                router.push(`/study?set=${id}&mode=spaced`)
+              } else {
+                study(id)
+              }
             }}
             onAll={() => {
               router.push('/sets')

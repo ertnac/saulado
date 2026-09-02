@@ -38,6 +38,7 @@ onlineManager.setEventListener((setOnline) =>
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      networkMode: 'always',
       retry: (failureCount, error) => {
         if (error instanceof ApiError) {
           const permanent =
@@ -56,6 +57,7 @@ export const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
     },
     mutations: {
+      networkMode: 'always',
       retry: false,
     },
   },

@@ -1,6 +1,9 @@
 import '@testing-library/jest-dom/vitest'
+import * as matchers from '@testing-library/jest-dom/matchers'
 import { cleanup } from '@testing-library/react'
-import { afterEach, vi } from 'vitest'
+import { afterEach, expect, vi } from 'vitest'
+
+expect.extend(matchers)
 
 /**
  * jsdom ships no `matchMedia`, and anything rendering the app shell reads it via
