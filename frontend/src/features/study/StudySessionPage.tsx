@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import type { SessionSummary, SubmitAnswerRequest, StartableMode } from '@saulado/shared'
+import type {
+  SessionSummary,
+  SubmitAnswerRequest,
+  StartableMode,
+  AnsweringType,
+} from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -46,6 +51,7 @@ export function StudySessionPage(): ReactElement {
   const [params, setParams] = useSearchParams()
   const studySetId = params.get('set')
   const modeParam = params.get('mode') as StartableMode | null
+  const typeParam = params.get('type') as AnsweringType | null
 
   const session = useStudySession()
   const start = useStartSession()
@@ -59,6 +65,7 @@ export function StudySessionPage(): ReactElement {
   const [startError, setStartError] = useState<Error | null>(null)
 
   const [mode, setMode] = useState<StartableMode>(modeParam ?? 'spaced')
+  const [answeringType] = useState<AnsweringType>(typeParam ?? 'identification')
   const [picking, setPicking] = useState(
     studySetId !== null && modeParam === null && resumeId === null,
   )
@@ -151,12 +158,13 @@ export function StudySessionPage(): ReactElement {
     })
   }
 
-  const send = (revealed: boolean): void => {
+  const send = (revealed: boolean, overrideValues?: Record<number, string>): void => {
     if (!session.card || !sessionId || session.answer) return
 
+    const valuesToSubmit = overrideValues ?? session.values
     const body: SubmitAnswerRequest = {
       cardId: session.card.cardId,
-      blanks: Object.entries(session.values).map(([ordinal, submitted]) => ({
+      blanks: Object.entries(valuesToSubmit).map(([ordinal, submitted]) => ({
         ordinal: Number(ordinal),
         submitted,
       })),
@@ -172,6 +180,7 @@ export function StudySessionPage(): ReactElement {
     const spent = session.advance()
     if (spent && sessionId) finish(sessionId)
   }
+
   useEffect(() => {
     /**
      * Session shortcuts, on `window` because the target varies: Enter is handled
@@ -395,9 +404,10 @@ export function StudySessionPage(): ReactElement {
         values={session.values}
         results={session.answer?.results ?? null}
         disabled={session.answer !== null || submit.isPending}
+        answeringType={answeringType}
         onChange={session.setValue}
-        onSubmit={() => {
-          send(false)
+        onSubmit={(overrideValues) => {
+          send(false, overrideValues)
         }}
       />
 
@@ -408,7 +418,7 @@ export function StudySessionPage(): ReactElement {
           isLast={session.isLast}
           onNext={next}
         />
-      ) : (
+      ) : answeringType === 'identification' ? (
         <div className="flex flex-wrap items-center gap-3">
           <Button
             disabled={submit.isPending}
@@ -436,7 +446,22 @@ export function StudySessionPage(): ReactElement {
             Enter to check · Shift+Enter to reveal
           </p>
         </div>
-      )}
+      ) : answeringType === 'multiple-choice' ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="ghost"
+            disabled={submit.isPending}
+            onClick={() => {
+              send(true)
+            }}
+          >
+            Reveal answer
+          </Button>
+          <p className="ml-auto text-xs text-muted-foreground max-sm:hidden">
+            Press 1–4 or A–D to select
+          </p>
+        </div>
+      ) : null}
 
       {/*
         A failed submission keeps the card and its typed answers on screen. The
