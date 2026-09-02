@@ -7,13 +7,14 @@ import { Card } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { segmentClass } from '@/components/ui/segmented'
-import { PlusIcon } from '@/components/ui/icons'
+import { PlusIcon, UploadIcon } from '@/components/ui/icons'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { useDueCounts } from '@/features/study/queries'
 import { cn } from '@/lib/utils'
 import { setAccentClass } from './colors'
 import { cardCountLabel, childCountLabel } from './counts'
 import { SetDialog } from './SetDialog'
+import { UniversalImportDialog } from './transfer/UniversalImportDialog'
 import { flattenPages, useCreateSet, useDeleteSet, useSets, useUpdateSet } from './queries'
 
 /**
@@ -185,6 +186,7 @@ function deleteWarning(set: StudySet): string {
 export function SetsPage(): ReactElement {
   const [archived, setArchived] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [editing, setEditing] = useState<StudySet | null>(null)
   const [deleting, setDeleting] = useState<StudySet | null>(null)
 
@@ -205,14 +207,25 @@ export function SetsPage(): ReactElement {
         title="Your sets"
         description="A set groups cards on one subject. Open one to add cards or nest a sub-set inside it."
         actions={
-          <Button
-            onClick={() => {
-              setCreating(true)
-            }}
-          >
-            <PlusIcon />
-            New set
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setImporting(true)
+              }}
+            >
+              <UploadIcon />
+              Import Deck
+            </Button>
+            <Button
+              onClick={() => {
+                setCreating(true)
+              }}
+            >
+              <PlusIcon />
+              New set
+            </Button>
+          </div>
         }
       />
 
@@ -377,6 +390,13 @@ export function SetsPage(): ReactElement {
               setDeleting(null)
             },
           })
+        }}
+      />
+
+      <UniversalImportDialog
+        open={importing}
+        onClose={() => {
+          setImporting(false)
         }}
       />
     </div>
