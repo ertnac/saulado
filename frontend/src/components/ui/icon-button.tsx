@@ -1,9 +1,16 @@
-import type { ButtonHTMLAttributes, ReactElement, ReactNode } from 'react'
+import type { ReactElement, ReactNode } from 'react'
+import { motion, type HTMLMotionProps } from 'framer-motion'
+import { SPRING } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
 type Tone = 'plain' | 'soft' | 'active'
 
-interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
+/**
+ * Motion's button props rather than the DOM ones, now that this renders a
+ * `motion.button`: the two disagree about `onAnimationStart`, and spreading the
+ * DOM shape onto a motion component is a type error rather than a subtlety.
+ */
+interface IconButtonProps extends Omit<HTMLMotionProps<'button'>, 'children'> {
   /**
    * The accessible name. Required rather than optional, because an icon-only
    * control with no label is announced as "button" and nothing else — and the
@@ -15,11 +22,16 @@ interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 
 }
 
 const tones: Record<Tone, string> = {
+  // Flat, and deliberately so. This is chrome — the theme toggle, a dismiss —
+  // and `.clay-pill` would give it a surface fill, turning a control that is
+  // meant to sit quietly in the header into a third raised thing competing with
+  // the two that are meant to be seen. Same reasoning as `Button`'s `ghost`.
   plain: 'text-muted-foreground hover:bg-surface-muted hover:text-foreground',
-  soft: 'bg-surface-muted text-foreground hover:bg-muted',
+  soft: 'clay-pill bg-surface-muted text-foreground hover:bg-muted',
   // The filled disc marking the current item in the rail. Reads as selected by
-  // shape and fill, not only by colour.
-  active: 'bg-primary text-primary-foreground shadow-soft',
+  // shape and fill, not only by colour. `.clay-pill` replaces `shadow-soft`
+  // rather than joining it: a utility shadow would override the whole clay stack.
+  active: 'clay-pill bg-primary text-primary-foreground',
 }
 
 /**
@@ -27,7 +39,9 @@ const tones: Record<Tone, string> = {
  *
  * Fixed at 44×44 (`h-11 w-11`) whatever the icon inside it. Circular controls
  * are the easiest thing in a rounded design to shrink to a pretty 32px that
- * misses the touch-target minimum, so the size is not a prop.
+ * misses the touch-target minimum, so the size is not a prop. Clay's inset
+ * shadow visually eats a couple of pixels off that; the box does not shrink to
+ * compensate.
  *
  * `title` duplicates the label for a pointer tooltip. It does not affect the
  * accessible name — `aria-label` wins over `title` in the name computation, so
@@ -42,7 +56,7 @@ export function IconButton({
   ...props
 }: IconButtonProps): ReactElement {
   return (
-    <button
+    <motion.button
       type={type}
       aria-label={label}
       title={label}
@@ -53,9 +67,14 @@ export function IconButton({
         tones[tone],
         className,
       )}
+      // The same press as `Button`, from the same spring. An icon control that
+      // does not answer the press is the one place a user is most likely to think
+      // the tap missed, since there is no label to watch.
+      whileTap={{ scale: 0.94 }}
+      transition={SPRING}
       {...props}
     >
       {icon}
-    </button>
+    </motion.button>
   )
 }

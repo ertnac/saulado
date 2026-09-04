@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, type ReactElement, type ReactNode } from 'react'
+import { motion } from 'framer-motion'
+import { DUR, EASE, SPRING } from '@/lib/motion'
 import { Button } from './button'
 
 /**
@@ -108,6 +110,15 @@ export function Dialog({
 
   if (!open) return null
 
+  /**
+   * Enter only, no exit.
+   *
+   * Wrapping the panel in `AnimatePresence` would keep it mounted after close
+   * while the exit ran, and the dialog is asserted gone immediately after the
+   * closing click in several places — an exit animation would turn those into
+   * timing races for the sake of a transition nobody watches. The panel is
+   * unmounted by the `open` guard above, as it always was.
+   */
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       {/*
@@ -115,22 +126,37 @@ export function Dialog({
         accessible ways out, and a focusable overlay would be one more stop
         between the user and the form.
       */}
-      <div
+      <motion.div
         className="absolute inset-0 bg-foreground/40 backdrop-blur-sm"
         aria-hidden="true"
         onClick={onClose}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: DUR.base, ease: EASE }}
       />
 
-      <div
+      <motion.div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-title`}
         aria-describedby={description ? `${id}-description` : undefined}
         tabIndex={-1}
-        // Full-width sheet on mobile, centred card from sm up — a centred modal at
-        // 320px leaves no room for the form inside it.
-        className="relative w-full max-w-lg rounded-t-xl bg-surface p-6 shadow-lift sm:rounded-xl"
+        /*
+          Scale only, deliberately not opacity. A panel that fades in is reported
+          as invisible for as long as its opacity is under one, which is exactly
+          what a test asserting the dialog is showing would catch — and a
+          modal appearing over a backdrop that is itself fading needs no second
+          fade to read as arriving.
+        */
+        initial={{ scale: 0.96 }}
+        animate={{ scale: 1 }}
+        transition={SPRING}
+        // `.clay-raised` owns the fill, the shadow and the 1.5rem radius, so the
+        // `bg-surface` and `shadow-lift` utilities that used to are gone. The
+        // bottom corners are squared off below `sm`, where the panel is a sheet
+        // sitting flush against the bottom edge of the screen.
+        className="clay-raised relative w-full max-w-lg rounded-b-none p-6 sm:rounded-b-3xl"
       >
         <h2 id={`${id}-title`} className="text-lg font-semibold tracking-tight">
           {title}
@@ -143,7 +169,7 @@ export function Dialog({
         )}
 
         <div className="mt-4">{children}</div>
-      </div>
+      </motion.div>
     </div>
   )
 }

@@ -1,4 +1,6 @@
-import { useRef, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
+import { useId, useRef, type KeyboardEvent, type ReactElement, type ReactNode } from 'react'
+import { motion } from 'framer-motion'
+import { SPRING } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
 /**
@@ -29,18 +31,27 @@ interface SegmentedControlProps<T extends string> {
 }
 
 /**
+ * Geometry, shared so the standalone recipe below and the control's own buttons
+ * cannot drift apart. They differ only in where the selected fill comes from.
+ */
+const SEGMENT_BASE =
+  'inline-flex h-9 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-medium'
+
+/**
  * The look on its own, for places where the existing markup already has correct
  * semantics of its own kind (a set of toggles, a set of links) and only needs
  * to match. Swapping working semantics for these just to get the styling would
  * be a downgrade.
+ *
+ * The selected state is a static `.clay-pill` here. The sliding thumb belongs to
+ * `SegmentedControl`, which knows it owns every option in the group; a caller
+ * styling one link at a time has no such group to slide within.
  */
 export function segmentClass(selected: boolean, className?: string): string {
   return cn(
-    'inline-flex h-9 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-medium',
+    SEGMENT_BASE,
     'transition-[background-color,color,box-shadow] duration-150',
-    selected
-      ? 'bg-surface text-foreground shadow-soft'
-      : 'text-muted-foreground hover:text-foreground',
+    selected ? 'clay-pill text-foreground' : 'text-muted-foreground hover:text-foreground',
     className,
   )
 }
@@ -53,6 +64,13 @@ export function SegmentedControl<T extends string>({
   className,
 }: SegmentedControlProps<T>): ReactElement {
   const groupRef = useRef<HTMLDivElement>(null)
+  /**
+   * Per instance, not the shared literal it looks like it could be. Two
+   * segmented controls on one screen — a filter beside a sort — sharing one
+   * `layoutId` would make the thumb fly from one group to the other whenever
+   * either changed, because framer would read them as the same element moving.
+   */
+  const thumbId = useId()
 
   function move(delta: number): void {
     const index = options.findIndex((option) => option.value === value)
@@ -83,7 +101,11 @@ export function SegmentedControl<T extends string>({
       role="radiogroup"
       aria-label={label}
       onKeyDown={onKeyDown}
-      className={cn('inline-flex gap-1 rounded-full bg-surface-muted p-1', className)}
+      // Recessed, so the unselected options read as sitting *in* the track and
+      // the thumb as sitting on top of it — which is the whole reason the
+      // selected option needs no border to be legible. The pill radius overrides
+      // `.clay-inset`'s 12px, which exists for multi-line fields.
+      className={cn('clay-inset inline-flex gap-1 rounded-full p-1', className)}
     >
       {options.map((option) => {
         const selected = option.value === value
@@ -98,9 +120,29 @@ export function SegmentedControl<T extends string>({
             // whichever option is currently chosen.
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(option.value)}
-            className={segmentClass(selected)}
+            // No selected fill in the class: the thumb below is the fill, and
+            // having both would show a pill under a pill for the one frame the
+            // thumb is still travelling.
+            className={cn(
+              SEGMENT_BASE,
+              'relative transition-colors duration-150',
+              selected ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
           >
-            {option.label}
+            {selected && (
+              <motion.span
+                layoutId={thumbId}
+                aria-hidden="true"
+                className="clay-pill absolute inset-0"
+                transition={SPRING}
+              />
+            )}
+            {/*
+              Positioned so it paints over the thumb, which is absolutely
+              positioned behind it. Without this the label sits under the pill's
+              fill and disappears.
+            */}
+            <span className="relative">{option.label}</span>
           </button>
         )
       })}

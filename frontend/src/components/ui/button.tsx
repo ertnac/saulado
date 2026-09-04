@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react'
 import { motion, type HTMLMotionProps } from 'framer-motion'
+import { SPRING } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
 type Variant = 'default' | 'accent' | 'outline' | 'soft' | 'ghost' | 'danger'
@@ -21,14 +22,27 @@ interface ButtonProps extends HTMLMotionProps<'button'> {
  * further; `ghost` for icon-only chrome. `danger` exists so a destructive
  * action never has to borrow `--warning`, which the highlight editor already
  * spends on rejected selections.
+ *
+ * The clay recipes replace utilities rather than joining them. Tailwind
+ * utilities sit in a later layer than `@layer components`, so anywhere both
+ * systems set the same property the utility wins — a leftover `bg-primary` would
+ * paint over `.clay-btn-primary`'s gradient, and a leftover `shadow-soft` would
+ * flatten its whole shadow stack. The gradient *is* the background, so both go.
+ *
+ * `outline` and `soft` are the inverse, and get it for free: `.clay-pill` sets
+ * `background-color: hsl(var(--surface))`, so a variant keeping its own fill
+ * overrides that and takes the pill for its shadow and border alone.
  */
 const variants: Record<Variant, string> = {
-  default: 'bg-primary text-primary-foreground shadow-soft hover:brightness-110',
-  accent: 'bg-accent text-accent-foreground shadow-soft hover:brightness-105',
-  outline: 'border border-border bg-surface/70 hover:bg-surface',
-  soft: 'bg-surface-muted text-foreground hover:bg-muted',
+  default: 'clay-btn-primary',
+  accent: 'clay-btn-accent',
+  outline: 'clay-pill border-border bg-surface/70 hover:bg-surface',
+  soft: 'clay-pill bg-surface-muted text-foreground hover:bg-muted',
+  // Unchanged: chrome should not bulge. A ghost button is a label that happens
+  // to be pressable, and giving it a moulded fill makes it a third button
+  // competing with the two that are meant to be seen.
   ghost: 'bg-transparent hover:bg-surface-muted',
-  danger: 'bg-danger text-primary-foreground shadow-soft hover:brightness-110',
+  danger: 'clay-btn-danger',
 }
 
 /**
@@ -51,6 +65,10 @@ const sizes: Record<Size, string> = {
  * middle-click, "open in new tab" and the status-bar URL preview, and screen
  * readers announce the wrong role. So the styling is a function anything can
  * apply, rather than something only `<button>` can have.
+ *
+ * The clay recipe is applied here rather than inside `Button` for the same
+ * reason: several screens render `<Link className={buttonClass(...)}>`, and
+ * clay applied only in the component would leave every one of those flat.
  */
 export function buttonClass({
   variant = 'default',
@@ -80,8 +98,11 @@ export function Button({
     <motion.button
       type={type}
       className={buttonClass({ variant, size, className })}
+      // A spring rather than a 0.1s tween: the press settles instead of
+      // arriving, which is the difference between a button that feels moulded
+      // and one that feels like it flickered.
       whileTap={{ scale: 0.96 }}
-      transition={{ duration: 0.1 }}
+      transition={SPRING}
       {...props}
     />
   )

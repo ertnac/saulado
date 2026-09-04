@@ -12,20 +12,26 @@ import { cn } from '@/lib/utils'
  *
  * State tones deliberately carry text, never colour alone — a bare coloured dot
  * is invisible to a screen reader and ambiguous to everyone else.
+ *
+ * The count and chip tones take `.clay-pill` for its shadow and border while
+ * keeping their own fill, which wins over the pill's `background-color` by
+ * cascade. The state tones stay flat: their whole job is to be read, and a tinted
+ * 12px label is already at the edge of legibility without an inner highlight
+ * lightening the top of it.
  */
 
 type Tone = 'muted' | 'accent' | 'sand' | 'success' | 'warning' | 'danger' | 'primary'
 
 const tones: Record<Tone, string> = {
-  muted: 'bg-surface-muted text-muted-foreground',
-  accent: 'bg-accent text-accent-foreground',
-  sand: 'bg-sand text-sand-foreground',
+  muted: 'clay-pill bg-surface-muted text-muted-foreground',
+  accent: 'clay-pill bg-accent text-accent-foreground',
+  sand: 'clay-pill bg-sand text-sand-foreground',
   // Tint plus dark text rather than a solid fill: at these sizes a saturated
   // background under 4.5:1 text is the most common contrast failure there is.
   success: 'bg-success/15 text-success',
   warning: 'bg-warning/15 text-warning',
   danger: 'bg-danger/15 text-danger',
-  primary: 'bg-primary text-primary-foreground',
+  primary: 'clay-pill bg-primary text-primary-foreground',
 }
 
 interface BadgeProps {
