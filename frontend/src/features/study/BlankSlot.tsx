@@ -1,6 +1,7 @@
 import { forwardRef, type ReactElement } from 'react'
 import type { BlankResult } from '@saulado/shared'
 import { motion } from 'framer-motion'
+import { DUR, EASE_SQUISH } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
 /**
@@ -63,12 +64,21 @@ export const BlankSlot = forwardRef<HTMLInputElement, BlankSlotProps>(function B
 
     return (
       <motion.span
-        initial={{ opacity: 0.5, y: -2 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
+        /*
+          A pop rather than a fade. The graded fill is the answer to the question
+          the user just committed to, and `EASE_SQUISH`'s overshoot is what makes it
+          read as landing. Safe here and nowhere in a chart: overshoot on a data
+          mark misreports the value for as long as it runs, but a verdict has no
+          intermediate value to misreport.
+        */
+        initial={{ opacity: 0.5, scale: 0.94, y: -2 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: DUR.base, ease: EASE_SQUISH }}
         style={{ width }}
         className={cn(
-          'mx-0.5 inline-flex h-11 items-center overflow-hidden rounded-md border px-2 align-middle',
+          // `rounded-xl` matches the blank input's `.clay-inset` radius, so the box
+          // does not change shape between typing and grading.
+          'mx-0.5 inline-flex h-11 items-center overflow-hidden rounded-xl border px-2 align-middle',
           'font-mono text-base',
           // Green and red, not green and amber. Amber reads as "nearly", and the
           // one thing a graded blank has to be is unambiguous. Colour never
@@ -121,7 +131,11 @@ export const BlankSlot = forwardRef<HTMLInputElement, BlankSlotProps>(function B
         }
       }}
       className={cn(
-        'mx-0.5 inline-flex h-11 rounded-md border border-border bg-surface px-2 align-middle',
+        // Recessed: this is the one place on the card the user is meant to put
+        // something into. `.clay-inset` brings the fill, the 1px border and the
+        // 12px radius, so the utilities that used to do that are gone — the border
+        // width is unchanged, which is what keeps the reserved width exact.
+        'clay-inset mx-0.5 inline-flex h-11 px-2 align-middle',
         'font-mono text-base transition-colors duration-150',
         // The global focus ring offsets against the page; this input sits on a
         // card, so it offsets against the card instead.

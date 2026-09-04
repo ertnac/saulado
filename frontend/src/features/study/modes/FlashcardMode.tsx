@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactElement } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import type { BlankResult, SessionCard } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
 import { CheckIcon, CloseIcon } from '@/components/ui/icons'
+import { DUR, EASE } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
 export interface FlashcardModeProps {
@@ -20,7 +21,6 @@ export function FlashcardMode({
   onSubmit,
 }: FlashcardModeProps): ReactElement {
   const [isFlipped, setIsFlipped] = useState(false)
-  const shouldReduceMotion = useReducedMotion()
   const isGraded = results !== null
 
   // Reset flip state when moving to a new card
@@ -88,12 +88,16 @@ export function FlashcardMode({
   return (
     <div className="relative min-h-[320px] w-full [perspective:1200px]">
       <motion.div
-        className="relative h-full min-h-[320px] w-full rounded-2xl border border-border bg-surface p-6 shadow-soft transition-shadow duration-200"
+        className="clay-card relative h-full min-h-[320px] w-full p-6 transition-shadow duration-200"
         style={{ transformStyle: 'preserve-3d' }}
         animate={{ rotateY: isFlipped ? 180 : 0 }}
-        transition={
-          shouldReduceMotion ? { duration: 0 } : { duration: 0.45, ease: [0.25, 1, 0.5, 1] }
-        }
+        /*
+          The local `useReducedMotion()` check that used to pick a zero duration
+          here is gone: `MotionConfig reducedMotion="user"` in main.tsx drops
+          transform animation app-wide, and `rotateY` is a transform, so the flip
+          already becomes instant for a user who has asked for stillness.
+        */
+        transition={{ duration: DUR.page, ease: EASE }}
       >
         {/* ── FRONT FACE: Prompt / Question ── */}
         <div

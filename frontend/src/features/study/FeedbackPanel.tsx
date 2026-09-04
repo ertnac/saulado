@@ -1,7 +1,9 @@
 import type { ReactElement } from 'react'
 import type { AnswerResponse, Grade } from '@saulado/shared'
+import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { CheckIcon, CloseIcon } from '@/components/ui/icons'
+import { SPRING } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
 /**
@@ -50,8 +52,21 @@ export function FeedbackPanel({
   const typos = answer.results.filter((result) => result.correct && result.matchType === 'typo')
 
   return (
-    <div
+    <motion.div
       role="status"
+      /*
+        Slides up as it arrives, on the shared spring. The panel appears directly
+        under the card the user just submitted, so movement from that direction is
+        what tells them where it came from — a panel that simply materialises reads
+        as the page having re-rendered.
+
+        Opacity and transform only, per the redesign's constraints: this box's
+        colour is load-bearing (it is one of the three ways the verdict is stated)
+        and animating a colour would make it briefly say the wrong thing.
+      */
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={SPRING}
       className={cn(
         'rounded-lg border p-5 shadow-soft',
         answer.correct ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10',
@@ -134,6 +149,6 @@ export function FeedbackPanel({
           {answer.progress.answered} of {answer.progress.total}
         </p>
       </div>
-    </div>
+    </motion.div>
   )
 }
