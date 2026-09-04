@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { SearchHit, SnippetSegment } from '@saulado/shared'
+import { motion } from 'framer-motion'
 import { SearchIcon } from '@/components/ui/icons'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { cardHref } from '@/features/cards/links'
+import { DUR, EASE, SPRING } from '@/lib/motion'
 import { useSearch } from './queries'
 
 /**
@@ -127,17 +129,35 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps): ReactEle
         that floats over a live page, so the page reads as *behind* it instead of
         merely dimmed.
       */}
-      <div
+      <motion.div
         className="absolute inset-0 bg-foreground/30 backdrop-blur-sm"
         aria-hidden="true"
         onClick={onClose}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: DUR.base, ease: EASE }}
       />
 
-      <div
+      <motion.div
         role="dialog"
         aria-modal="true"
         aria-label="Search cards"
-        className="relative mt-[10vh] w-full max-w-xl overflow-hidden rounded-xl bg-surface shadow-lift"
+        /*
+          Scale only, not opacity — a panel under one is reported as invisible, and
+          the scrim behind it is already fading.
+
+          Deliberately no stagger on the results below. They are re-queried as the
+          user types, so a staggered entry would re-run on every keystroke and the
+          list would spend the whole search fading itself back in underneath the
+          person reading it. The results page, where results land per navigation
+          rather than per character, is where that belongs.
+        */
+        initial={{ scale: 0.96 }}
+        animate={{ scale: 1 }}
+        transition={SPRING}
+        // `.clay-raised` owns the fill, shadow and radius; the palette is the one
+        // thing in the app that floats over a live page.
+        className="clay-raised relative mt-[10vh] w-full max-w-xl overflow-hidden"
       >
         <div className="flex items-center gap-2 border-b border-border px-4">
           <span className="text-muted-foreground" aria-hidden="true">
@@ -173,7 +193,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps): ReactEle
           showEmpty={showEmpty}
           total={data?.total ?? 0}
         />
-      </div>
+      </motion.div>
     </div>
   )
 }

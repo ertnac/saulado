@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type ReactElement, type ReactNode } from 'react'
 import { Card } from '@/components/ui/card'
+import { Reveal } from '@/components/motion/Reveal'
 import { Select, fieldChipClass } from '@/components/ui/select'
 
 /**
@@ -13,14 +14,22 @@ import { Select, fieldChipClass } from '@/components/ui/select'
 
 export function Section({ title, children }: { title: string; children: ReactNode }): ReactElement {
   return (
-    <Card as="section" className="space-y-5 p-5 sm:p-6">
-      {/*
-        Sentence case, matching `CardLabel`. Small all-caps is harder to read and
-        the uppercase habit here came from the scaffold, not from the design.
-      */}
-      <h2 className="text-base font-semibold tracking-tight">{title}</h2>
-      {children}
-    </Card>
+    /*
+      Revealed as it scrolls in, and here rather than at each call site — every
+      grouped card on the settings and account pages comes through this one
+      component, so this is where "a Reveal per section" is a single edit rather
+      than one per section that the next new section would then forget.
+    */
+    <Reveal>
+      <Card as="section" className="space-y-5 p-5 sm:p-6">
+        {/*
+          Sentence case, matching `CardLabel`. Small all-caps is harder to read and
+          the uppercase habit here came from the scaffold, not from the design.
+        */}
+        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+        {children}
+      </Card>
+    </Reveal>
   )
 }
 

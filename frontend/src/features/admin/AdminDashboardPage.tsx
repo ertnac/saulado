@@ -1,6 +1,7 @@
 import { useState, type ReactElement } from 'react'
 import type { AdminUserFilter, AdminUserSort } from '@saulado/shared'
 import { Card } from '@/components/ui/card'
+import { CountUp } from '@/components/motion/CountUp'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -129,7 +130,16 @@ export function AdminDashboardPage(): ReactElement {
             </span>
           </div>
           <p className="mt-2 text-3xl font-bold tracking-tight tabular-nums text-foreground">
-            {metrics ? metrics.totalUsers.toLocaleString() : '—'}
+            {/*
+              `format` keeps the thousands separator these tiles already rendered.
+              CountUp's own default is plain digits, so without it a figure would
+              quietly lose its grouping on the way to being animated.
+            */}
+            {metrics ? (
+              <CountUp value={metrics.totalUsers} format={(n) => n.toLocaleString()} />
+            ) : (
+              '—'
+            )}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <Badge tone="accent">+{metrics?.newUsersToday ?? 0} today</Badge>
@@ -146,7 +156,11 @@ export function AdminDashboardPage(): ReactElement {
             </span>
           </div>
           <p className="mt-2 text-3xl font-bold tracking-tight tabular-nums text-foreground">
-            {metrics ? metrics.activeUsers24h.toLocaleString() : '—'}
+            {metrics ? (
+              <CountUp value={metrics.activeUsers24h} format={(n) => n.toLocaleString()} />
+            ) : (
+              '—'
+            )}
           </p>
           <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
             <span>
@@ -174,7 +188,11 @@ export function AdminDashboardPage(): ReactElement {
             </span>
           </div>
           <p className="mt-2 text-3xl font-bold tracking-tight tabular-nums text-foreground">
-            {metrics ? metrics.totalCards.toLocaleString() : '—'}
+            {metrics ? (
+              <CountUp value={metrics.totalCards} format={(n) => n.toLocaleString()} />
+            ) : (
+              '—'
+            )}
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
             Across{' '}
@@ -192,7 +210,11 @@ export function AdminDashboardPage(): ReactElement {
             </span>
           </div>
           <p className="mt-2 text-3xl font-bold tracking-tight tabular-nums text-foreground">
-            {metrics ? metrics.totalReviews.toLocaleString() : '—'}
+            {metrics ? (
+              <CountUp value={metrics.totalReviews} format={(n) => n.toLocaleString()} />
+            ) : (
+              '—'
+            )}
           </p>
           <p className="mt-2 text-xs text-muted-foreground">Total spaced-repetition recalls</p>
         </Card>
@@ -304,7 +326,11 @@ export function AdminDashboardPage(): ReactElement {
         </div>
 
         {/* Table View */}
-        <Card className="overflow-hidden">
+        {/*
+          Flat: this card is a frame around table rows, and a raised container
+          around dense rows is what the clay tier scale exists to prevent.
+        */}
+        <Card elevation="flat" className="overflow-hidden">
           {usersQuery.isError ? (
             <div className="flex flex-col items-center justify-center p-12 text-center">
               <span className="text-warning">

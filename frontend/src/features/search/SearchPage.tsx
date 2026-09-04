@@ -306,6 +306,14 @@ function SearchResults({
         {offset + 1}–{last} of {total} {total === 1 ? 'card' : 'cards'}
       </p>
 
+      {/*
+        Deliberately not staggered, for the same reason as the command palette:
+        this list is re-queried as the user types, so every keystroke replaces
+        every row and a staggered entry would spend the whole search fading the
+        results back in underneath the person reading them. The staleness fade on
+        the wrapper above is the feedback this list needs while a query is in
+        flight.
+      */}
       <ul className="space-y-2">
         {hits.map((hit) => (
           <Card as="li" key={hit.cardId} interactive>
