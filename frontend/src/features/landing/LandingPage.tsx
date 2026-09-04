@@ -22,6 +22,7 @@ import { FormField } from '@/components/ui/form-field'
 import { FormAlert } from '@/features/auth/AuthLayout'
 import { useFormErrors } from '@/hooks/useFormErrors'
 import { useAuthStore } from '@/stores/auth'
+import { DUR, EASE, SPRING } from '@/lib/motion'
 
 interface GoogleCredentialResponse {
   credential: string
@@ -258,9 +259,9 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
                   opacity: 0,
                   height: 0,
                   scale: 0.95,
-                  transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] },
+                  transition: { duration: DUR.page, ease: EASE },
                 }}
-                transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: DUR.page, ease: EASE }}
                 className="overflow-hidden flex justify-center"
               >
                 <div className="inline-flex items-center gap-2 clay-pill px-4 py-1.5 text-xs font-semibold text-primary mb-3">
@@ -274,12 +275,12 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
           {/* Main Headline (Smoothly moves up and reclaims space) */}
           <motion.div
             layout="position"
-            transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.55, ease: EASE }}
             className="max-w-3xl mx-auto flex flex-col items-center justify-center pb-2"
           >
             <motion.h1
               layout="position"
-              transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.55, ease: EASE }}
               className="text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-foreground leading-[1.12]"
             >
               Remember what you learn.{' '}
@@ -298,9 +299,9 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
                   exit={{
                     opacity: 0,
                     height: 0,
-                    transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] },
+                    transition: { duration: 0.4, ease: EASE },
                   }}
-                  transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                  transition={{ duration: DUR.page, ease: EASE }}
                   className="mt-3 text-base sm:text-xl text-muted-foreground leading-relaxed font-normal overflow-hidden max-w-2xl mx-auto"
                 >
                   Traditional flashcards isolate facts. Saulado turns your actual notes, textbooks,
@@ -321,9 +322,9 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
                 exit={{
                   opacity: 0,
                   height: 0,
-                  transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] },
+                  transition: { duration: 0.35, ease: EASE },
                 }}
-                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.4, ease: EASE }}
                 className="overflow-hidden w-full flex flex-col items-center justify-center space-y-4 pt-2"
               >
                 <div className="flex flex-wrap items-center justify-center gap-4">
@@ -368,7 +369,7 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
           {/* ── Middle Hero Container: Live Cloze Card OR Popped Claymorphic Auth Modal ── */}
           <motion.div
             layout="position"
-            transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.55, ease: EASE }}
             className="w-full max-w-lg mx-auto pt-4 text-left"
           >
             <AnimatePresence mode="wait" initial={false}>
@@ -382,9 +383,9 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
                     opacity: 0,
                     scale: 0.96,
                     y: -20,
-                    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] },
+                    transition: { duration: 0.3, ease: EASE },
                   }}
-                  transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                  transition={{ duration: DUR.page, ease: EASE }}
                   className="clay-card p-6 sm:p-8 space-y-6 relative overflow-hidden group"
                 >
                   <div className="flex items-center justify-between border-b border-border/50 pb-4">
@@ -471,9 +472,9 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
                     opacity: 0,
                     scale: 0.94,
                     y: 25,
-                    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] },
+                    transition: { duration: 0.3, ease: EASE },
                   }}
-                  transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                  transition={{ duration: 0.5, ease: EASE }}
                   className="clay-card p-8 sm:p-10 rounded-[2rem] shadow-2xl border border-border/70 relative overflow-hidden"
                 >
                   <h1 className="sr-only">
@@ -484,7 +485,7 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
                     <motion.div
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                      transition={SPRING}
                       className="py-10 text-center space-y-5"
                     >
                       <div className="h-16 w-16 mx-auto rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-md">
