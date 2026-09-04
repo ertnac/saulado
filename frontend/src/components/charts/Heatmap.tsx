@@ -1,5 +1,8 @@
 import type { ReactElement } from 'react'
 import type { DayStat } from '@saulado/shared'
+import { motion } from 'framer-motion'
+import { useDrawOn } from '@/components/motion/useDrawOn'
+import { DUR, EASE, staggerParent } from '@/lib/motion'
 import { ChartEmpty, ChartFigure } from './ChartFigure'
 import { longDate, weekdayIndex } from './scale'
 
@@ -97,6 +100,14 @@ export function Heatmap({ days, caption, emptyMessage }: HeatmapProps): ReactEle
 
   const busiest = Math.max(...active.map((day) => day.reviews))
   const weeks = toWeeks(days)
+  const drawOn = useDrawOn()
+  /*
+    The per-cell delay, borrowed from the same clamp the list stagger uses. A
+    year's heatmap is 371 cells; at any fixed delay per cell the last square
+    would arrive long after the reader had stopped waiting, so the whole reveal
+    is fitted into a fixed budget instead.
+  */
+  const step = staggerParent(weeks.length * WEEKDAY_LABELS.length).shown.transition.staggerChildren
 
   return (
     <ChartFigure
@@ -124,7 +135,7 @@ export function Heatmap({ days, caption, emptyMessage }: HeatmapProps): ReactEle
               day === null ? (
                 <span key={row} className="h-3 w-3" />
               ) : (
-                <span
+                <motion.span
                   key={row}
                   /*
                     A native tooltip for pointer users. Not an accessibility
@@ -134,6 +145,20 @@ export function Heatmap({ days, caption, emptyMessage }: HeatmapProps): ReactEle
                   */
                   title={`${longDate(day.day)}: ${String(day.reviews)} reviews`}
                   className={`h-3 w-3 rounded-sm ${LEVEL_CLASSES[levelFor(day.reviews, busiest)] ?? ''}`}
+                  /*
+                    The delay is computed rather than driven by variants: the week
+                    columns between this cell and the container are plain `div`s,
+                    and framer propagates variants only through motion components.
+                    Converting two levels of layout wrapper into motion components
+                    to pass a name down would cost more than the arithmetic.
+                  */
+                  initial={drawOn ? { opacity: 0, scale: 0.6 } : false}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{
+                    duration: DUR.base,
+                    ease: EASE,
+                    delay: step * (index * WEEKDAY_LABELS.length + row),
+                  }}
                 />
               ),
             )}

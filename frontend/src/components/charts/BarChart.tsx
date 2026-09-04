@@ -1,6 +1,9 @@
 import type { ReactElement } from 'react'
 import type { DayStat } from '@saulado/shared'
 import { accuracyPercent } from '@saulado/shared'
+import { motion } from 'framer-motion'
+import { useDrawOn } from '@/components/motion/useDrawOn'
+import { DUR, EASE } from '@/lib/motion'
 import { ChartEmpty, ChartFigure } from './ChartFigure'
 import { barHeightPercent, longDate, niceCeiling, shortDate } from './scale'
 
@@ -59,6 +62,7 @@ export function BarChart({ days, caption, emptyMessage }: BarChartProps): ReactE
 
   const ceiling = niceCeiling(Math.max(...days.map((day) => day.reviews)))
   const stride = Math.max(1, Math.ceil(days.length / MAX_TICKS))
+  const drawOn = useDrawOn()
 
   return (
     <ChartFigure
@@ -77,9 +81,23 @@ export function BarChart({ days, caption, emptyMessage }: BarChartProps): ReactE
           <div className="flex h-40 items-end gap-px border-b border-border">
             {days.map((day) => (
               <div key={day.day} className="flex h-full min-w-0 flex-1 flex-col justify-end">
-                <div
-                  className="w-full rounded-t-sm bg-success/20"
+                <motion.div
+                  className="w-full origin-bottom rounded-t-sm bg-success/20"
                   style={{ height: `${String(barHeightPercent(day.reviews, ceiling))}%` }}
+                  /*
+                    `scaleY`, not `height`. Animating height is a layout animation
+                    on every frame and the redesign restricts JavaScript animation
+                    to opacity and transform — and scaling the bar takes the nested
+                    correct-portion with it, so the split stays truthful the whole
+                    way up rather than being briefly wrong.
+
+                    `EASE`, never `EASE_SQUISH`: a bar that overshoots its value
+                    misreports the data for as long as the animation runs, and a
+                    reader glancing at the wrong moment reads the wrong number.
+                  */
+                  initial={drawOn ? { scaleY: 0 } : false}
+                  animate={{ scaleY: 1 }}
+                  transition={{ duration: DUR.slow, ease: EASE }}
                 >
                   {/*
                     Nested so the correct portion is measured against the bar it
@@ -93,7 +111,7 @@ export function BarChart({ days, caption, emptyMessage }: BarChartProps): ReactE
                       height: `${String(day.reviews > 0 ? Math.round((day.correct / day.reviews) * 100) : 0)}%`,
                     }}
                   />
-                </div>
+                </motion.div>
               </div>
             ))}
           </div>

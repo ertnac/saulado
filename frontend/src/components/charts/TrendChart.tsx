@@ -1,6 +1,9 @@
 import type { ReactElement } from 'react'
 import type { DayStat } from '@saulado/shared'
 import { accuracyPercent } from '@saulado/shared'
+import { motion } from 'framer-motion'
+import { useDrawOn } from '@/components/motion/useDrawOn'
+import { DUR, EASE } from '@/lib/motion'
 import { ChartEmpty, ChartFigure } from './ChartFigure'
 import { longDate, shortDate } from './scale'
 
@@ -61,6 +64,7 @@ interface TrendChartProps {
 
 export function TrendChart({ days, caption, emptyMessage }: TrendChartProps): ReactElement {
   const runs = segments(days)
+  const drawOn = useDrawOn()
 
   const table = {
     headers: ['Day', 'Accuracy', 'Reviews'],
@@ -129,7 +133,7 @@ export function TrendChart({ days, caption, emptyMessage }: TrendChartProps): Re
               // in the window is still visible rather than silently missing.
               if (run.length === 1) {
                 return (
-                  <line
+                  <motion.line
                     key={first.index}
                     x1={x(first.index)}
                     y1={y(first.accuracy)}
@@ -139,12 +143,21 @@ export function TrendChart({ days, caption, emptyMessage }: TrendChartProps): Re
                     strokeWidth="6"
                     strokeLinecap="round"
                     vectorEffect="non-scaling-stroke"
+                    /*
+                      A fade, not a `pathLength` draw: this line's two endpoints are
+                      the same point, so it has no length to draw along. Fading is
+                      also the only enter animation that leaves the dot at its exact
+                      plotted position at every frame.
+                    */
+                    initial={drawOn ? { opacity: 0 } : false}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: DUR.slow, ease: EASE }}
                   />
                 )
               }
 
               return (
-                <polyline
+                <motion.polyline
                   key={first.index}
                   points={run
                     .map((point) => `${String(x(point.index))},${String(y(point.accuracy))}`)
@@ -155,6 +168,15 @@ export function TrendChart({ days, caption, emptyMessage }: TrendChartProps): Re
                   strokeLinejoin="round"
                   strokeLinecap="round"
                   vectorEffect="non-scaling-stroke"
+                  /*
+                    Drawn left to right along its own length. `EASE` rather than
+                    `EASE_SQUISH`: overshoot on a data mark would push the line past
+                    the last measured point, inventing a reading for a day that has
+                    not happened.
+                  */
+                  initial={drawOn ? { pathLength: 0 } : false}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: DUR.page, ease: EASE }}
                 />
               )
             })}

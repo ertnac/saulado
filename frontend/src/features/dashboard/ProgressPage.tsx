@@ -250,7 +250,13 @@ export function ProgressPage(): ReactElement {
               />
             </section>
 
-            <Card as="section" className="space-y-8 p-5">
+            {/*
+              Flat, per the clay tier scale: these are chart panels, and clay's
+              inset highlight lightens the top of a surface, which is where a
+              chart's own marks and axis labels live. Depth here competes with
+              the data instead of framing it.
+            */}
+            <Card as="section" elevation="flat" className="space-y-8 p-5">
               <BarChart
                 days={data.days}
                 caption="Reviews per day"
@@ -264,7 +270,7 @@ export function ProgressPage(): ReactElement {
               />
             </Card>
 
-            <Card as="section" className="p-5">
+            <Card as="section" elevation="flat" className="p-5">
               <Heatmap
                 days={data.days}
                 caption="Study days"
@@ -284,7 +290,10 @@ export function ProgressPage(): ReactElement {
                   </p>
                 </Card>
               ) : (
-                <Card className="p-1.5">
+                // Flat: the card is a frame around table rows, and a puffy
+                // container around dense rows is the case the tier scale exists to
+                // prevent.
+                <Card elevation="flat" className="p-1.5">
                   <PerSetTable sets={data.perSet} />
                 </Card>
               )}

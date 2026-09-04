@@ -1,4 +1,7 @@
 import type { ReactElement } from 'react'
+import { motion } from 'framer-motion'
+import { useDrawOn } from '@/components/motion/useDrawOn'
+import { DUR, EASE } from '@/lib/motion'
 
 /**
  * The daily goal ring (plan §5.2).
@@ -7,15 +10,20 @@ import type { ReactElement } from 'react'
  * implementation: `strokeDasharray` set to the circumference, `strokeDashoffset`
  * to the unfinished remainder.
  *
- * Two things it deliberately does not do:
+ * **It sweeps to its value on mount**, which reverses this file's original
+ * position. That position had two halves: there is nothing to animate *to*, and a
+ * sweep would be decoration a reduced-motion user then has to have suppressed.
+ * The second half no longer holds — `useDrawOn` suppresses it, and the ring
+ * renders finished rather than frozen at zero. The first half was a judgement
+ * call, and the clay redesign makes the other one: the ring is the figure the
+ * dashboard exists to show, and a ring that fills is how a reader sees it is a
+ * proportion rather than a picture.
  *
- * - **It does not animate.** Not because of `prefers-reduced-motion` per se, but
- *   because there is nothing to animate *to* — the ring renders once at the
- *   value it already has. A sweep on mount would be decoration that a reduced-
- *   motion user then has to have suppressed.
- * - **It does not fill past 100%.** Overshooting the ring makes a 40-review day
- *   look identical to a 20-review one against a goal of 20. The count beside it
- *   carries the excess, and the goal is met either way.
+ * One thing it still deliberately does not do: **fill past 100%**. Overshooting
+ * the ring makes a 40-review day look identical to a 20-review one against a goal
+ * of 20. The count beside it carries the excess, and the goal is met either way.
+ * The sweep uses `EASE`, never `EASE_SQUISH`, for the same reason — an overshoot
+ * would momentarily draw a goal that was exceeded when it was only met.
  *
  * The ring itself is `aria-hidden`; the label beside it is the accessible text.
  * A screen reader gets "12 of 20 reviews", which is the entire content.
@@ -37,6 +45,7 @@ export function GoalRing({ value, goal, met }: GoalRingProps): ReactElement {
   // A goal of zero would divide by zero and, more to the point, cannot be
   // missed — treat it as complete rather than as an error state.
   const fraction = goal <= 0 ? 1 : Math.min(1, value / goal)
+  const drawOn = useDrawOn()
 
   return (
     <div className="flex items-center gap-4">
@@ -56,7 +65,7 @@ export function GoalRing({ value, goal, met }: GoalRingProps): ReactElement {
             className="stroke-surface-muted"
           />
           {fraction > 0 && (
-            <circle
+            <motion.circle
               cx={SIZE / 2}
               cy={SIZE / 2}
               r={RADIUS}
@@ -64,12 +73,16 @@ export function GoalRing({ value, goal, met }: GoalRingProps): ReactElement {
               strokeWidth={STROKE}
               strokeLinecap="round"
               strokeDasharray={CIRCUMFERENCE}
-              strokeDashoffset={CIRCUMFERENCE * (1 - fraction)}
               // Rotated so the arc starts at twelve o'clock. SVG angles begin at
               // three, and a progress ring that starts on the right reads as
               // already part-finished.
               transform={`rotate(-90 ${String(SIZE / 2)} ${String(SIZE / 2)})`}
               className={met ? 'stroke-success' : 'stroke-primary'}
+              // A full offset is an empty ring, so the sweep runs from there to
+              // the unfinished remainder that was previously rendered outright.
+              initial={drawOn ? { strokeDashoffset: CIRCUMFERENCE } : false}
+              animate={{ strokeDashoffset: CIRCUMFERENCE * (1 - fraction) }}
+              transition={{ duration: DUR.page, ease: EASE }}
             />
           )}
         </svg>
