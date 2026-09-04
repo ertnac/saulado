@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
@@ -31,8 +31,9 @@ describe('LandingPage', () => {
 
     expect(screen.getByText(/Correct recall/i)).toBeInTheDocument()
 
-    const revealBtn = screen.getByRole('button', { name: /reveal answer/i })
-    await user.click(revealBtn)
+    const revealBtn = screen.getAllByRole('button', { name: /reveal answer/i })[0]
+    expect(revealBtn).toBeDefined()
+    await user.click(revealBtn!)
     expect(screen.getByText('time')).toBeInTheDocument()
   })
 
@@ -49,5 +50,24 @@ describe('LandingPage', () => {
     await user.click(flashcardTab)
 
     expect(screen.getByText(/3D Flip with SM-2 Grading/i)).toBeInTheDocument()
+  })
+
+  it('opens and closes the hero auth modal on clicking Start Studying Free', async () => {
+    const user = userEvent.setup()
+    renderLandingPage()
+
+    const startBtn = screen.getByRole('button', { name: /Start Studying Free/i })
+    await user.click(startBtn)
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /Create Account/i }).length).toBeGreaterThan(0)
+    })
+
+    const closeBtn = screen.getByRole('button', { name: /Back to demo/i })
+    await user.click(closeBtn)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/type here/i)).toBeInTheDocument()
+    })
   })
 })

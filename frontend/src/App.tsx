@@ -12,8 +12,6 @@ import { SettingsPage } from '@/features/account/SettingsPage'
 import { AdminDashboardPage } from '@/features/admin/AdminDashboardPage'
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
 import { LandingPage } from '@/features/landing/LandingPage'
-import { LoginPage } from '@/features/auth/LoginPage'
-import { RegisterPage } from '@/features/auth/RegisterPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 import { SetDetailPage } from '@/features/cards/SetDetailPage'
 import { SetsPage } from '@/features/cards/SetsPage'
@@ -88,7 +86,7 @@ export function App(): ReactElement {
                   path="/login"
                   element={
                     <AnonymousRoute>
-                      <LoginPage />
+                      <LandingPage initialModal="login" />
                     </AnonymousRoute>
                   }
                 />
@@ -96,7 +94,7 @@ export function App(): ReactElement {
                   path="/register"
                   element={
                     <AnonymousRoute>
-                      <RegisterPage />
+                      <LandingPage initialModal="register" />
                     </AnonymousRoute>
                   }
                 />

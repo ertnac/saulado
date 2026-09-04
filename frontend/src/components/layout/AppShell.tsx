@@ -1,5 +1,5 @@
 import { useEffect, useState, type ComponentType, type ReactElement } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -159,6 +159,7 @@ function ThemeToggle(): ReactElement {
 export function AppShell(): ReactElement {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
+  const navigate = useNavigate()
   const palette = useSearchShortcut()
   const location = useLocation()
   const { data: adminCheck } = useAdminCheck()
@@ -243,7 +244,9 @@ export function AppShell(): ReactElement {
             aria-label="Sign out"
             className="h-11 w-11 p-0 sm:w-auto sm:px-4"
             onClick={() => {
-              void logout()
+              void logout().then(() => {
+                void navigate('/welcome?auth=login', { replace: true })
+              })
             }}
           >
             <LogoutIcon />
@@ -256,9 +259,9 @@ export function AppShell(): ReactElement {
       <main id="main" className="mx-auto w-full max-w-5xl px-4 pb-28 pt-4 md:pb-16 md:pt-6">
         <motion.div
           key={location.pathname}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          initial={{ opacity: 0, y: 16, filter: 'blur(4px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
         >
           <Outlet />
         </motion.div>

@@ -44,7 +44,13 @@ export function ProtectedRoute({
      * this, following a deep link while signed out silently drops it and lands
      * them on the dashboard wondering what happened.
      */
-    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
+    return (
+      <Navigate
+        to="/welcome?auth=login"
+        replace
+        state={{ from: location.pathname + location.search }}
+      />
+    )
   }
 
   return children

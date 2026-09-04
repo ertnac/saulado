@@ -380,3 +380,12 @@ export function MailIcon(props: IconProps): ReactElement {
     </Icon>
   )
 }
+
+export function XIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </Icon>
+  )
+}

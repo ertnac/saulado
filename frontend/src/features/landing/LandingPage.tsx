@@ -1,17 +1,107 @@
-import { useState, type ReactElement } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect, useRef, type FormEvent, type ReactElement } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
+import { checkPassword, PASSWORD_MIN_LENGTH } from '@saulado/shared'
 import {
   BookOpenIcon,
   CheckIcon,
   ChevronRightIcon,
+  EyeIcon,
+  EyeOffIcon,
   FileTextIcon,
   FlameIcon,
+  LockIcon,
+  MailIcon,
   SparklesIcon,
+  XIcon,
 } from '@/components/ui/icons'
 import { Logo, MascotSprite } from '@/components/ui/brand'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { FormField } from '@/components/ui/form-field'
+import { FormAlert } from '@/features/auth/AuthLayout'
+import { useFormErrors } from '@/hooks/useFormErrors'
+import { useAuthStore } from '@/stores/auth'
 
-export function LandingPage(): ReactElement {
+interface GoogleCredentialResponse {
+  credential: string
+}
+
+interface GoogleAccounts {
+  id: {
+    initialize(config: {
+      client_id: string
+      callback: (res: GoogleCredentialResponse) => void
+    }): void
+    renderButton(parent: HTMLElement, options: Record<string, unknown>): void
+  }
+}
+
+declare global {
+  interface Window {
+    google?: { accounts: GoogleAccounts }
+  }
+}
+
+interface LandingPageProps {
+  initialModal?: 'login' | 'register' | null
+}
+
+export function LandingPage({ initialModal }: LandingPageProps = {}): ReactElement {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const register = useAuthStore((s) => s.register)
+  const login = useAuthStore((s) => s.login)
+  const googleLogin = useAuthStore((s) => s.googleLogin)
+  const { errors, setFromError, clear } = useFormErrors()
+
+  const authQuery = searchParams.get('auth')
+  const defaultTab: 'register' | 'login' =
+    initialModal === 'login' || authQuery === 'login' || location.pathname === '/login'
+      ? 'login'
+      : 'register'
+
+  const defaultShowModal =
+    initialModal !== undefined && initialModal !== null
+      ? Boolean(initialModal)
+      : authQuery === 'login' ||
+        authQuery === 'register' ||
+        location.pathname === '/login' ||
+        location.pathname === '/register'
+
+  // Hero Interactive Auth Modal Transition State
+  const [showAuthModal, setShowAuthModal] = useState(defaultShowModal)
+  const [authTab, setAuthTab] = useState<'register' | 'login'>(defaultTab)
+  const [authSuccess, setAuthSuccess] = useState(false)
+
+  const from = (location.state as { from?: string } | null)?.from ?? '/dashboard'
+
+  // Sync route / query parameters with modal state
+  useEffect(() => {
+    const auth = searchParams.get('auth')
+    if (auth === 'login' || location.pathname === '/login' || initialModal === 'login') {
+      setShowAuthModal(true)
+      setAuthTab('login')
+    } else if (
+      auth === 'register' ||
+      location.pathname === '/register' ||
+      initialModal === 'register'
+    ) {
+      setShowAuthModal(true)
+      setAuthTab('register')
+    }
+  }, [searchParams, location.pathname, initialModal])
+
+  // Auth Form State
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [showAuthPassword, setShowAuthPassword] = useState(false)
+  const [localPasswordError, setLocalPasswordError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const googleBtnRef = useRef<HTMLDivElement>(null)
+  const isGoogleInitialized = useRef(false)
+
   // Hero Interactive Demo State
   const [heroInput, setHeroInput] = useState('')
   const [heroRevealed, setHeroRevealed] = useState(false)
@@ -33,10 +123,98 @@ export function LandingPage(): ReactElement {
   const [sandboxRevealed, setSandboxRevealed] = useState(false)
 
   const sandboxWords = sandboxText.split(' ')
+  const isPasswordValid = authPassword.length >= PASSWORD_MIN_LENGTH
+
+  // Initialize Google Sign-In when modal is visible
+  useEffect(() => {
+    if (!showAuthModal) return
+
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let unmounted = false
+
+    const initGoogle = () => {
+      if (unmounted || typeof window === 'undefined') return
+      if (window.google && googleBtnRef.current) {
+        if (!isGoogleInitialized.current) {
+          window.google.accounts.id.initialize({
+            client_id: String(import.meta.env.VITE_GOOGLE_CLIENT_ID),
+            callback: (response: GoogleCredentialResponse) => {
+              clear()
+              googleLogin(response.credential)
+                .then(() => {
+                  setAuthSuccess(true)
+                  setTimeout(() => {
+                    void navigate(from, { replace: true })
+                  }, 700)
+                })
+                .catch((err) => {
+                  setFromError(err)
+                })
+            },
+          })
+          isGoogleInitialized.current = true
+        }
+
+        window.google.accounts.id.renderButton(googleBtnRef.current, {
+          theme: 'outline',
+          size: 'large',
+          shape: 'pill',
+          text: 'continue_with',
+          width: 280,
+        })
+      } else if (typeof window !== 'undefined') {
+        timer = setTimeout(initGoogle, 100)
+      }
+    }
+    initGoogle()
+
+    return () => {
+      unmounted = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [showAuthModal, googleLogin, navigate, from, clear, setFromError])
+
+  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    clear()
+    setLocalPasswordError(null)
+
+    if (authTab === 'register') {
+      const problem = checkPassword(authPassword)
+      if (problem) {
+        setLocalPasswordError(problem.message)
+        return
+      }
+    }
+
+    setSubmitting(true)
+    try {
+      if (authTab === 'register') {
+        await register(authEmail, authPassword)
+      } else {
+        await login(authEmail, authPassword)
+      }
+      setAuthSuccess(true)
+      setTimeout(() => {
+        void navigate(from, { replace: true })
+      }, 700)
+    } catch (err) {
+      setFromError(err)
+      setSubmitting(false)
+    }
+  }
+
+  function handleCloseModal(): void {
+    setShowAuthModal(false)
+    clear()
+    if (searchParams.get('auth')) {
+      setSearchParams({}, { replace: true })
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col selection:bg-accent/20">
-      {/* ── Top Navigation Bar ── */}
+      {/* ── Top Navigation Bar (Clean & Minimalist, Top-Right Buttons Removed) ── */}
       <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-background/85 border-b border-border/60 transition-all">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5 group">
@@ -46,7 +224,7 @@ export function LandingPage(): ReactElement {
             </span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-muted-foreground">
+          <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-muted-foreground">
             <a href="#how-it-works" className="hover:text-foreground transition-colors">
               How it Works
             </a>
@@ -60,161 +238,454 @@ export function LandingPage(): ReactElement {
               Features
             </a>
           </nav>
-
-          <div className="flex items-center gap-3">
-            <Link
-              to="/login"
-              className="clay-pill px-4 py-2 text-xs sm:text-sm font-semibold text-foreground hover:text-primary transition-colors"
-            >
-              Sign In
-            </Link>
-            <Link
-              to="/register"
-              className="clay-btn-primary px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 shadow-sm"
-            >
-              Get Started
-              <ChevronRightIcon className="h-3.5 w-3.5" />
-            </Link>
-          </div>
         </div>
       </header>
 
-      {/* ── Hero Section ── */}
-      <section className="relative pt-12 pb-20 sm:pt-20 sm:pb-28 overflow-hidden">
+      {/* ── Hero Section with Fluid Layout Continuity ── */}
+      <section className="relative pt-6 pb-16 sm:pt-10 sm:pb-24 overflow-hidden">
         {/* Subtle Ambient Radial Accents */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-primary/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 text-center space-y-8">
-          {/* Eyebrow Pill */}
-          <div className="inline-flex items-center gap-2 clay-pill px-4 py-1.5 text-xs font-semibold text-primary">
-            <SparklesIcon className="h-3.5 w-3.5 text-accent" />
-            <span>Active Recall · Spaced Repetition · Contextual Cloze</span>
-          </div>
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 text-center flex flex-col items-center">
+          {/* Eyebrow Pill with smooth collapse and upward glide (no snapping) */}
+          <AnimatePresence initial={false}>
+            {!showAuthModal && (
+              <motion.div
+                key="hero-eyebrow"
+                initial={{ opacity: 0, height: 0, scale: 0.95 }}
+                animate={{ opacity: 1, height: 'auto', scale: 1 }}
+                exit={{
+                  opacity: 0,
+                  height: 0,
+                  scale: 0.95,
+                  transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] },
+                }}
+                transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden flex justify-center"
+              >
+                <div className="inline-flex items-center gap-2 clay-pill px-4 py-1.5 text-xs font-semibold text-primary mb-3">
+                  <SparklesIcon className="h-3.5 w-3.5 text-accent" />
+                  <span>Active Recall · Spaced Repetition · Contextual Cloze</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {/* Main Headline */}
-          <div className="space-y-4 max-w-3xl mx-auto">
-            <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-foreground leading-[1.12]">
+          {/* Main Headline (Smoothly moves up and reclaims space) */}
+          <motion.div
+            layout="position"
+            transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+            className="max-w-3xl mx-auto flex flex-col items-center justify-center pb-2"
+          >
+            <motion.h1
+              layout="position"
+              transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+              className="text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-foreground leading-[1.12]"
+            >
               Remember what you learn.{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-emerald-600 to-teal-500 dark:from-emerald-400 dark:to-teal-300">
                 In context.
               </span>
-            </h1>
-            <p className="text-lg sm:text-xl text-muted-foreground leading-relaxed font-normal">
-              Traditional flashcards isolate facts. Saulado turns your actual notes, textbooks, and
-              documents into smart cloze recall cards—spaced at the exact moment before you forget.
-            </p>
-          </div>
+            </motion.h1>
 
-          {/* Call to Actions */}
-          <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
-            <Link
-              to="/register"
-              className="clay-btn-primary px-7 py-3.5 text-base font-semibold inline-flex items-center gap-2 text-white"
-            >
-              Start Studying Free
-              <ChevronRightIcon className="h-4 w-4" />
-            </Link>
-            <a
-              href="#sandbox"
-              className="clay-pill px-6 py-3.5 text-base font-medium text-foreground hover:bg-surface-muted transition-all"
-            >
-              Try Interactive Demo
-            </a>
-          </div>
+            {/* Explanatory Paragraph (Smoothly removed while modal is displaying for more vertical height) */}
+            <AnimatePresence initial={false}>
+              {!showAuthModal && (
+                <motion.p
+                  key="hero-paragraph"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{
+                    opacity: 0,
+                    height: 0,
+                    transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] },
+                  }}
+                  transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                  className="mt-3 text-base sm:text-xl text-muted-foreground leading-relaxed font-normal overflow-hidden max-w-2xl mx-auto"
+                >
+                  Traditional flashcards isolate facts. Saulado turns your actual notes, textbooks,
+                  and documents into smart cloze recall cards—spaced at the exact moment before you
+                  forget.
+                </motion.p>
+              )}
+            </AnimatePresence>
+          </motion.div>
 
-          {/* Micro Trust Stats */}
-          <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-12 pt-4 text-xs sm:text-sm text-muted-foreground font-medium">
-            <span className="flex items-center gap-1.5">
-              <CheckIcon className="h-4 w-4 text-emerald-500" />
-              100% Free & Open Source
-            </span>
-            <span className="flex items-center gap-1.5">
-              <CheckIcon className="h-4 w-4 text-emerald-500" />
-              No Credit Card Required
-            </span>
-            <span className="flex items-center gap-1.5">
-              <CheckIcon className="h-4 w-4 text-emerald-500" />
-              SM-2 Spaced Algorithm
-            </span>
-          </div>
-
-          {/* ── Interactive Hero Preview Card (Claymorphic) ── */}
-          <div className="max-w-2xl mx-auto mt-12 text-left">
-            <div className="clay-card p-6 sm:p-8 space-y-6 relative overflow-hidden group">
-              <div className="flex items-center justify-between border-b border-border/50 pb-4">
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-red-400/80" />
-                  <span className="h-3 w-3 rounded-full bg-amber-400/80" />
-                  <span className="h-3 w-3 rounded-full bg-emerald-400/80" />
-                  <span className="text-xs text-muted-foreground font-medium ml-2">
-                    Live Cloze Demo
-                  </span>
-                </div>
-                <Badge tone="accent" className="text-xs font-semibold">
-                  Try typing below
-                </Badge>
-              </div>
-
-              <div className="space-y-4">
-                <p className="text-base sm:text-lg leading-relaxed text-foreground font-normal">
-                  "Spaced repetition is an evidence-based learning technique that incorporates
-                  increasing intervals of{' '}
-                  <span className="inline-block relative align-baseline mx-1">
-                    {heroRevealed ? (
-                      <span className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-lg border border-emerald-500/30">
-                        time
-                      </span>
-                    ) : (
-                      <input
-                        type="text"
-                        value={heroInput}
-                        onChange={(e) => setHeroInput(e.target.value)}
-                        placeholder="[ type here ]"
-                        className={`w-32 px-2.5 py-1 text-sm font-semibold rounded-xl border text-center transition-all focus:outline-none ${
-                          isHeroCorrect
-                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/30'
-                            : heroInput.length > 0
-                              ? 'bg-amber-500/10 border-amber-400 text-foreground'
-                              : 'bg-surface border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20'
-                        }`}
-                      />
-                    )}
-                  </span>{' '}
-                  between subsequent review of previously learned material."
-                </p>
-
-                <div className="flex items-center justify-between pt-2">
-                  <div className="text-xs text-muted-foreground">
-                    {isHeroCorrect ? (
-                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                        <CheckIcon className="h-4 w-4" /> Correct recall! Memory anchored.
-                      </span>
-                    ) : (
-                      <span>Hint: Dimension of clocks and hours</span>
-                    )}
-                  </div>
-
+          {/* Call to Actions & Trust Badges (Fade out and collapse smoothly) */}
+          <AnimatePresence initial={false}>
+            {!showAuthModal && (
+              <motion.div
+                key="cta-buttons"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{
+                  opacity: 0,
+                  height: 0,
+                  transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] },
+                }}
+                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden w-full flex flex-col items-center justify-center space-y-4 pt-2"
+              >
+                <div className="flex flex-wrap items-center justify-center gap-4">
                   <button
                     type="button"
                     onClick={() => {
-                      setHeroRevealed(!heroRevealed)
-                      if (!heroRevealed) setHeroInput('time')
+                      setShowAuthModal(true)
+                      setAuthTab('register')
                     }}
-                    className="text-xs font-semibold text-primary hover:underline"
+                    className="clay-btn-primary px-7 py-3.5 text-base font-semibold inline-flex items-center gap-2 text-white shadow-lg cursor-pointer"
                   >
-                    {heroRevealed ? 'Hide answer' : 'Reveal answer'}
+                    Start Studying Free
+                    <ChevronRightIcon className="h-4 w-4" />
                   </button>
+                  <a
+                    href="#sandbox"
+                    className="clay-pill px-6 py-3.5 text-base font-medium text-foreground hover:bg-surface-muted transition-all"
+                  >
+                    Try Interactive Demo
+                  </a>
                 </div>
-              </div>
-            </div>
-          </div>
+
+                {/* Micro Trust Stats */}
+                <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-12 pt-1 text-xs sm:text-sm text-muted-foreground font-medium">
+                  <span className="flex items-center gap-1.5">
+                    <CheckIcon className="h-4 w-4 text-emerald-500" />
+                    100% Free & Open Source
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <CheckIcon className="h-4 w-4 text-emerald-500" />
+                    No Credit Card Required
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <CheckIcon className="h-4 w-4 text-emerald-500" />
+                    SM-2 Spaced Algorithm
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── Middle Hero Container: Live Cloze Card OR Popped Claymorphic Auth Modal ── */}
+          <motion.div
+            layout="position"
+            transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full max-w-lg mx-auto pt-4 text-left"
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              {!showAuthModal ? (
+                /* Card 1: Interactive Hero Preview Card */
+                <motion.div
+                  key="live-demo-card"
+                  initial={{ opacity: 0, scale: 0.96, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{
+                    opacity: 0,
+                    scale: 0.96,
+                    y: -20,
+                    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] },
+                  }}
+                  transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                  className="clay-card p-6 sm:p-8 space-y-6 relative overflow-hidden group"
+                >
+                  <div className="flex items-center justify-between border-b border-border/50 pb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-3 rounded-full bg-red-400/80" />
+                      <span className="h-3 w-3 rounded-full bg-amber-400/80" />
+                      <span className="h-3 w-3 rounded-full bg-emerald-400/80" />
+                      <span className="text-xs text-muted-foreground font-medium ml-2">
+                        Live Cloze Demo
+                      </span>
+                    </div>
+                    <Badge tone="accent" className="text-xs font-semibold">
+                      Try typing below
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-4">
+                    <p className="text-base sm:text-lg leading-relaxed text-foreground font-normal">
+                      &quot;Spaced repetition is an evidence-based learning technique that
+                      incorporates increasing intervals of{' '}
+                      <span className="inline-block align-baseline">
+                        <input
+                          type="text"
+                          value={heroInput}
+                          onChange={(e) => {
+                            setHeroInput(e.target.value)
+                          }}
+                          placeholder="[ type here ]"
+                          className={`inline-block w-28 sm:w-36 text-center font-bold px-2 py-0.5 rounded-lg border text-sm transition-all focus:outline-none focus:ring-2 ${
+                            isHeroCorrect
+                              ? 'bg-emerald-500/15 border-emerald-500 text-emerald-700 dark:text-emerald-300 ring-emerald-400/30'
+                              : 'bg-surface border-border focus:border-primary focus:ring-primary/20'
+                          }`}
+                        />
+                      </span>{' '}
+                      between subsequent review of previously learned material.&quot;
+                    </p>
+
+                    <div className="flex items-center justify-between pt-2 text-xs text-muted-foreground">
+                      <span className="italic">Hint: Dimension of clocks and hours</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHeroRevealed(!heroRevealed)
+                        }}
+                        className="text-xs font-semibold text-primary hover:underline cursor-pointer"
+                      >
+                        {heroRevealed ? 'Hide answer' : 'Reveal answer'}
+                      </button>
+                    </div>
+
+                    {heroRevealed && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="p-3 rounded-xl bg-primary/10 border border-primary/20 text-xs text-primary font-medium"
+                      >
+                        Target Cloze Answer:{' '}
+                        <strong className="font-bold underline decoration-primary">time</strong>
+                      </motion.div>
+                    )}
+
+                    {isHeroCorrect && (
+                      <motion.div
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-xs text-emerald-800 dark:text-emerald-300 font-bold flex items-center gap-2"
+                      >
+                        <CheckIcon className="h-4 w-4 text-emerald-600" />
+                        <span>
+                          Correct recall! Notice how active recall triggers deeper memory formation.
+                        </span>
+                      </motion.div>
+                    )}
+                  </div>
+                </motion.div>
+              ) : (
+                /* Card 2: Popped Claymorphic Auth Modal (Spacious, Balanced & Smooth) */
+                <motion.div
+                  key="auth-modal-card"
+                  initial={{ opacity: 0, scale: 0.94, y: 25 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{
+                    opacity: 0,
+                    scale: 0.94,
+                    y: 25,
+                    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] },
+                  }}
+                  transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                  className="clay-card p-8 sm:p-10 rounded-[2rem] shadow-2xl border border-border/70 relative overflow-hidden"
+                >
+                  <h1 className="sr-only">
+                    {authTab === 'register' ? 'Create your account' : 'Sign in'}
+                  </h1>
+
+                  {authSuccess ? (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                      className="py-10 text-center space-y-5"
+                    >
+                      <div className="h-16 w-16 mx-auto rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-md">
+                        <CheckIcon className="h-8 w-8" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <h3 className="text-2xl font-extrabold text-foreground tracking-tight">
+                          {authTab === 'register' ? 'Account Created!' : 'Welcome Back!'}
+                        </h3>
+                        <p className="text-sm text-muted-foreground font-medium">
+                          Redirecting to your study dashboard...
+                        </p>
+                      </div>
+                      <div className="w-36 h-1.5 bg-surface-muted rounded-full mx-auto overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: '100%' }}
+                          transition={{ duration: 0.65, ease: 'easeInOut' }}
+                          className="h-full bg-primary rounded-full"
+                        />
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <>
+                      {/* Top Bar: Segmented Switcher + Close Button */}
+                      <div className="flex items-center justify-between gap-4 mb-7">
+                        <div className="flex-1 p-1.5 rounded-2xl bg-surface-muted flex items-center border border-border/50 h-12">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuthTab('register')
+                              clear()
+                            }}
+                            className={`flex-1 py-2 text-center text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
+                              authTab === 'register'
+                                ? 'bg-surface text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            Create Account
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuthTab('login')
+                              clear()
+                            }}
+                            className={`flex-1 py-2 text-center text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
+                              authTab === 'login'
+                                ? 'bg-surface text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            Sign In
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleCloseModal}
+                          className="h-10 w-10 shrink-0 rounded-full flex items-center justify-center bg-surface-muted/60 hover:bg-surface-muted text-muted-foreground hover:text-foreground border border-border/40 transition-all cursor-pointer"
+                          aria-label="Back to demo"
+                          title="Back to live demo"
+                        >
+                          <XIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {errors.general && <FormAlert message={errors.general} />}
+
+                      {/* Auth Form with Generous Vertical Rhythm */}
+                      <form
+                        onSubmit={(e) => void handleAuthSubmit(e)}
+                        noValidate
+                        className="space-y-5"
+                      >
+                        <FormField
+                          label="Email"
+                          type="email"
+                          value={authEmail}
+                          onChange={(e) => setAuthEmail(e.target.value)}
+                          placeholder="learner@example.com"
+                          error={errors.fields.email}
+                          leftIcon={<MailIcon className="h-4 w-4" />}
+                          autoComplete="email"
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          required
+                          autoFocus
+                        />
+
+                        <div className="space-y-1.5">
+                          <FormField
+                            label="Password"
+                            labelAction={
+                              authTab === 'login' ? (
+                                <Link
+                                  to="/forgot-password"
+                                  className="text-xs font-semibold text-muted-foreground hover:text-primary transition-colors underline"
+                                >
+                                  Forgot password?
+                                </Link>
+                              ) : undefined
+                            }
+                            type={showAuthPassword ? 'text' : 'password'}
+                            value={authPassword}
+                            onChange={(e) => {
+                              setAuthPassword(e.target.value)
+                              if (localPasswordError) setLocalPasswordError(null)
+                            }}
+                            placeholder={
+                              authTab === 'register' ? 'Choose a password' : 'Enter your password'
+                            }
+                            error={localPasswordError ?? errors.fields.password}
+                            leftIcon={<LockIcon className="h-4 w-4" />}
+                            rightElement={
+                              <button
+                                type="button"
+                                onClick={() => setShowAuthPassword(!showAuthPassword)}
+                                className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                                aria-label={showAuthPassword ? 'Hide password' : 'Show password'}
+                              >
+                                {showAuthPassword ? (
+                                  <EyeOffIcon className="h-4 w-4" />
+                                ) : (
+                                  <EyeIcon className="h-4 w-4" />
+                                )}
+                              </button>
+                            }
+                            autoComplete={
+                              authTab === 'register' ? 'new-password' : 'current-password'
+                            }
+                            required
+                          />
+
+                          {authTab === 'register' && (
+                            <div className="flex items-center gap-2 pt-1 text-xs">
+                              <span
+                                className={`flex items-center gap-1 font-medium transition-colors ${
+                                  isPasswordValid
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-muted-foreground'
+                                }`}
+                              >
+                                <CheckIcon
+                                  className={`h-3.5 w-3.5 ${
+                                    isPasswordValid
+                                      ? 'text-emerald-500'
+                                      : 'text-muted-foreground/50'
+                                  }`}
+                                />
+                                At least {PASSWORD_MIN_LENGTH} characters
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <Button
+                          type="submit"
+                          disabled={submitting}
+                          className="clay-btn-primary w-full h-12 py-3 text-base font-bold rounded-2xl mt-4 shadow-lg cursor-pointer"
+                          size="lg"
+                        >
+                          {submitting
+                            ? authTab === 'register'
+                              ? 'Creating account…'
+                              : 'Signing in…'
+                            : authTab === 'register'
+                              ? 'Create Account'
+                              : 'Sign in'}
+                        </Button>
+                      </form>
+
+                      {/* Minimalist Divider */}
+                      <div className="relative my-6">
+                        <div className="absolute inset-0 flex items-center">
+                          <span className="w-full border-t border-border/60" />
+                        </div>
+                        <div className="relative flex justify-center text-xs">
+                          <span className="bg-surface px-3 font-semibold text-muted-foreground">
+                            or continue with
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Pill-shaped Google Auth Button */}
+                      <div className="flex justify-center min-h-[44px]" ref={googleBtnRef}></div>
+                    </>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
         </div>
       </section>
 
-      {/* ── Study Modes Interactive Showcase ── */}
+      {/* ── Triple Answering Engine Interactive Showcase ── */}
       <section
         id="study-modes"
-        className="py-16 sm:py-24 bg-surface-muted/50 border-y border-border/60"
+        className="py-16 sm:py-24 bg-surface-muted/40 border-t border-border/60"
       >
         <div className="mx-auto max-w-6xl px-4 sm:px-6 space-y-12">
           <div className="text-center space-y-3 max-w-2xl mx-auto">
@@ -222,17 +693,17 @@ export function LandingPage(): ReactElement {
               Triple Answering Engine
             </h2>
             <h3 className="text-3xl sm:text-4xl font-extrabold text-foreground tracking-tight">
-              Study your way: Type-In, Quiz, or Flashcards
+              One deck. Three ways to master it.
             </h3>
             <p className="text-sm sm:text-base text-muted-foreground">
-              Switch modes anytime mid-session. Zero lock-in, seamless progress sync across all
-              modes.
+              Different study sessions call for different cognitive demands. Switch answering modes
+              on the fly without losing spaced repetition progress.
             </p>
           </div>
 
-          {/* Mode Selector Tabs (Clay Pill Style) */}
+          {/* Mode Selector Pill Tabs */}
           <div className="flex justify-center">
-            <div className="clay-pill p-1.5 inline-flex items-center gap-1.5 max-w-full overflow-x-auto">
+            <div className="clay-pill p-1.5 inline-flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setSelectedMode('type-in')}
@@ -242,7 +713,7 @@ export function LandingPage(): ReactElement {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                1. Type-In (Active Recall)
+                Type-In (Active Recall)
               </button>
               <button
                 type="button"
@@ -253,7 +724,7 @@ export function LandingPage(): ReactElement {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                2. Multiple Choice (Fast Quiz)
+                Multiple Choice (Quiz)
               </button>
               <button
                 type="button"
@@ -264,271 +735,232 @@ export function LandingPage(): ReactElement {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                3. Flashcards (Self-Graded)
+                Flashcards (Flip & Grade)
               </button>
             </div>
           </div>
 
-          {/* Interactive Mode Preview Card */}
-          <div className="max-w-3xl mx-auto">
-            <div className="clay-card p-6 sm:p-10 space-y-6">
-              {selectedMode === 'type-in' && (
-                <div className="space-y-6 animate-fadeIn">
-                  <div className="flex items-center justify-between">
-                    <Badge tone="accent">Type-In Mode</Badge>
-                    <span className="text-xs text-muted-foreground">
-                      Typo-Tolerant String Distance
-                    </span>
-                  </div>
-                  <p className="text-lg leading-relaxed text-foreground">
-                    "Binary search operates in{' '}
-                    <input
-                      type="text"
-                      placeholder="[ answer ]"
-                      defaultValue="O(log n)"
-                      readOnly
-                      className="inline-block w-28 px-2 py-0.5 text-center font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-lg border border-emerald-500/30"
-                    />{' '}
-                    time on sorted arrays by repeatedly dividing the search interval in half."
-                  </p>
-                  <p className="text-xs text-muted-foreground italic">
-                    ✓ Evaluated with Levenshtein typo-tolerance so minor spelling slips don't break
-                    your streak.
+          {/* Dynamic Mode Interactive Display */}
+          <div className="max-w-2xl mx-auto">
+            {selectedMode === 'type-in' && (
+              <div className="clay-card p-6 sm:p-8 space-y-6">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="font-semibold text-primary">Mode: Type-In</span>
+                  <span>Max Retention Strength</span>
+                </div>
+                <p className="text-lg leading-relaxed">
+                  &quot;The powerhouse of the cell responsible for ATP synthesis is the{' '}
+                  <span className="font-mono bg-surface-muted px-2 py-0.5 rounded border border-border/80 font-bold text-primary">
+                    [ mitochondria ]
+                  </span>
+                  .&quot;
+                </p>
+                <div className="p-4 rounded-2xl bg-surface-muted/50 border border-border/50 text-xs text-muted-foreground space-y-2">
+                  <p className="font-semibold text-foreground">Why this works:</p>
+                  <p>
+                    Typing out the exact keyword forces full retrieval from neural pathways,
+                    delivering up to 300% higher long-term retention than passive reading.
                   </p>
                 </div>
-              )}
+              </div>
+            )}
 
-              {selectedMode === 'multiple-choice' && (
-                <div className="space-y-6 animate-fadeIn">
-                  <div className="flex items-center justify-between">
-                    <Badge tone="accent">Multiple Choice Mode</Badge>
-                    <span className="text-xs text-muted-foreground">
-                      Smart Contextual Distractors
-                    </span>
-                  </div>
-                  <p className="text-lg leading-relaxed text-foreground">
-                    "A{' '}
-                    <span className="font-bold underline decoration-primary decoration-2 underline-offset-4">
-                      [ ? ]
-                    </span>{' '}
-                    uses a hashing function to map keys to bucket indices for fast average O(1)
-                    lookups."
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    {[
-                      { id: 0, text: 'A. Stack', correct: false },
-                      { id: 1, text: 'B. Hash table', correct: true },
-                      { id: 2, text: 'C. Linked list', correct: false },
-                      { id: 3, text: 'D. Binary Tree', correct: false },
-                    ].map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setMcSelection(opt.id)}
-                        className={`p-3.5 rounded-2xl border text-left text-sm font-semibold transition-all ${
-                          mcSelection === opt.id
-                            ? opt.correct
-                              ? 'bg-emerald-500/20 border-emerald-500 text-emerald-800 dark:text-emerald-300 ring-2 ring-emerald-500/30'
-                              : 'bg-danger/10 border-danger text-danger'
-                            : 'bg-surface border-border hover:border-primary/50 text-foreground'
-                        }`}
-                      >
-                        {opt.text}
-                      </button>
-                    ))}
-                  </div>
+            {selectedMode === 'multiple-choice' && (
+              <div className="clay-card p-6 sm:p-8 space-y-6">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="font-semibold text-primary">Mode: Multiple Choice (Quiz)</span>
+                  <span>Fast Rapid-Fire Review</span>
                 </div>
-              )}
+                <p className="text-lg leading-relaxed">
+                  &quot;The powerhouse of the cell responsible for ATP synthesis is the{' '}
+                  <span className="text-primary font-bold underline decoration-wavy">[ ? ]</span>
+                  .&quot;
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  {['Ribosome', 'Mitochondria', 'Endoplasmic Reticulum', 'Golgi Apparatus'].map(
+                    (opt, idx) => {
+                      const isChosen = mcSelection === idx
+                      const isCorrect = idx === 1
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setMcSelection(idx)}
+                          className={`p-3.5 rounded-2xl text-sm font-semibold border text-left transition-all ${
+                            isChosen
+                              ? isCorrect
+                                ? 'bg-emerald-500/15 border-emerald-500 text-emerald-800 dark:text-emerald-300'
+                                : 'bg-red-500/15 border-red-500 text-red-800 dark:text-red-300'
+                              : 'bg-surface hover:bg-surface-muted border-border/60 text-foreground'
+                          }`}
+                        >
+                          <span className="inline-block w-6 text-muted-foreground">
+                            {String.fromCharCode(65 + idx)}.
+                          </span>
+                          {opt}
+                        </button>
+                      )
+                    },
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground italic text-center">
+                  Smart Contextual Distractors generated automatically from your notes.
+                </p>
+              </div>
+            )}
 
-              {selectedMode === 'flashcard' && (
-                <div className="space-y-6 animate-fadeIn">
-                  <div className="flex items-center justify-between">
-                    <Badge tone="accent">Flashcard Mode</Badge>
-                    <span className="text-xs text-muted-foreground">3D Flip with SM-2 Grading</span>
-                  </div>
-                  <div
-                    onClick={() => setIsFlipped(!isFlipped)}
-                    className="cursor-pointer p-8 rounded-2xl bg-surface-muted/60 border border-border/80 text-center space-y-4 hover:border-primary/50 transition-all group"
-                  >
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      {isFlipped ? 'Back (Answer)' : 'Front (Question) — Click to Flip'}
-                    </p>
+            {selectedMode === 'flashcard' && (
+              <div
+                onClick={() => setIsFlipped(!isFlipped)}
+                className="clay-card p-8 sm:p-12 text-center space-y-6 cursor-pointer select-none transition-all hover:scale-[1.01]"
+              >
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  {isFlipped ? 'Back (Answer & Explanation)' : 'Front (Prompt) — Click to Flip'}
+                </div>
+                <div className="min-h-[100px] flex items-center justify-center">
+                  {!isFlipped ? (
                     <p className="text-xl font-bold text-foreground">
-                      {isFlipped
-                        ? 'Answer: Mitochondria (ATP production)'
-                        : 'Which organelle generates most of the cellular energy in the form of ATP?'}
+                      &quot;The powerhouse of the cell responsible for ATP synthesis is the [ ...
+                      ].&quot;
                     </p>
-                    <p className="text-xs text-primary font-medium group-hover:underline">
-                      {isFlipped ? 'Click to flip back' : 'Press Space or Click to Reveal'}
-                    </p>
-                  </div>
-                  {isFlipped && (
-                    <div className="grid grid-cols-4 gap-2 pt-2 animate-fadeIn">
-                      <button
-                        type="button"
-                        className="p-2 rounded-xl bg-danger/10 text-danger text-xs font-bold hover:bg-danger/20"
-                      >
-                        Again [1]
-                      </button>
-                      <button
-                        type="button"
-                        className="p-2 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs font-bold hover:bg-amber-500/20"
-                      >
-                        Hard [2]
-                      </button>
-                      <button
-                        type="button"
-                        className="p-2 rounded-xl bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20"
-                      >
-                        Good [3]
-                      </button>
-                      <button
-                        type="button"
-                        className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-500/20"
-                      >
-                        Easy [4]
-                      </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                        Mitochondria
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Generates most of the chemical energy needed to power biochemical reactions.
+                      </p>
                     </div>
                   )}
                 </div>
-              )}
-            </div>
+                <div className="flex justify-center gap-2 pt-2 text-xs text-muted-foreground">
+                  <span className="clay-pill px-3 py-1 font-medium">3D Flip with SM-2 Grading</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
 
       {/* ── Interactive Cloze Sandbox ── */}
-      <section id="sandbox" className="py-16 sm:py-24">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 space-y-12">
-          <div className="text-center space-y-3 max-w-2xl mx-auto">
+      <section id="sandbox" className="py-16 sm:py-24 relative">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 space-y-10">
+          <div className="text-center space-y-3">
             <h2 className="text-xs font-bold uppercase tracking-wider text-accent">
               Interactive Sandbox
             </h2>
             <h3 className="text-3xl sm:text-4xl font-extrabold text-foreground tracking-tight">
-              Create a card in 5 seconds
+              Create a cloze recall card in 5 seconds.
             </h3>
             <p className="text-sm sm:text-base text-muted-foreground">
-              Click any word in your sentence below to instantly turn it into a cloze blank.
+              Type or paste any sentence below. Click any word to turn it into an active recall
+              blank.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-            {/* Left: Interactive Creator */}
-            <div className="clay-card p-6 sm:p-8 space-y-6">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-base text-foreground">1. Type or edit your note</h4>
-                <span className="text-xs text-muted-foreground">Click word to blank</span>
-              </div>
-
+          <div className="clay-card p-6 sm:p-8 space-y-6">
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                1. Edit or Paste Text
+              </label>
               <textarea
                 value={sandboxText}
-                onChange={(e) => setSandboxText(e.target.value)}
-                rows={3}
-                className="w-full p-3.5 text-sm rounded-xl border border-border bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                onChange={(e) => {
+                  setSandboxText(e.target.value)
+                  setBlankWord('')
+                }}
+                rows={2}
+                className="w-full rounded-2xl border border-border/80 bg-surface p-4 text-sm sm:text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
+            </div>
 
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground">
-                  Pick target blank from your words:
-                </p>
-                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1">
-                  {sandboxWords.map((word, idx) => {
-                    const clean = word.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
-                    const isBlanked = clean === blankWord
-                    return (
-                      <button
-                        key={`${word}-${String(idx)}`}
-                        type="button"
-                        onClick={() => {
-                          setBlankWord(clean)
-                          setSandboxTestInput('')
-                          setSandboxRevealed(false)
-                        }}
-                        className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${
-                          isBlanked
-                            ? 'bg-accent text-accent-foreground font-bold shadow-sm scale-105'
-                            : 'bg-surface-muted text-foreground hover:bg-surface-muted/80'
-                        }`}
-                      >
-                        {clean}
-                      </button>
-                    )
-                  })}
-                </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                2. Click a word to make it a recall blank
+              </label>
+              <div className="flex flex-wrap gap-2 p-3 rounded-2xl bg-surface-muted/50 border border-border/50">
+                {sandboxWords.map((w, idx) => {
+                  const cleaned = w.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
+                  const isSelected =
+                    cleaned.toLowerCase() === blankWord.toLowerCase() && blankWord !== ''
+                  return (
+                    <button
+                      key={`${w}-${idx}`}
+                      type="button"
+                      onClick={() => {
+                        setBlankWord(cleaned)
+                        setSandboxTestInput('')
+                        setSandboxRevealed(false)
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                        isSelected
+                          ? 'clay-btn-primary text-white scale-105 shadow-sm'
+                          : 'bg-surface hover:bg-surface-muted text-foreground border border-border/60'
+                      }`}
+                    >
+                      {w}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
-            {/* Right: Instant Playable Preview */}
-            <div className="clay-card p-6 sm:p-8 space-y-6 bg-gradient-to-br from-surface to-surface-muted/40">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-base text-foreground">
-                  2. Live Generated Cloze Card
-                </h4>
-                <Badge tone="accent" className="text-xs">
-                  Ready to test
-                </Badge>
-              </div>
+            {blankWord && (
+              <div className="pt-4 border-t border-border/50 space-y-4">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="font-bold text-foreground">3. Generated Flashcard Preview</span>
+                  <span>Active Blank: &ldquo;{blankWord}&rdquo;</span>
+                </div>
 
-              <div className="p-5 rounded-2xl bg-surface border border-border/80 space-y-4">
-                <p className="text-base leading-relaxed text-foreground">
-                  {sandboxWords.map((word, idx) => {
-                    const clean = word.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
-                    const isBlank = clean === blankWord
-                    const punctuation = word.slice(clean.length)
-
-                    if (isBlank) {
-                      return (
-                        <span key={String(idx)} className="inline-block mx-1">
-                          {sandboxRevealed ? (
-                            <span className="font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-lg">
-                              {clean}
-                            </span>
-                          ) : (
+                <div className="p-5 rounded-2xl bg-surface-muted/30 border border-border/60 space-y-3">
+                  <p className="text-base sm:text-lg leading-relaxed">
+                    {sandboxWords.map((w, idx) => {
+                      const cleaned = w.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
+                      if (cleaned.toLowerCase() === blankWord.toLowerCase()) {
+                        return (
+                          <span key={idx} className="inline-block align-baseline mx-1">
                             <input
                               type="text"
                               value={sandboxTestInput}
                               onChange={(e) => setSandboxTestInput(e.target.value)}
                               placeholder="[ ? ]"
-                              className={`w-24 px-2 py-0.5 text-xs text-center font-bold rounded-lg border focus:outline-none ${
+                              className={`w-28 sm:w-32 text-center font-bold px-2 py-0.5 rounded-lg border text-sm transition-all ${
                                 sandboxTestInput.trim().toLowerCase() === blankWord.toLowerCase()
-                                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-700'
+                                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-800 dark:text-emerald-300'
                                   : 'bg-surface border-border'
                               }`}
                             />
-                          )}
-                          {punctuation}
-                        </span>
-                      )
-                    }
-                    return <span key={String(idx)}>{word} </span>
-                  })}
-                </p>
+                          </span>
+                        )
+                      }
+                      return <span key={idx}>{w} </span>
+                    })}
+                  </p>
 
-                <div className="flex items-center justify-between pt-2 border-t border-border/40">
-                  <span className="text-xs text-muted-foreground">
-                    {sandboxTestInput.trim().toLowerCase() === blankWord.toLowerCase() ? (
-                      <span className="text-emerald-600 font-semibold">✓ Correct!</span>
-                    ) : (
-                      'Type above to test'
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSandboxRevealed(!sandboxRevealed)}
+                      className="text-xs font-semibold text-primary hover:underline cursor-pointer"
+                    >
+                      {sandboxRevealed ? 'Hide Answer' : 'Reveal Answer'}
+                    </button>
+                    {sandboxTestInput.trim().toLowerCase() === blankWord.toLowerCase() && (
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <CheckIcon className="h-4 w-4" /> Correct recall!
+                      </span>
                     )}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSandboxRevealed(!sandboxRevealed)}
-                    className="text-xs font-semibold text-primary hover:underline"
-                  >
-                    {sandboxRevealed ? 'Hide' : 'Reveal'}
-                  </button>
+                  </div>
+
+                  {sandboxRevealed && (
+                    <div className="p-2 rounded-xl bg-primary/10 text-xs text-primary font-medium">
+                      Answer: <strong>{blankWord}</strong>
+                    </div>
+                  )}
                 </div>
               </div>
-
-              <Link
-                to="/register"
-                className="clay-btn-accent w-full py-3 text-center text-sm font-semibold block text-white"
-              >
-                Save This to Your Free Deck ➔
-              </Link>
-            </div>
+            )}
           </div>
         </div>
       </section>
@@ -602,13 +1034,18 @@ export function LandingPage(): ReactElement {
               </p>
             </div>
             <div className="pt-2">
-              <Link
-                to="/register"
-                className="clay-btn-primary px-8 py-3.5 text-base font-semibold inline-flex items-center gap-2 text-white shadow-md"
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAuthModal(true)
+                  setAuthTab('register')
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }}
+                className="clay-btn-primary px-8 py-3.5 text-base font-semibold inline-flex items-center gap-2 text-white shadow-md cursor-pointer"
               >
                 Create Free Account
                 <ChevronRightIcon className="h-4 w-4" />
-              </Link>
+              </button>
             </div>
           </div>
         </div>
@@ -622,12 +1059,28 @@ export function LandingPage(): ReactElement {
             <span>© 2026 Saulado. Built for active recall.</span>
           </div>
           <div className="flex items-center gap-6">
-            <Link to="/login" className="hover:text-foreground transition-colors">
+            <button
+              type="button"
+              onClick={() => {
+                setShowAuthModal(true)
+                setAuthTab('login')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+              className="hover:text-foreground transition-colors cursor-pointer"
+            >
               Sign In
-            </Link>
-            <Link to="/register" className="hover:text-foreground transition-colors">
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAuthModal(true)
+                setAuthTab('register')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+              className="hover:text-foreground transition-colors cursor-pointer"
+            >
               Register
-            </Link>
+            </button>
             <a href="#how-it-works" className="hover:text-foreground transition-colors">
               Overview
             </a>
