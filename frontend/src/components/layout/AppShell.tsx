@@ -20,6 +20,7 @@ import { useSearchShortcut } from '@/features/search/useSearchShortcut'
 import { useAdminCheck } from '@/features/admin/queries'
 import { useTheme } from '@/hooks/useTheme'
 import { useAuthStore } from '@/stores/auth'
+import { DUR, EASE, SPRING } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
 /**
@@ -62,16 +63,40 @@ function MainNav(): ReactElement {
               <span className="flex w-16 flex-col items-center gap-1 py-1.5 md:w-20 md:py-0">
                 <span
                   className={cn(
-                    'flex h-11 w-11 items-center justify-center rounded-full text-xl',
-                    'transition-[background-color,color,box-shadow] duration-150',
-                    isActive
-                      ? // A filled disc, not just a tint: the active item has to
-                        // survive being read in greyscale.
-                        'bg-primary text-primary-foreground shadow-soft'
-                      : 'text-muted-foreground group-hover:bg-surface-muted group-hover:text-foreground',
+                    'relative flex h-11 w-11 items-center justify-center rounded-full text-xl',
+                    'transition-[background-color,color] duration-150',
+                    !isActive && 'text-muted-foreground group-hover:bg-surface-muted',
                   )}
                 >
-                  <ItemIcon />
+                  {/*
+                    The disc is its own element, shared by `layoutId` across all
+                    three destinations, so it travels to the item the user picked
+                    instead of vanishing here and reappearing there. Only one is
+                    ever mounted — framer reads the unmount-and-remount as the
+                    same object moving, which is the whole mechanism.
+
+                    Absolutely positioned behind the icon rather than being the
+                    icon's own background, because a background cannot animate
+                    between two elements.
+                  */}
+                  {isActive && (
+                    <motion.span
+                      layoutId="nav-disc"
+                      aria-hidden="true"
+                      // A filled disc, not just a tint: the active item has to
+                      // survive being read in greyscale.
+                      className="clay-pill absolute inset-0 bg-primary"
+                      transition={SPRING}
+                    />
+                  )}
+                  <span
+                    className={cn(
+                      'relative',
+                      isActive ? 'text-primary-foreground' : 'group-hover:text-foreground',
+                    )}
+                  >
+                    <ItemIcon />
+                  </span>
                 </span>
                 {/* Visible on phones, name-only on desktop where the rail is icons. */}
                 <span
@@ -119,8 +144,11 @@ function SearchTrigger({ onOpen }: { onOpen: () => void }): ReactElement {
       aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
       aria-label="Search cards"
       className={cn(
-        'flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-full border border-border',
-        'bg-surface text-muted-foreground transition-colors duration-150 hover:text-foreground',
+        'flex h-11 w-11 shrink-0 items-center justify-center gap-2 rounded-full',
+        // Recessed, matching the field it opens now that `Input` is inset. A
+        // raised control that is shaped like a text field reads as a button
+        // pretending to be one.
+        'clay-inset text-muted-foreground transition-colors duration-150 hover:text-foreground',
         'sm:w-full sm:max-w-sm sm:justify-start sm:px-4',
       )}
     >
@@ -204,10 +232,10 @@ export function AppShell(): ReactElement {
               className={({ isActive }) =>
                 cn(
                   'flex h-11 items-center gap-1.5 rounded-full px-3 text-xs font-semibold',
-                  'transition-colors duration-150',
+                  'clay-pill transition-colors duration-150',
                   isActive
-                    ? 'bg-primary text-primary-foreground shadow-soft'
-                    : 'border border-border bg-surface text-muted-foreground hover:bg-surface-muted hover:text-foreground',
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-surface text-muted-foreground hover:bg-surface-muted hover:text-foreground',
                 )
               }
             >
@@ -261,7 +289,7 @@ export function AppShell(): ReactElement {
           key={location.pathname}
           initial={{ opacity: 0, y: 16, filter: 'blur(4px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: DUR.page, ease: EASE }}
         >
           <Outlet />
         </motion.div>
