@@ -4,6 +4,7 @@ import { cardLabel, type AnswerRange, type StudyCardSummary, type StudySet } fro
 import { Button, buttonClass } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { Stagger, StaggerItem } from '@/components/motion/Stagger'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChevronRightIcon, ImageIcon, PlusIcon } from '@/components/ui/icons'
@@ -206,10 +207,13 @@ function CardRow({
   onEdit: () => void
   onDelete: () => void
 }): ReactElement {
-  if (composer) return <li>{composer}</li>
+  if (composer) return <StaggerItem as="li">{composer}</StaggerItem>
 
   return (
-    <Card as="li" className="flex flex-col gap-3 p-5">
+    // A `div` inside the `StaggerItem`'s `li`, not the `li` itself — the list item
+    // is what the stagger and the reflow animate, and `Card` is not a motion
+    // component.
+    <Card className="flex flex-col gap-3 p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="min-w-0 font-medium">{cardLabel(card.paragraph)}</h3>
         <p className="shrink-0 text-sm tabular-nums text-muted-foreground">
@@ -688,31 +692,37 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
         </Card>
       ) : (
         <>
-          <ul className="space-y-3">
+          <Stagger as="ul" count={items.length} className="space-y-3">
             {items.map((card) => (
-              <CardRow
-                key={card.id}
-                card={card}
-                composer={
-                  composing?.kind === 'edit' && composing.inRow && composing.cardId === card.id ? (
-                    <CardComposer setId={setId} cardId={card.id} onClose={closeComposer} />
-                  ) : undefined
-                }
-                onEdit={() => {
-                  // Ends a running import. Only one composer may be mounted at
-                  // a time — see this file's header — and editing an existing
-                  // card is a deliberate move away from the queue. The paragraphs
-                  // left in it are re-readable from the image; a second textarea
-                  // sharing `card-paragraph` is not recoverable at all.
-                  setQueue(null)
-                  setComposing({ kind: 'edit', cardId: card.id, inRow: true })
-                }}
-                onDelete={() => {
-                  setDeleting(card)
-                }}
-              />
+              // `layout` so adding or removing a card slides its neighbours rather
+              // than snapping them. No `AnimatePresence`, per the note in SetsPage:
+              // an exit animation keeps a deleted card mounted while it plays.
+              <StaggerItem as="li" layout key={card.id}>
+                <CardRow
+                  card={card}
+                  composer={
+                    composing?.kind === 'edit' &&
+                    composing.inRow &&
+                    composing.cardId === card.id ? (
+                      <CardComposer setId={setId} cardId={card.id} onClose={closeComposer} />
+                    ) : undefined
+                  }
+                  onEdit={() => {
+                    // Ends a running import. Only one composer may be mounted at
+                    // a time — see this file's header — and editing an existing
+                    // card is a deliberate move away from the queue. The paragraphs
+                    // left in it are re-readable from the image; a second textarea
+                    // sharing `card-paragraph` is not recoverable at all.
+                    setQueue(null)
+                    setComposing({ kind: 'edit', cardId: card.id, inRow: true })
+                  }}
+                  onDelete={() => {
+                    setDeleting(card)
+                  }}
+                />
+              </StaggerItem>
             ))}
-          </ul>
+          </Stagger>
 
           {cards.hasNextPage && (
             <Button

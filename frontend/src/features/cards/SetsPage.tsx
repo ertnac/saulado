@@ -4,6 +4,7 @@ import { SET_COLORS, type SetColor, type StudySet } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { Stagger, StaggerItem } from '@/components/motion/Stagger'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { segmentClass } from '@/components/ui/segmented'
@@ -71,9 +72,14 @@ function SetCard({
 
   return (
     <Card
-      as="li"
+      /*
+        A `div` inside the `StaggerItem`'s `li` rather than being the `li` itself:
+        the list item has to be the element the stagger and the reflow animate, and
+        `Card` is not a motion component. `h-full` because the `li` is now the grid
+        item, so the card has to fill the track it used to define.
+      */
       interactive
-      className={cn('relative flex flex-col p-5 pb-2 border-l-4', setAccentClass(set.color))}
+      className={cn('relative flex h-full flex-col p-5 pb-2 border-l-4', setAccentClass(set.color))}
     >
       <div className="flex items-start justify-between gap-3">
         <h3 className="min-w-0 text-lg font-semibold leading-snug tracking-tight">
@@ -471,29 +477,38 @@ export function SetsPage(): ReactElement {
         </Card>
       ) : (
         <>
-          <ul className={GRID}>
+          <Stagger as="ul" count={filteredAndSortedItems.length} className={GRID}>
             {filteredAndSortedItems.map((set) => {
               const entry = counts.get(set.id)
               return (
-                <SetCard
-                  key={set.id}
-                  set={set}
-                  due={entry?.due ?? 0}
-                  newCards={entry?.newCards ?? 0}
-                  mastered={entry?.mastered ?? 0}
-                  onEdit={() => {
-                    setEditing(set)
-                  }}
-                  onArchive={() => {
-                    update.mutate({ id: set.id, body: { archived: set.archivedAt === null } })
-                  }}
-                  onDelete={() => {
-                    setDeleting(set)
-                  }}
-                />
+                /*
+                  `layout` so a filter or sort change slides the surviving cards to
+                  their new places instead of teleporting them. Deliberately no
+                  `AnimatePresence`: an exit animation keeps a removed card mounted
+                  while it plays, and a card is removed by deleting it — which
+                  several tests assert is immediate. Same call the spec makes for
+                  Dialog, for the same reason.
+                */
+                <StaggerItem as="li" layout key={set.id}>
+                  <SetCard
+                    set={set}
+                    due={entry?.due ?? 0}
+                    newCards={entry?.newCards ?? 0}
+                    mastered={entry?.mastered ?? 0}
+                    onEdit={() => {
+                      setEditing(set)
+                    }}
+                    onArchive={() => {
+                      update.mutate({ id: set.id, body: { archived: set.archivedAt === null } })
+                    }}
+                    onDelete={() => {
+                      setDeleting(set)
+                    }}
+                  />
+                </StaggerItem>
               )
             })}
-          </ul>
+          </Stagger>
 
           {sets.hasNextPage && (
             <Button

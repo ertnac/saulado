@@ -4,6 +4,8 @@ import type { DashboardResponse, RecentSet } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardFigure, CardLabel } from '@/components/ui/card'
+import { CountUp } from '@/components/motion/CountUp'
+import { Stagger, StaggerItem } from '@/components/motion/Stagger'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   BookOpenIcon,
@@ -204,7 +206,9 @@ function DuePanel({ due }: { due: number }): ReactElement {
       </div>
 
       <div className="my-3 flex items-baseline gap-2">
-        <CardFigure>{due}</CardFigure>
+        <CardFigure>
+          <CountUp value={due} />
+        </CardFigure>
         <span className="text-sm text-muted-foreground">
           {due === 1 ? 'card ready for review' : 'cards ready for review'}
         </span>
@@ -237,7 +241,9 @@ function ReadyToLearn({ newCards }: { newCards: number }): ReactElement {
       </div>
 
       <div className="my-3 flex items-baseline gap-2">
-        <CardFigure>{newCards}</CardFigure>
+        <CardFigure>
+          <CountUp value={newCards} />
+        </CardFigure>
         <span className="text-sm text-muted-foreground">
           {newCards === 1 ? 'card waiting to be learned' : 'cards waiting to be learned'}
         </span>
@@ -369,7 +375,7 @@ function RecentSetRow({ set }: { set: RecentSet }): ReactElement {
   }
 
   return (
-    <li>
+    <StaggerItem as="li">
       <Link
         to={`/sets/${set.id}`}
         className="flex min-h-[48px] items-center justify-between gap-3 rounded-xl border border-border bg-surface px-5 py-4 transition-all hover:border-primary/40 hover:shadow-sm"
@@ -387,7 +393,7 @@ function RecentSetRow({ set }: { set: RecentSet }): ReactElement {
           <ChevronRightIcon className="text-muted-foreground h-4 w-4" />
         </div>
       </Link>
-    </li>
+    </StaggerItem>
   )
 }
 
@@ -407,11 +413,11 @@ function RecentSets({ sets, onCreate }: { sets: RecentSet[]; onCreate: () => voi
         </Button>
       </div>
 
-      <ul className="space-y-2">
+      <Stagger as="ul" count={sets.length} className="space-y-2">
         {sets.map((set) => (
           <RecentSetRow key={set.id} set={set} />
         ))}
-      </ul>
+      </Stagger>
 
       <Link
         to="/sets"
