@@ -56,7 +56,6 @@ export async function importSetsAndCards(
         await api.createCard(destinationSetId, {
           paragraph: c.paragraph,
           answers: c.answers,
-          tags: c.tags,
         })
         importedCards++
       } catch (err) {
