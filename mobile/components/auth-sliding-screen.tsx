@@ -120,7 +120,9 @@ export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenPro
         await googleLogin(userInfo.data.idToken)
         router.replace(from !== undefined && from !== '' ? { pathname: from } : '/')
       } else {
-        throw new Error('No ID token received from Google')
+        throw new Error(
+          'Google Sign-In is not configured for this debug build. Please log in with email and password.',
+        )
       }
     } catch (error) {
       if (isErrorWithCode(error)) {

@@ -64,9 +64,20 @@ export function useFormErrors(): {
      * all.
      */
     console.error('[useFormErrors] Non-ApiError caught:', error)
+    const rawMessage = error instanceof Error ? error.message : String(error)
+    const lower = rawMessage.toLowerCase()
+    const isNetwork =
+      lower.includes('fetch failed') ||
+      lower.includes('network') ||
+      lower.includes('canceled') ||
+      lower.includes('aborted') ||
+      lower.includes('timeout') ||
+      lower.includes('connection')
     setErrors({
       fields: {},
-      general: `Debug Error: ${error instanceof Error ? error.message : JSON.stringify(error)}`,
+      general: isNetwork
+        ? 'Could not reach the server. Please check your network connection and try again.'
+        : rawMessage,
     })
   }, [])
 

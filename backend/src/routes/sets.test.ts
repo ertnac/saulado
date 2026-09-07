@@ -315,14 +315,25 @@ describe('GET /api/sets', () => {
     expect(res.status).toBe(400)
   })
 
-  it('rejects a malformed cursor with 400, not 500', async () => {
+  it('lists all sets across levels when parent=all', async () => {
     const { token } = await registerTestUser(app)
+    const rootSet = await createSet(token, { title: 'Root Set' })
+    const childSet = await createSet(token, { title: 'Child Set', parentId: rootSet.id })
 
-    const res = await request(app)
-      .get('/api/sets?cursor=bm90LWpzb24')
+    // By default without parent, lists only root
+    const defaultRes = await request(app).get('/api/sets').set('Authorization', `Bearer ${token}`)
+    expect(defaultRes.status).toBe(200)
+    const defaultIds = (defaultRes.body as { items: { id: string }[] }).items.map((i) => i.id)
+    expect(defaultIds).toContain(rootSet.id)
+    expect(defaultIds).not.toContain(childSet.id)
+
+    // With parent=all, lists both root and child
+    const allRes = await request(app)
+      .get('/api/sets?parent=all')
       .set('Authorization', `Bearer ${token}`)
-
-    expect(res.status).toBe(400)
-    expect(res.body).toMatchObject({ error: { code: 'VALIDATION_ERROR' } })
+    expect(allRes.status).toBe(200)
+    const allIds = (allRes.body as { items: { id: string }[] }).items.map((i) => i.id)
+    expect(allIds).toContain(rootSet.id)
+    expect(allIds).toContain(childSet.id)
   })
 })

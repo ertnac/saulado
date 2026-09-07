@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils'
 import { setAccentClass, setColorClass } from './colors'
 import { cardCountLabel, childCountLabel } from './counts'
 import { SetDialog } from './SetDialog'
+import { MoveSetDialog } from './MoveSetDialog'
 import { UniversalImportDialog } from './transfer/UniversalImportDialog'
 import { SeedDecksDialog } from './transfer/SeedDecksDialog'
 import { QuickLearnDialog } from '@/features/study/QuickLearnDialog'
@@ -39,6 +40,7 @@ interface SetCardProps {
   newCards: number
   mastered: number
   onEdit: () => void
+  onMove: () => void
   onArchive: () => void
   onDelete: () => void
 }
@@ -49,6 +51,7 @@ function SetCard({
   newCards,
   mastered,
   onEdit,
+  onMove,
   onArchive,
   onDelete,
 }: SetCardProps): ReactElement {
@@ -137,6 +140,9 @@ function SetCard({
         <Button variant="ghost" size="sm" className="h-11 px-2.5" onClick={onEdit}>
           Edit
         </Button>
+        <Button variant="ghost" size="sm" className="h-11 px-2.5" onClick={onMove}>
+          Move
+        </Button>
         <Button
           variant="ghost"
           size="sm"
@@ -186,6 +192,7 @@ export function SetsPage(): ReactElement {
   const [quickLearnOpen, setQuickLearnOpen] = useState(false)
   const [quickLearnSetId, setQuickLearnSetId] = useState<string | null>(null)
   const [editing, setEditing] = useState<StudySet | null>(null)
+  const [movingSet, setMovingSet] = useState<StudySet | null>(null)
   const [deleting, setDeleting] = useState<StudySet | null>(null)
 
   const sets = useSets({ archived })
@@ -498,6 +505,9 @@ export function SetsPage(): ReactElement {
                     onEdit={() => {
                       setEditing(set)
                     }}
+                    onMove={() => {
+                      setMovingSet(set)
+                    }}
                     onArchive={() => {
                       update.mutate({ id: set.id, body: { archived: set.archivedAt === null } })
                     }}
@@ -593,6 +603,8 @@ export function SetsPage(): ReactElement {
         }}
         initialSetId={quickLearnSetId}
       />
+
+      <MoveSetDialog open={movingSet !== null} onClose={() => setMovingSet(null)} set={movingSet} />
     </div>
   )
 }

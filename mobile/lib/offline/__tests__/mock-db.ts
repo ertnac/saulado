@@ -186,17 +186,61 @@ export class InMemorySQLiteDatabase {
       return { changes: 1 }
     }
 
-    if (s.startsWith('UPDATE study_cards') && s.includes('SET paragraph = ?')) {
-      const [paragraph, answers, tags, sync_status, updated_at, _userId, cardId] = params
-      const card = this.cards.get(cardId)
-      if (card) {
-        card.paragraph = paragraph
-        card.answers = typeof answers === 'string' ? answers : JSON.stringify(answers ?? [])
-        card.tags = typeof tags === 'string' ? tags : JSON.stringify(tags ?? [])
-        card.sync_status = sync_status
-        card.updated_at = updated_at
+    if (
+      s.startsWith('UPDATE study_sets') &&
+      s.includes("SET sync_status = 'synced', parent_id = ?")
+    ) {
+      const [parentId, updatedAt, lastSyncedAt, setId] = params
+      const set = this.sets.get(setId)
+      if (set) {
+        set.sync_status = 'synced'
+        set.parent_id = parentId
+        set.updated_at = updatedAt
+        set.last_synced_at = lastSyncedAt
       }
       return { changes: 1 }
+    }
+
+    if (
+      s.startsWith('UPDATE study_cards') &&
+      s.includes("SET sync_status = 'synced', set_id = ?")
+    ) {
+      const [newSetId, updatedAt, lastSyncedAt, cardId] = params
+      const card = this.cards.get(cardId)
+      if (card) {
+        card.sync_status = 'synced'
+        card.set_id = newSetId
+        card.updated_at = updatedAt
+        card.last_synced_at = lastSyncedAt
+      }
+      return { changes: 1 }
+    }
+
+    if (s.startsWith('UPDATE study_cards') && s.includes('SET paragraph = ?')) {
+      if (s.includes('set_id = ?')) {
+        const [paragraph, answers, tags, set_id, sync_status, updated_at, _userId, cardId] = params
+        const card = this.cards.get(cardId)
+        if (card) {
+          card.paragraph = paragraph
+          card.answers = typeof answers === 'string' ? answers : JSON.stringify(answers ?? [])
+          card.tags = typeof tags === 'string' ? tags : JSON.stringify(tags ?? [])
+          card.set_id = set_id
+          card.sync_status = sync_status
+          card.updated_at = updated_at
+        }
+        return { changes: 1 }
+      } else {
+        const [paragraph, answers, tags, sync_status, updated_at, _userId, cardId] = params
+        const card = this.cards.get(cardId)
+        if (card) {
+          card.paragraph = paragraph
+          card.answers = typeof answers === 'string' ? answers : JSON.stringify(answers ?? [])
+          card.tags = typeof tags === 'string' ? tags : JSON.stringify(tags ?? [])
+          card.sync_status = sync_status
+          card.updated_at = updated_at
+        }
+        return { changes: 1 }
+      }
     }
 
     if (s.startsWith('UPDATE study_cards') && s.includes('SET id = ?, set_id = ?')) {
@@ -253,19 +297,7 @@ export class InMemorySQLiteDatabase {
       return { changes: 1 }
     }
 
-    if (
-      s.startsWith('DELETE FROM study_cards WHERE user_id = ? AND id = ?') ||
-      s.startsWith('DELETE FROM study_cards WHERE id = ?')
-    ) {
-      const cardId = params[params.length - 1]
-      this.cards.delete(cardId)
-      return { changes: 1 }
-    }
-
-    if (
-      s.startsWith('DELETE FROM study_cards WHERE user_id = ? AND set_id = ?') ||
-      s.startsWith('DELETE FROM study_cards WHERE set_id = ?')
-    ) {
+    if (s.startsWith('DELETE FROM study_cards') && s.includes('set_id = ?')) {
       const setId = params[params.length - 1]
       for (const [id, c] of this.cards.entries()) {
         if (c.set_id === setId) this.cards.delete(id)
@@ -273,10 +305,13 @@ export class InMemorySQLiteDatabase {
       return { changes: 1 }
     }
 
-    if (
-      s.startsWith('DELETE FROM study_sets WHERE user_id = ? AND id = ?') ||
-      s.startsWith('DELETE FROM study_sets WHERE id = ?')
-    ) {
+    if (s.startsWith('DELETE FROM study_cards') && s.includes('id = ?')) {
+      const cardId = params[params.length - 1]
+      this.cards.delete(cardId)
+      return { changes: 1 }
+    }
+
+    if (s.startsWith('DELETE FROM study_sets') && s.includes('id = ?')) {
       const setId = params[params.length - 1]
       this.sets.delete(setId)
       return { changes: 1 }
@@ -287,9 +322,14 @@ export class InMemorySQLiteDatabase {
 
   async getFirstAsync<T>(sql: string, params: any[] = []): Promise<T | null> {
     if (sql.includes('FROM study_sets')) {
-      const [userId, setId] = params
+      const setId = params[params.length - 1]
+      const userId = params.length > 1 ? params[0] : 'local-user'
       const set = this.sets.get(setId)
-      if (set && set.user_id === userId && set.is_deleted === 0) {
+      if (
+        set &&
+        (set.user_id === userId || set.user_id === 'local-user' || userId === 'local-user') &&
+        set.is_deleted === 0
+      ) {
         if (
           sql.includes('is_downloaded = 1') &&
           set.is_downloaded !== 1 &&
@@ -304,9 +344,14 @@ export class InMemorySQLiteDatabase {
     }
 
     if (sql.includes('FROM study_cards')) {
-      const [userId, cardId] = params
+      const cardId = params[params.length - 1]
+      const userId = params.length > 1 ? params[0] : 'local-user'
       const card = this.cards.get(cardId)
-      if (card && card.user_id === userId && card.is_deleted === 0) {
+      if (
+        card &&
+        (card.user_id === userId || card.user_id === 'local-user' || userId === 'local-user') &&
+        card.is_deleted === 0
+      ) {
         return { ...card } as any
       }
       return null
@@ -317,13 +362,17 @@ export class InMemorySQLiteDatabase {
 
   async getAllAsync<T>(sql: string, params: any[] = []): Promise<T[]> {
     if (sql.includes('FROM study_sets')) {
-      const userId = params[0]
-      const parentId = params.length > 1 ? params[1] : undefined
+      const hasUserParam = sql.includes('user_id = ?')
+      const userId = hasUserParam ? params[0] : 'local-user'
+      const parentId =
+        params.length > (hasUserParam ? 1 : 0) ? params[params.length - 1] : undefined
       const isFilteredByDownload = sql.includes('is_downloaded = 1')
 
       const results: SQLiteStudySet[] = []
       for (const set of this.sets.values()) {
-        if (set.user_id !== userId || set.is_deleted !== 0) continue
+        if (set.user_id !== userId && set.user_id !== 'local-user' && userId !== 'local-user')
+          continue
+        if (set.is_deleted !== 0) continue
         if (
           isFilteredByDownload &&
           set.is_downloaded !== 1 &&
@@ -339,10 +388,15 @@ export class InMemorySQLiteDatabase {
     }
 
     if (sql.includes('FROM study_cards')) {
-      const [userId, setId] = params
+      const setId = params[params.length - 1]
+      const userId = params.length > 1 ? params[0] : 'local-user'
       const results: SQLiteStudyCard[] = []
       for (const card of this.cards.values()) {
-        if (card.user_id === userId && card.set_id === setId && card.is_deleted === 0) {
+        if (
+          (card.user_id === userId || card.user_id === 'local-user' || userId === 'local-user') &&
+          card.set_id === setId &&
+          card.is_deleted === 0
+        ) {
           results.push({ ...card })
         }
       }

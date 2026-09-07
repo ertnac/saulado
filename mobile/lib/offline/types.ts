@@ -112,6 +112,7 @@ export interface OfflineUpdateCardMutation {
   type: 'update_card'
   cardId: string
   setId: string
+  studySetId?: string
   paragraph?: string
   answers?: AnswerInput[]
   tags?: string[]
@@ -175,6 +176,7 @@ export interface OfflineSetIndexEntry {
   syncStatus?: SyncStatus
   updatedAt: string
   metadata?: StudySet
+  isDownloaded?: boolean
 }
 
 export interface OfflineSetIndex {

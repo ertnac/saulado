@@ -89,10 +89,8 @@ setsRouter.get(
     const rows = await prisma.studySet.findMany({
       where: {
         userId,
-        // One level of the tree per request. `parent` is already normalised to
-        // null-for-roots by the schema, so this is a plain equality term and
-        // pagination below is untouched by it.
-        parentId: parent,
+        // One level of the tree per request, or all levels when parent is 'all'.
+        ...(parent === 'all' ? {} : { parentId: parent }),
         // `archived=true` asks for the archive, anything else means active only.
         // A null check rather than a boolean column: see the schema comment on
         // why `archivedAt` carries a timestamp.

@@ -219,9 +219,13 @@ export const listSetsQuerySchema = listQuerySchema.extend({
    * and adding it later is easier than removing it.
    */
   parent: z
-    .union([z.literal('root'), z.string().uuid('Not a valid set id.')])
+    .union([z.literal('root'), z.literal('all'), z.string().uuid('Not a valid set id.')])
     .optional()
-    .transform((value) => (value === undefined || value === 'root' ? null : value)),
+    .transform((value) => {
+      if (value === 'all') return 'all'
+      if (value === undefined || value === 'root') return null
+      return value
+    }),
 })
 
 export const listCardsQuerySchema = listQuerySchema.extend({

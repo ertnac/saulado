@@ -193,6 +193,7 @@ function mergeCreateCardWithUpdate(
 ): OfflineCreateCardMutation {
   return {
     ...base,
+    setId: update.studySetId ?? base.setId,
     paragraph: update.paragraph ?? base.paragraph,
     answers: update.answers ?? base.answers,
     tags: update.tags !== undefined ? update.tags : base.tags,
@@ -205,6 +206,7 @@ function mergeUpdateCardWithUpdate(
 ): OfflineUpdateCardMutation {
   return {
     ...base,
+    studySetId: update.studySetId !== undefined ? update.studySetId : base.studySetId,
     paragraph: update.paragraph ?? base.paragraph,
     answers: update.answers ?? base.answers,
     tags: update.tags !== undefined ? update.tags : base.tags,

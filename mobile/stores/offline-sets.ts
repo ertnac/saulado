@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { OfflineSetIndexEntry } from '../lib/offline/types'
 import { getOfflineSetIndex, onOfflineIndexUpdated } from '../lib/offline/sets'
+import { onAuthLogout, useAuthStore } from './auth'
 
 export interface OfflineSetsState {
   sets: Record<string, OfflineSetIndexEntry>
@@ -36,4 +37,21 @@ export const useOfflineSetsStore = create<OfflineSetsState>((set) => ({
 // Automatically reload store when storage index changes
 onOfflineIndexUpdated(() => {
   void useOfflineSetsStore.getState().load()
+})
+
+// Reset on logout
+onAuthLogout(() => {
+  useOfflineSetsStore.getState().reset()
+})
+
+// Synchronize with auth state changes
+useAuthStore.subscribe((state, prevState) => {
+  if (state.status === 'anonymous' && prevState.status !== 'anonymous') {
+    useOfflineSetsStore.getState().reset()
+  } else if (
+    (state.status === 'authenticated' || state.status === 'offline-authenticated') &&
+    prevState.status !== state.status
+  ) {
+    void useOfflineSetsStore.getState().load()
+  }
 })

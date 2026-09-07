@@ -3,8 +3,16 @@ import { create } from 'zustand'
 import { onSessionChange } from '../services/api'
 import * as authApi from '../services/auth'
 import { queryClient, asyncStoragePersister } from '../lib/query-client'
-import { useOfflineSetsStore } from './offline-sets'
-import { syncEngine } from '../lib/offline/sync'
+
+type AuthEventListener = () => void
+const logoutListeners = new Set<AuthEventListener>()
+
+export function onAuthLogout(listener: AuthEventListener): () => void {
+  logoutListeners.add(listener)
+  return () => {
+    logoutListeners.delete(listener)
+  }
+}
 
 /**
  * Auth state, ported from `frontend/src/stores/auth.ts` — unchanged, and that is
@@ -51,8 +59,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   applySession: (session, isOffline = false) => {
     if (!session) {
       set({ status: 'anonymous', user: null, settings: null })
-      const offlineSets = useOfflineSetsStore.getState()
-      if (offlineSets.reset) offlineSets.reset()
       return
     }
     set({
@@ -60,7 +66,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user: session.user,
       settings: session.settings,
     })
-    void useOfflineSetsStore.getState().load()
   },
 
   login: async (email, password) => {
@@ -76,8 +81,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
-    // 1. Explicitly stop background sync
-    syncEngine.stop()
+    // 1. Notify listeners to stop background sync and clear session-tied stores
+    logoutListeners.forEach((fn) => {
+      try {
+        fn()
+      } catch (err) {
+        console.warn('Error in auth logout listener:', err)
+      }
+    })
 
     // 2. Revoke session on backend and clear keys
     await authApi.logout()
@@ -86,11 +97,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     queryClient.clear()
     await asyncStoragePersister.removeClient()
 
-    // 4. Reset in-memory offline sets state
-    const offlineSets = useOfflineSetsStore.getState()
-    if (offlineSets.reset) offlineSets.reset()
-
-    // 5. Finally, enter anonymous state
+    // 4. Finally, enter anonymous state
     get().applySession(null)
   },
 

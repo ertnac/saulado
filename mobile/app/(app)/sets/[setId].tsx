@@ -8,7 +8,6 @@ import {
   Text,
   TextInput,
   View,
-  RefreshControl,
   Modal,
   Pressable,
   TouchableOpacity,
@@ -26,6 +25,7 @@ import {
   ArchiveIcon,
   ChevronLeftIcon,
   EditIcon,
+  FolderInputIcon,
   MoreVerticalIcon,
   ShareIcon,
   TrashIcon,
@@ -33,6 +33,8 @@ import {
   CloudOffIcon,
   CloudIcon,
 } from '../../../components/icons'
+import { MoveCardModal } from '../../../components/move-card-modal'
+import { MoveSetModal } from '../../../components/move-set-modal'
 import { SetList } from '../../../components/set-list'
 import { useOfflineSetsStore } from '../../../stores/offline-sets'
 import { downloadSet, removeOfflineSet } from '../../../lib/offline/sets'
@@ -56,13 +58,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 function CardRow({
   card,
   onEdit,
+  onMove,
   onDelete,
 }: {
   card: StudyCardSummary
   onEdit: () => void
+  onMove: () => void
   onDelete: () => void
 }): ReactElement {
   const warning = useTokenColor('--warning')
+  const muted = useTokenColor('--muted-foreground')
   const blanks = `${String(card.answerCount)} ${card.answerCount === 1 ? 'blank' : 'blanks'}`
   const isUnsynced = card.id.startsWith('temp-card-')
 
@@ -88,15 +93,27 @@ function CardRow({
         </View>
       </Pressable>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Delete card: ${cardLabel(card.paragraph)}`}
-        hitSlop={8}
-        onPress={onDelete}
-        className="rounded-full p-2 active:bg-warning/10"
-      >
-        <TrashIcon color={warning} size={18} />
-      </Pressable>
+      <View className="flex-row items-center gap-1">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Move card: ${cardLabel(card.paragraph)}`}
+          hitSlop={8}
+          onPress={onMove}
+          className="rounded-full p-2 active:bg-surface-muted"
+        >
+          <FolderInputIcon color={muted} size={18} />
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Delete card: ${cardLabel(card.paragraph)}`}
+          hitSlop={8}
+          onPress={onDelete}
+          className="rounded-full p-2 active:bg-warning/10"
+        >
+          <TrashIcon color={warning} size={18} />
+        </Pressable>
+      </View>
     </View>
   )
 }
@@ -110,6 +127,8 @@ export default function SetDetailScreen(): ReactElement {
   const [menuVisible, setMenuVisible] = useState(false)
   const [renameVisible, setRenameVisible] = useState(false)
   const [newTitle, setNewTitle] = useState('')
+  const [movingCard, setMovingCard] = useState<StudyCardSummary | null>(null)
+  const [moveSetVisible, setMoveSetVisible] = useState(false)
 
   const warning = useTokenColor('--warning')
   const foreground = useTokenColor('--foreground')
@@ -134,7 +153,7 @@ export default function SetDetailScreen(): ReactElement {
   }, [setId, router])
 
   const offlineEntry = useOfflineSetsStore((state) => (setId ? state.sets[setId] : undefined))
-  const isAvailableOffline = offlineEntry?.status === 'available'
+  const isAvailableOffline = Boolean(offlineEntry?.isDownloaded)
   const isDownloading = offlineEntry?.status === 'downloading'
   const isUnsyncedSet =
     (setId?.startsWith('temp-set-') ?? false) ||
@@ -256,12 +275,6 @@ export default function SetDetailScreen(): ReactElement {
 
   const [composerSession, setComposerSession] = useState(0)
 
-  const handlePullToCreate = (): void => {
-    setEditing(null)
-    setComposerSession((s: number) => s + 1)
-    setComposerOpen(true)
-  }
-
   const handleOpenCreate = (): void => {
     setEditing(null)
     setComposerSession((s: number) => s + 1)
@@ -287,7 +300,8 @@ export default function SetDetailScreen(): ReactElement {
     )
   }
 
-  const isOfflineUnavailable = isOffline && !isAvailableOffline && !set.data?.set
+  const currentSet = set.data?.set ?? offlineEntry?.metadata
+  const isOfflineUnavailable = isOffline && !currentSet
 
   if (isOfflineUnavailable) {
     return (
@@ -313,8 +327,6 @@ export default function SetDetailScreen(): ReactElement {
     )
   }
 
-  const currentSet = set.data?.set ?? offlineEntry?.metadata
-
   return (
     <View className="flex-1 bg-background">
       <ScrollView
@@ -323,15 +335,6 @@ export default function SetDetailScreen(): ReactElement {
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 96, 128) }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        refreshControl={
-          <RefreshControl
-            refreshing={false}
-            onRefresh={handlePullToCreate}
-            title="Pull down to create card"
-            tintColor={warning}
-            titleColor={warning}
-          />
-        }
       >
         <View className="gap-3">
           {parent.data !== undefined && (
@@ -351,7 +354,10 @@ export default function SetDetailScreen(): ReactElement {
               <Text className="text-3xl font-extrabold tracking-tight text-foreground">
                 {title ?? (set.isError ? 'Set unavailable' : '…')}
               </Text>
-              {(isUnsyncedSet || isAvailableOffline || isDownloading) && (
+              {(isUnsyncedSet ||
+                isAvailableOffline ||
+                isDownloading ||
+                (isOffline && !isAvailableOffline)) && (
                 <View className="flex-row items-center mt-1">
                   {isUnsyncedSet ? (
                     <View className="flex-row items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/15 px-2.5 py-0.5 self-start">
@@ -363,12 +369,19 @@ export default function SetDetailScreen(): ReactElement {
                       <CloudIcon color={primary} size={12} />
                       <Text className="text-xs font-semibold text-primary">Available Offline</Text>
                     </View>
-                  ) : (
+                  ) : isDownloading ? (
                     <View className="flex-row items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 self-start">
                       <ActivityIndicator size={12} color={warning} />
                       <Text className="text-xs font-semibold text-warning">Downloading...</Text>
                     </View>
-                  )}
+                  ) : isOffline ? (
+                    <View className="flex-row items-center gap-1 rounded-full bg-surface-muted border border-border px-2.5 py-0.5 self-start">
+                      <CloudIcon color={muted} size={12} />
+                      <Text className="text-xs font-medium text-muted-foreground">
+                        Cached (Not Downloaded)
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               )}
             </View>
@@ -455,7 +468,7 @@ export default function SetDetailScreen(): ReactElement {
           ) : items.length === 0 ? (
             <View className="gap-3">
               <Text className="text-sm text-muted-foreground">
-                No cards yet. Pull down the screen or tap "+ Card" to create your first flashcard!
+                No cards yet. Tap "+ Card" to create your first flashcard!
               </Text>
               <Button
                 label="Read a page with the camera"
@@ -474,6 +487,9 @@ export default function SetDetailScreen(): ReactElement {
                   card={card}
                   onEdit={() => {
                     handleEditCard(card.id)
+                  }}
+                  onMove={() => {
+                    setMovingCard(card)
                   }}
                   onDelete={() => {
                     confirmDelete(card)
@@ -513,9 +529,10 @@ export default function SetDetailScreen(): ReactElement {
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          className="flex-1 bg-background pt-4"
+          style={{ paddingTop: Math.max(12, insets.top) }}
+          className="flex-1 bg-background"
         >
-          <View className="flex-row items-center justify-between border-b border-border px-4 pb-4">
+          <View className="flex-row items-center justify-between border-b border-border px-4 pb-3">
             <Text className="text-lg font-bold text-foreground">
               {editing ? 'Edit Card' : 'Create Cards'}
             </Text>
@@ -523,14 +540,12 @@ export default function SetDetailScreen(): ReactElement {
               <Text className="font-medium text-primary">{editing ? 'Cancel' : 'Done'}</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerClassName="p-4 pb-20" keyboardShouldPersistTaps="always">
-            <CardComposer
-              key={`${editing ?? 'new'}-${String(composerSession)}`}
-              setId={setId}
-              cardId={editing ?? undefined}
-              onClose={handleCloseComposer}
-            />
-          </ScrollView>
+          <CardComposer
+            key={`${editing ?? 'new'}-${String(composerSession)}`}
+            setId={setId}
+            cardId={editing ?? undefined}
+            onClose={handleCloseComposer}
+          />
         </KeyboardAvoidingView>
       </Modal>
 
@@ -597,7 +612,21 @@ export default function SetDetailScreen(): ReactElement {
 
             <View className="h-px bg-border/40" />
 
-            {/* Option 2: Share JSON */}
+            {/* Option 2: Move Set */}
+            <TouchableOpacity
+              onPress={() => {
+                setMenuVisible(false)
+                setMoveSetVisible(true)
+              }}
+              className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
+            >
+              <FolderInputIcon color={foreground} size={20} />
+              <Text className="text-base font-semibold text-foreground">Move Set</Text>
+            </TouchableOpacity>
+
+            <View className="h-px bg-border/40" />
+
+            {/* Option 3: Share JSON */}
             <TouchableOpacity
               onPress={handleShareSet}
               className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
@@ -676,6 +705,21 @@ export default function SetDetailScreen(): ReactElement {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Move Card Modal */}
+      <MoveCardModal
+        visible={movingCard !== null}
+        card={movingCard}
+        currentSetId={setId ?? ''}
+        onClose={() => setMovingCard(null)}
+      />
+
+      {/* Move Set Modal */}
+      <MoveSetModal
+        visible={moveSetVisible}
+        set={set.data?.set ?? null}
+        onClose={() => setMoveSetVisible(false)}
+      />
     </View>
   )
 }

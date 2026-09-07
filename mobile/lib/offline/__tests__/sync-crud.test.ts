@@ -63,6 +63,7 @@ vi.mock('../../../stores/auth', () => ({
     getState: vi.fn(() => ({ status: 'authenticated', user: { id: 'user-1' } })),
     subscribe: vi.fn(() => () => {}),
   },
+  onAuthLogout: vi.fn(),
 }))
 
 describe('SyncEngine CRUD & Temp ID Remapping Integration', () => {

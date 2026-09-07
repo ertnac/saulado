@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { downloadSet, getOfflineSet, getOfflineSetIndex, removeOfflineSet } from '../sets'
+import { mirrorSetToSQLite } from '../data-source'
 import * as api from '../../../services/cards'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAuthStore } from '../../../stores/auth'
@@ -36,6 +37,7 @@ vi.mock('../../../stores/auth', () => ({
   useAuthStore: {
     getState: vi.fn(),
   },
+  onAuthLogout: vi.fn(),
 }))
 
 describe('Offline Sets SQLite Engine', () => {
@@ -156,5 +158,25 @@ describe('Offline Sets SQLite Engine', () => {
 
     const set = await getOfflineSet('s1')
     expect(set).toBeNull()
+  })
+
+  it('includes non-downloaded mirrored sets in offline set index with isDownloaded false', async () => {
+    await mirrorSetToSQLite('test-user', {
+      id: 'mirrored-1',
+      title: 'Mirrored Set',
+      parentId: null,
+      color: 'amber',
+      archivedAt: null,
+      cardCount: 2,
+      subtreeCardCount: 2,
+      childCount: 0,
+      createdAt: '2026-09-01T00:00:00Z',
+      updatedAt: '2026-09-01T00:00:00Z',
+    })
+
+    const index = await getOfflineSetIndex()
+    expect(index.sets['mirrored-1']).toBeDefined()
+    expect(index.sets['mirrored-1']?.metadata?.title).toBe('Mirrored Set')
+    expect(index.sets['mirrored-1']?.isDownloaded).toBe(false)
   })
 })

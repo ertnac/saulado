@@ -187,16 +187,20 @@ async function toApiError(res: Response): Promise<ApiError> {
   return new ApiError(message, res.status, code, fields, retryAfter)
 }
 
+const DEFAULT_TIMEOUT_MS = 30000
+
 async function dispatch(path: string, options: RequestOptions): Promise<Response> {
   const { method = 'GET', body, authorized } = options
   let signal = options.signal
   let timeoutId: ReturnType<typeof setTimeout> | undefined
+  let isTimedOut = false
 
   if (!signal) {
     const controller = new AbortController()
     timeoutId = setTimeout(() => {
+      isTimedOut = true
       controller.abort()
-    }, 5000)
+    }, DEFAULT_TIMEOUT_MS)
     signal = controller.signal
   }
 
@@ -220,6 +224,15 @@ async function dispatch(path: string, options: RequestOptions): Promise<Response
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal,
     })
+  } catch (error) {
+    if (isTimedOut) {
+      throw new ApiError(
+        'Request timed out. The server took too long to respond. Please check your connection.',
+        408,
+        'INTERNAL_ERROR',
+      )
+    }
+    throw error
   } finally {
     if (timeoutId) clearTimeout(timeoutId)
   }

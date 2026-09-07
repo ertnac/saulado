@@ -1,16 +1,17 @@
-import { useState, type ReactElement } from 'react'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { Pressable, Text, TextInput, View } from 'react-native'
 import {
   ANSWERS_MAX_PER_CARD,
   codePointLength,
   codeUnitToCodePoint,
   PARAGRAPH_MAX_CODE_POINTS,
+  snapToWordBoundaries,
   type DraftAnswer,
 } from '@saulado/shared'
+import { compileEnumeration, parseEnumeration } from '../lib/enumeration'
 import type { CardDraftActions, CardDraftState } from '../hooks/useCardDraft'
 import { useTokenColor } from '../stores/theme'
 import { Button } from './button'
-import { ClozePreview } from './cloze-preview'
 import { HighlightSurface } from './highlight-surface'
 import { AlertIcon } from './icons'
 
@@ -26,10 +27,6 @@ import { AlertIcon } from './icons'
  * State-agnostic on purpose. It takes {@link useCardDraft}'s state and actions as
  * props rather than owning them, so the create and edit flows share one editor
  * and one state machine instead of two of each.
- *
- * What does not port: `Ctrl/Cmd+H`, Tab-through, and the `snap` prop. There is no
- * hardware keyboard to bind and no free selection to snap — the tap gesture is
- * already word-aligned, which is what `snap` existed to arrange.
  */
 
 export function HighlightEditor({
@@ -45,6 +42,7 @@ export function HighlightEditor({
     setDraftText,
     commitParagraph,
     addHighlight,
+    setHighlights,
     removeHighlight,
     dismissOrphans,
   } = draft
@@ -53,62 +51,211 @@ export function HighlightEditor({
   const length = codePointLength(draftText)
   const overLimit = length > PARAGRAPH_MAX_CODE_POINTS
 
-  const [activeSelection, setActiveSelection] = useState<{
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isTypingRef = useRef(false)
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const [isEnumerationMode, setIsEnumerationMode] = useState(false)
+  const [enumTitle, setEnumTitle] = useState('')
+  const [enumItems, setEnumItems] = useState<string[]>(['', '', ''])
+  const [selectionPopup, setSelectionPopup] = useState<{
     start: number
     end: number
     text: string
-    rawSelection: string
   } | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+      if (typingTimerRef.current) {
+        clearTimeout(typingTimerRef.current)
+      }
+    }
+  }, [])
+
+  const applySelectionAsBlank = (start: number, end: number): void => {
+    const raw = draftText.slice(start, end)
+    const trimmed = raw.trim()
+    if (trimmed.length === 0) return
+
+    const leadingSpaces = raw.length - raw.trimStart().length
+    const actualStart = start + leadingSpaces
+    const actualEnd = actualStart + trimmed.length
+
+    let startOffset = codeUnitToCodePoint(draftText, actualStart)
+    let endOffset = codeUnitToCodePoint(draftText, actualEnd)
+
+    // Snapping outward to word boundaries ensures hold/drag captures complete words
+    const snapped = snapToWordBoundaries(paragraph, startOffset, endOffset)
+    startOffset = snapped.startOffset
+    endOffset = snapped.endOffset
+
+    if (startOffset >= endOffset) return
+
+    // 1. Exact match with an existing blank: toggle off
+    const exactMatch = answers.find(
+      (a) => a.startOffset === startOffset && a.endOffset === endOffset,
+    )
+    if (exactMatch) {
+      removeHighlight(exactMatch.ordinal)
+      return
+    }
+
+    // 2. Double-tap on a single word inside an existing multi-word blank: toggle off that blank
+    const isSingleWord = !/\s/.test(trimmed)
+    if (isSingleWord) {
+      const enclosingMatch = answers.find(
+        (a) => a.startOffset <= startOffset && a.endOffset >= endOffset,
+      )
+      if (enclosingMatch) {
+        removeHighlight(enclosingMatch.ordinal)
+        return
+      }
+    }
+
+    // 3. Otherwise add highlight (single word if double-tapped, multi-word if dragged)
+    addHighlight({ startOffset, endOffset })
+  }
 
   const handleSelectionChange = (e: {
     nativeEvent: { selection: { start: number; end: number } }
   }): void => {
-    const { start, end } = e.nativeEvent.selection
-    if (start !== end) {
-      const sStart = Math.min(start, end)
-      const sEnd = Math.max(start, end)
-      const raw = draftText.slice(sStart, sEnd)
-      const trimmed = raw.trim()
-      if (trimmed.length > 0) {
-        setActiveSelection({
-          start: sStart,
-          end: sEnd,
-          text: trimmed,
-          rawSelection: raw,
-        })
-      }
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
     }
+
+    if (isTypingRef.current) return
+
+    const { start, end } = e.nativeEvent.selection
+    if (start === end) {
+      setSelectionPopup(null)
+      return
+    }
+
+    const sStart = Math.min(start, end)
+    const sEnd = Math.max(start, end)
+    const raw = draftText.slice(sStart, sEnd).trim()
+    if (raw.length > 0) {
+      setSelectionPopup({ start: sStart, end: sEnd, text: raw })
+    }
+
+    // Debounce to allow user to hold and drag selection handles across multiple words
+    debounceTimerRef.current = setTimeout(() => {
+      applySelectionAsBlank(sStart, sEnd)
+    }, 350)
   }
 
   const handleTextChange = (text: string): void => {
+    isTypingRef.current = true
+    setSelectionPopup(null)
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
+    }
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current)
+    }
+    typingTimerRef.current = setTimeout(() => {
+      isTypingRef.current = false
+    }, 250)
+
     setDraftText(text)
-    if (activeSelection !== null && !text.includes(activeSelection.text)) {
-      setActiveSelection(null)
+  }
+
+  const handleToggleEnumerationMode = (): void => {
+    if (!isEnumerationMode) {
+      const parsed = parseEnumeration(draftText)
+      const title = parsed.title
+      const items = parsed.items.length > 0 ? parsed.items : ['', '', '']
+
+      setEnumTitle(title)
+      setEnumItems(items)
+      setIsEnumerationMode(true)
+
+      if (draftText.trim().length > 0) {
+        const compiled = compileEnumeration(title, items)
+        setDraftText(compiled.paragraph)
+        setHighlights(compiled.blanks, compiled.paragraph)
+      }
+    } else {
+      setIsEnumerationMode(false)
     }
   }
 
-  const handleMakeBlankFromSelection = (): void => {
-    if (activeSelection === null) return
+  const handleConvertSelectionToEnumeration = (): void => {
+    if (!selectionPopup) return
+    const textToConvert = selectionPopup.text
+    const parsed = parseEnumeration(textToConvert)
 
-    const { start, rawSelection, text } = activeSelection
-    const leadingSpaces = rawSelection.length - rawSelection.trimStart().length
-    const actualStart = start + leadingSpaces
-    const actualEnd = actualStart + text.length
+    const title = parsed.title
+    const items = parsed.items.length > 0 ? parsed.items : ['', '', '']
 
-    // Commit paragraph first so normalized text is up to date
-    commitParagraph()
+    setEnumTitle(title)
+    setEnumItems(items)
+    setIsEnumerationMode(true)
 
-    const startOffset = codeUnitToCodePoint(draftText, actualStart)
-    const endOffset = codeUnitToCodePoint(draftText, actualEnd)
+    const compiled = compileEnumeration(title, items)
+    setDraftText(compiled.paragraph)
+    setHighlights(compiled.blanks, compiled.paragraph)
 
-    addHighlight({ startOffset, endOffset })
-    setActiveSelection(null)
+    setSelectionPopup(null)
+  }
+
+  const handleEnumTitleChange = (newTitle: string): void => {
+    setEnumTitle(newTitle)
+    const compiled = compileEnumeration(newTitle, enumItems)
+    setDraftText(compiled.paragraph)
+    setHighlights(compiled.blanks, compiled.paragraph)
+  }
+
+  const handleEnumItemChange = (index: number, newText: string): void => {
+    const nextItems = [...enumItems]
+    nextItems[index] = newText
+    setEnumItems(nextItems)
+    const compiled = compileEnumeration(enumTitle, nextItems)
+    setDraftText(compiled.paragraph)
+    setHighlights(compiled.blanks, compiled.paragraph)
+  }
+
+  const handleAddEnumItem = (): void => {
+    const nextItems = [...enumItems, '']
+    setEnumItems(nextItems)
+  }
+
+  const handleRemoveEnumItem = (index: number): void => {
+    if (enumItems.length <= 1) return
+    const nextItems = enumItems.filter((_, i) => i !== index)
+    setEnumItems(nextItems)
+    const compiled = compileEnumeration(enumTitle, nextItems)
+    setDraftText(compiled.paragraph)
+    setHighlights(compiled.blanks, compiled.paragraph)
   }
 
   return (
     <View className="gap-4">
-      <View className="flex-row items-center justify-between gap-3">
-        <Text className="text-lg font-bold text-foreground">Card Content</Text>
+      <View className="flex-row flex-wrap items-center justify-between gap-2">
+        <View className="flex-row items-center gap-2">
+          <Text className="text-lg font-bold text-foreground">Card Content</Text>
+          <Pressable
+            onPress={handleToggleEnumerationMode}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle enumeration mode"
+            className={`flex-row items-center gap-1 rounded-full border px-3 py-1 active:opacity-80 ${
+              isEnumerationMode ? 'border-primary bg-primary' : 'border-primary/30 bg-primary/10'
+            }`}
+          >
+            <Text
+              className={`text-xs font-black ${
+                isEnumerationMode ? 'text-primary-foreground' : 'text-primary'
+              }`}
+            >
+              1. 2. 3. Enumeration
+            </Text>
+          </Pressable>
+        </View>
 
         <Text
           className={`text-xs ${overLimit ? 'font-medium text-warning' : 'text-muted-foreground'}`}
@@ -117,53 +264,124 @@ export function HighlightEditor({
         </Text>
       </View>
 
-      {/* Custom Context Menu Floating Bar */}
-      {activeSelection !== null && (
-        <View className="flex-row items-center justify-between rounded-2xl bg-foreground p-2 shadow-xl shadow-black/30">
+      {/* Floating Action Popup when selecting or dragging text */}
+      {!isEnumerationMode && selectionPopup !== null && (
+        <View className="flex-row items-center justify-between rounded-2xl border border-primary/40 bg-foreground p-2 shadow-xl shadow-black/30">
           <Pressable
-            onPress={handleMakeBlankFromSelection}
-            className="flex-row items-center gap-2 rounded-xl bg-primary px-4 py-2.5 active:opacity-90"
+            onPress={handleConvertSelectionToEnumeration}
+            accessibilityRole="button"
+            accessibilityLabel="Format selected text as enumeration"
+            className="flex-row items-center gap-2 rounded-xl bg-primary px-3.5 py-2 active:opacity-90"
           >
-            <Text className="text-sm font-black text-primary-foreground">✨ Make a Question</Text>
+            <Text className="text-sm">📋</Text>
+            <Text className="text-xs font-black text-primary-foreground">
+              Format as Enumeration
+            </Text>
           </Pressable>
           <View className="mx-2.5 flex-1 overflow-hidden">
             <Text numberOfLines={1} className="text-xs font-medium text-background/80">
-              "{activeSelection.text}"
+              "{selectionPopup.text}"
             </Text>
           </View>
           <Pressable
-            onPress={() => {
-              setActiveSelection(null)
-            }}
+            onPress={() => setSelectionPopup(null)}
             hitSlop={8}
-            className="h-8 w-8 items-center justify-center rounded-full bg-surface-muted/20 active:opacity-70"
+            className="h-7 w-7 items-center justify-center rounded-full bg-surface-muted/20 active:opacity-70"
           >
             <Text className="text-xs font-bold text-background">✕</Text>
           </Pressable>
         </View>
       )}
 
-      <View className="gap-2">
-        <TextInput
-          value={draftText}
-          onChangeText={handleTextChange}
-          onBlur={commitParagraph}
-          onSelectionChange={handleSelectionChange}
-          contextMenuHidden={true}
-          accessibilityLabel="Paragraph"
-          multiline
-          textAlignVertical="top"
-          placeholder="Type or paste your notes here..."
-          placeholderTextColor={placeholder}
-          style={{ fontSize: 17, lineHeight: 28 }}
-          className={`min-h-32 rounded-xl border bg-surface p-4 text-foreground ${
-            overLimit ? 'border-warning' : 'border-border'
-          }`}
-        />
-        <Text className="text-xs text-muted-foreground">
-          Select words above to click "✨ Make a Question", or tap words below to create blanks.
-        </Text>
-      </View>
+      {/* ── Editor Body: Structured Enumeration vs Freeform Paragraph ── */}
+      {isEnumerationMode ? (
+        <View className="gap-3 rounded-2xl border border-border bg-surface p-4">
+          <View className="flex-row items-center justify-between">
+            <Text className="text-xs font-bold uppercase tracking-wider text-primary">
+              Structured Enumeration
+            </Text>
+            <Pressable
+              onPress={() => setIsEnumerationMode(false)}
+              className="rounded-lg bg-surface-muted px-2.5 py-1 active:opacity-70"
+            >
+              <Text className="text-xs font-semibold text-foreground">Switch to Paragraph</Text>
+            </Pressable>
+          </View>
+
+          {/* Dedicated Title input — no movable "Title:" in text */}
+          <View className="gap-1">
+            <Text className="text-xs font-bold text-muted-foreground">Topic / Question Prompt</Text>
+            <TextInput
+              value={enumTitle}
+              onChangeText={handleEnumTitleChange}
+              placeholder="e.g. Three Primary Colors..."
+              placeholderTextColor={placeholder}
+              className="rounded-xl border border-border bg-surface-muted/30 px-3.5 py-2.5 text-base font-semibold text-foreground"
+            />
+          </View>
+
+          {/* List of items with fixed, unmovable numbering badges */}
+          <View className="gap-2 pt-1">
+            <Text className="text-xs font-bold text-muted-foreground">
+              Enumerated Notes (Auto-Blanked)
+            </Text>
+            {enumItems.map((item, index) => (
+              <View key={index} className="flex-row items-center gap-2">
+                <View className="h-9 w-9 items-center justify-center rounded-xl border border-primary/40 bg-primary/10">
+                  <Text className="text-xs font-black text-primary">{index + 1}.</Text>
+                </View>
+
+                <TextInput
+                  value={item}
+                  onChangeText={(text) => handleEnumItemChange(index, text)}
+                  placeholder={`Item ${String(index + 1)}...`}
+                  placeholderTextColor={placeholder}
+                  className="flex-1 rounded-xl border border-border bg-surface-muted/30 px-3.5 py-2 text-base text-foreground"
+                />
+
+                {enumItems.length > 1 && (
+                  <Pressable
+                    onPress={() => handleRemoveEnumItem(index)}
+                    hitSlop={8}
+                    className="h-8 w-8 items-center justify-center rounded-full bg-surface-muted/40 active:bg-warning/20"
+                  >
+                    <Text className="text-xs font-bold text-muted-foreground">✕</Text>
+                  </Pressable>
+                )}
+              </View>
+            ))}
+          </View>
+
+          {/* Add item button */}
+          <Pressable
+            onPress={handleAddEnumItem}
+            className="mt-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-dashed border-primary/40 bg-primary/5 py-2.5 active:bg-primary/10"
+          >
+            <Text className="text-xs font-black text-primary">+ Add Next Item</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View className="gap-2">
+          <TextInput
+            value={draftText}
+            onChangeText={handleTextChange}
+            onBlur={commitParagraph}
+            onSelectionChange={handleSelectionChange}
+            accessibilityLabel="Paragraph"
+            multiline
+            textAlignVertical="top"
+            placeholder="Type or paste your notes here..."
+            placeholderTextColor={placeholder}
+            style={{ fontSize: 17, lineHeight: 28 }}
+            className={`min-h-32 rounded-xl border bg-surface p-4 text-foreground ${
+              overLimit ? 'border-warning' : 'border-border'
+            }`}
+          />
+          <Text className="text-xs text-muted-foreground">
+            Double-tap or drag to blank words. Select text to pop up "Format as Enumeration".
+          </Text>
+        </View>
+      )}
 
       {/* Active Blanks Badges */}
       {answers.length > 0 && (
@@ -206,18 +424,6 @@ export function HighlightEditor({
       )}
 
       <OrphanedNotice orphaned={orphaned} onDismiss={dismissOrphans} />
-
-      <View className="gap-2">
-        <Text className="text-sm font-medium text-foreground">
-          Preview
-          <Text className="font-normal text-muted-foreground">
-            {answers.length === 0
-              ? '  no blanks yet'
-              : `  ${String(answers.length)} of ${String(ANSWERS_MAX_PER_CARD)} blanks`}
-          </Text>
-        </Text>
-        <ClozePreview paragraph={paragraph} answers={answers} />
-      </View>
     </View>
   )
 }

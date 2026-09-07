@@ -188,6 +188,103 @@ export function useSet(id: string | undefined) {
   })
 }
 
+export function useAllSets(options: { archived?: boolean } = {}) {
+  const archived = options.archived ?? false
+  const client = useQueryClient()
+
+  return useQuery({
+    queryKey: [...setKeys.all, 'all-sets', { archived }],
+    queryFn: async () => {
+      const setsMap = new Map<string, StudySet>()
+
+      // 1. Gather sets from React Query cache
+      try {
+        const cachedLists = client.getQueriesData<InfiniteData<SetsResponse>>({
+          queryKey: setKeys.lists(),
+        })
+        for (const [_key, data] of cachedLists) {
+          if (data?.pages) {
+            for (const page of data.pages) {
+              if (page?.items) {
+                for (const s of page.items) {
+                  if (s?.id) setsMap.set(s.id, s)
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        // Cache read fallback
+      }
+
+      // 2. Fetch from API
+      try {
+        const rootRes = await api.listSets({
+          limit: 50,
+          archived: archived ? true : undefined,
+        })
+        if (rootRes?.items) {
+          for (const s of rootRes.items) {
+            if (s?.id) setsMap.set(s.id, s)
+          }
+
+          const parentsWithKids = rootRes.items.filter((s) => s.childCount > 0)
+          if (parentsWithKids.length > 0) {
+            const childLists = await Promise.all(
+              parentsWithKids.map((p) =>
+                api
+                  .listSets({
+                    limit: 50,
+                    archived: archived ? true : undefined,
+                    parent: p.id,
+                  })
+                  .then((r) => r.items ?? [])
+                  .catch(() => [] as StudySet[]),
+              ),
+            )
+            const level2Sets: StudySet[] = []
+            for (const cl of childLists) {
+              for (const cs of cl) {
+                if (cs?.id) {
+                  setsMap.set(cs.id, cs)
+                  level2Sets.push(cs)
+                }
+              }
+            }
+
+            const level2Parents = level2Sets.filter((s) => s.childCount > 0)
+            if (level2Parents.length > 0) {
+              const grandChildLists = await Promise.all(
+                level2Parents.map((p) =>
+                  api
+                    .listSets({
+                      limit: 50,
+                      archived: archived ? true : undefined,
+                      parent: p.id,
+                    })
+                    .then((r) => r.items ?? [])
+                    .catch(() => [] as StudySet[]),
+                ),
+              )
+              for (const gcl of grandChildLists) {
+                for (const gcs of gcl) {
+                  if (gcs?.id) setsMap.set(gcs.id, gcs)
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Failed fetching sets for move:', err)
+      }
+
+      const all = Array.from(setsMap.values())
+      return all.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+    },
+    staleTime: 10_000,
+  })
+}
+
 // ── Set mutations ───────────────────────────────────────────────────────────
 
 /**

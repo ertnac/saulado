@@ -35,9 +35,11 @@ import {
   CloudOffIcon,
   DownloadIcon,
   EditIcon,
+  FolderInputIcon,
   ShareIcon,
   TrashIcon,
 } from './icons'
+import { MoveSetModal } from './move-set-modal'
 
 /**
  * A level of the set tree: the sets directly under `parent`, and one input to add
@@ -87,6 +89,7 @@ function SetRow({
 
   const [menuVisible, setMenuVisible] = useState(false)
   const [renameVisible, setRenameVisible] = useState(false)
+  const [moveVisible, setMoveVisible] = useState(false)
   const [newTitle, setNewTitle] = useState(set.title)
 
   const warning = useTokenColor('--warning')
@@ -159,7 +162,7 @@ function SetRow({
   }
 
   const offlineEntry = useOfflineSetsStore((state) => state.sets[set.id])
-  const isAvailableOffline = offlineEntry?.status === 'available'
+  const isAvailableOffline = Boolean(offlineEntry?.isDownloaded)
   const isDownloading = offlineEntry?.status === 'downloading'
   const isUnsynced =
     set.id.startsWith('temp-set-') ||
@@ -326,7 +329,21 @@ function SetRow({
 
             <View className="h-px bg-border/40" />
 
-            {/* Option 2: Share JSON */}
+            {/* Option 2: Move Set */}
+            <TouchableOpacity
+              onPress={() => {
+                setMenuVisible(false)
+                setMoveVisible(true)
+              }}
+              className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
+            >
+              <FolderInputIcon color={foreground} size={20} />
+              <Text className="text-base font-semibold text-foreground">Move Set</Text>
+            </TouchableOpacity>
+
+            <View className="h-px bg-border/40" />
+
+            {/* Option 3: Share JSON */}
             <TouchableOpacity
               onPress={handleShare}
               className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
@@ -405,6 +422,9 @@ function SetRow({
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Move Set Modal */}
+      <MoveSetModal visible={moveVisible} set={set} onClose={() => setMoveVisible(false)} />
     </>
   )
 }
@@ -447,7 +467,6 @@ export function SetList({
   const offlineSets = Object.values(offlineStore.sets)
     .filter(
       (entry) =>
-        entry.status === 'available' &&
         entry.metadata &&
         (parent === null ? !entry.metadata.parentId : entry.metadata.parentId === parent),
     )

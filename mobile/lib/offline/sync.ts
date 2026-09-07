@@ -2,7 +2,7 @@ import { onlineManager } from '@tanstack/react-query'
 import * as api from '../../services/cards'
 import { submitAnswer } from '../../services/study'
 import { queryClient } from '../query-client'
-import { useAuthStore } from '../../stores/auth'
+import { onAuthLogout, useAuthStore } from '../../stores/auth'
 import { useSyncStore } from '../../stores/sync'
 import { useOfflineSetsStore } from '../../stores/offline-sets'
 import { getDatabase } from './db'
@@ -70,6 +70,8 @@ export class SyncEngine {
         onlineManager.isOnline()
       ) {
         void this.triggerSync()
+      } else if (state.status === 'anonymous') {
+        this.stop()
       }
     })
 
@@ -302,7 +304,12 @@ export class SyncEngine {
       case 'update_set': {
         const m = mutation as OfflineUpdateSetMutation
         const targetSetId = resolveEntityId(m.setId)
-        const parentId = m.parentId ? resolveEntityId(m.parentId) : undefined
+        const parentId =
+          m.parentId === null
+            ? null
+            : m.parentId !== undefined
+              ? resolveEntityId(m.parentId)
+              : undefined
 
         const res = await api.updateSet(targetSetId, {
           title: m.title,
@@ -312,8 +319,8 @@ export class SyncEngine {
         })
 
         await db.runAsync(
-          `UPDATE study_sets SET sync_status = 'synced', updated_at = ?, last_synced_at = ? WHERE id = ?`,
-          [res.set.updatedAt ?? now, now, targetSetId],
+          `UPDATE study_sets SET sync_status = 'synced', parent_id = ?, updated_at = ?, last_synced_at = ? WHERE id = ?`,
+          [res.set.parentId, res.set.updatedAt ?? now, now, targetSetId],
         )
         break
       }
@@ -387,15 +394,17 @@ export class SyncEngine {
       case 'update_card': {
         const m = mutation as OfflineUpdateCardMutation
         const targetCardId = resolveEntityId(m.cardId)
+        const targetStudySetId = m.studySetId ? resolveEntityId(m.studySetId) : undefined
         const res = await api.updateCard(targetCardId, {
           paragraph: m.paragraph,
           answers: m.answers,
           tags: m.tags,
+          studySetId: targetStudySetId,
         })
 
         await db.runAsync(
-          `UPDATE study_cards SET sync_status = 'synced', updated_at = ?, last_synced_at = ? WHERE id = ?`,
-          [res.card.updatedAt ?? now, now, targetCardId],
+          `UPDATE study_cards SET sync_status = 'synced', set_id = ?, updated_at = ?, last_synced_at = ? WHERE id = ?`,
+          [res.card.studySetId, res.card.updatedAt ?? now, now, targetCardId],
         )
         break
       }
@@ -451,3 +460,7 @@ export class SyncEngine {
 }
 
 export const syncEngine = new SyncEngine()
+
+onAuthLogout(() => {
+  syncEngine.stop()
+})

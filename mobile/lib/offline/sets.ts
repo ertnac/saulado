@@ -2,7 +2,7 @@ import * as api from '../../services/cards'
 import { useAuthStore } from '../../stores/auth'
 import { loadAuthCache } from '../../services/auth-cache'
 import { getDatabase, migrateAsyncStoragePayloads } from './db'
-import { getCards, mapSQLiteRowToStudySet } from './data-source'
+import { buildUserFilter, getCards, mapSQLiteRowToStudySet } from './data-source'
 import type { OfflineSetIndex, OfflineSetPayload, SQLiteStudySet } from './types'
 
 export { onOfflineIndexUpdated, notifyOfflineIndexUpdated } from './events'
@@ -50,9 +50,10 @@ export async function getOfflineSetIndex(): Promise<OfflineSetIndex> {
   await migrateAsyncStoragePayloads(userId)
 
   const db = await getDatabase()
+  const { sql, params } = buildUserFilter(userId)
   const rows = await db.getAllAsync<SQLiteStudySet>(
-    `SELECT * FROM study_sets WHERE user_id = ? AND is_deleted = 0 AND (is_downloaded = 1 OR sync_status LIKE 'pending_%' OR id LIKE 'temp-set-%') ORDER BY updated_at DESC`,
-    [userId],
+    `SELECT * FROM study_sets WHERE ${sql} AND is_deleted = 0 ORDER BY updated_at DESC`,
+    params,
   )
   const result: OfflineSetIndex = { sets: {} }
 
@@ -64,6 +65,7 @@ export async function getOfflineSetIndex(): Promise<OfflineSetIndex> {
       syncStatus: set.sync_status,
       updatedAt: set.updated_at,
       metadata: studySet,
+      isDownloaded: set.is_downloaded === 1,
     }
   }
 
@@ -77,9 +79,10 @@ export async function getOfflineSet(setId: string): Promise<OfflineSetPayload | 
   await migrateAsyncStoragePayloads(userId)
 
   const db = await getDatabase()
+  const { sql, params } = buildUserFilter(userId)
   const row = await db.getFirstAsync<SQLiteStudySet>(
-    `SELECT * FROM study_sets WHERE user_id = ? AND id = ? AND is_deleted = 0 AND (is_downloaded = 1 OR sync_status LIKE 'pending_%' OR id LIKE 'temp-set-%')`,
-    [userId, setId],
+    `SELECT * FROM study_sets WHERE ${sql} AND id = ? AND is_deleted = 0 AND (is_downloaded = 1 OR sync_status LIKE 'pending_%' OR id LIKE 'temp-set-%')`,
+    [...params, setId],
   )
   if (!row) return null
 
@@ -172,6 +175,7 @@ export function downloadSet(setId: string): Promise<void> {
               id, set_id, user_id, paragraph, answers, tags, is_deleted, sync_status, created_at, updated_at, last_synced_at
             ) VALUES (?, ?, ?, ?, ?, ?, 0, 'synced', ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
+              set_id = excluded.set_id,
               paragraph = excluded.paragraph,
               answers = excluded.answers,
               tags = excluded.tags,
@@ -212,13 +216,17 @@ export async function removeOfflineSet(setId: string): Promise<void> {
   if (!userId || !setId) return
 
   const db = await getDatabase()
+  const { sql, params } = buildUserFilter(userId)
   await db.withTransactionAsync(async () => {
-    await db.runAsync(`DELETE FROM study_cards WHERE user_id = ? AND set_id = ?`, [userId, setId])
+    await db.runAsync(
+      `DELETE FROM study_cards WHERE ${sql} AND set_id = ? AND sync_status NOT LIKE 'pending_%'`,
+      [...params, setId],
+    )
     if (setId.startsWith('temp-set-')) {
-      await db.runAsync(`DELETE FROM study_sets WHERE user_id = ? AND id = ?`, [userId, setId])
+      await db.runAsync(`DELETE FROM study_sets WHERE ${sql} AND id = ?`, [...params, setId])
     } else {
-      await db.runAsync(`UPDATE study_sets SET is_downloaded = 0 WHERE user_id = ? AND id = ?`, [
-        userId,
+      await db.runAsync(`UPDATE study_sets SET is_downloaded = 0 WHERE ${sql} AND id = ?`, [
+        ...params,
         setId,
       ])
     }

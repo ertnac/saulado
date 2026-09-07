@@ -6,6 +6,7 @@ import {
   createAnswer,
   needsReanchoring,
   normalizeParagraph,
+  rangesOverlap,
   reanchorAnswers,
   type AnswerRange,
   type DraftAnswer,
@@ -64,6 +65,10 @@ export interface CardDraftActions {
   /** Discards the in-progress edit and returns to the committed paragraph. */
   revertDraftText: () => void
   addHighlight: (range: Pick<AnswerRange, 'startOffset' | 'endOffset'>) => void
+  setHighlights: (
+    ranges: Pick<AnswerRange, 'startOffset' | 'endOffset'>[],
+    targetParagraph?: string,
+  ) => void
   removeHighlight: (ordinal: number) => void
   setAltAnswers: (ordinal: number, alts: string[]) => void
   dismissOrphans: () => void
@@ -94,9 +99,26 @@ export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDra
 
   const [mode, setMode] = useState<EditorMode>(init.mode ?? 'compose')
   const [paragraph, setParagraph] = useState(initialParagraph)
-  const [draftText, setDraftText] = useState(initialParagraph)
+  const [draftText, setDraftTextState] = useState(initialParagraph)
   const [answers, setAnswers] = useState<EditorAnswer[]>(() => renumber(init.answers ?? []))
   const [orphaned, setOrphaned] = useState<DraftAnswer[]>([])
+
+  const setDraftText = useCallback(
+    (text: string) => {
+      setDraftTextState(text)
+      const next = normalizeParagraph(text)
+      setParagraph(next)
+
+      if (answers.length === 0) return
+
+      if (!needsReanchoring(paragraph, next, answers)) return
+
+      const { matched, orphaned: lost } = reanchorAnswers(paragraph, next, answers)
+      setAnswers(renumber(matched))
+      setOrphaned(lost)
+    },
+    [answers, paragraph],
+  )
 
   /**
    * Reads `answers` directly rather than through a functional updater: the
@@ -107,7 +129,7 @@ export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDra
     const next = normalizeParagraph(draftText)
 
     setParagraph(next)
-    setDraftText(next)
+    setDraftTextState(next)
 
     if (answers.length === 0) return
 
@@ -122,7 +144,7 @@ export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDra
   }, [answers, draftText, paragraph])
 
   const revertDraftText = useCallback(() => {
-    setDraftText(paragraph)
+    setDraftTextState(paragraph)
   }, [paragraph])
 
   /**
@@ -135,8 +157,6 @@ export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDra
    */
   const addHighlight = useCallback(
     (range: Pick<AnswerRange, 'startOffset' | 'endOffset'>) => {
-      if (answers.length >= ANSWERS_MAX_PER_CARD) return
-
       let answer: DraftAnswer
       try {
         answer = createAnswer(paragraph, range.startOffset, range.endOffset)
@@ -148,9 +168,32 @@ export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDra
         throw error
       }
 
-      setAnswers(renumber([...answers, answer]))
+      setAnswers((current) => {
+        const nonOverlapping = current.filter((existing) => !rangesOverlap(range, existing))
+        if (nonOverlapping.length >= ANSWERS_MAX_PER_CARD) return current
+        return renumber([...nonOverlapping, answer])
+      })
     },
-    [answers, paragraph],
+    [paragraph],
+  )
+
+  const setHighlights = useCallback(
+    (ranges: Pick<AnswerRange, 'startOffset' | 'endOffset'>[], targetParagraph?: string) => {
+      const textToValidate = targetParagraph ?? paragraph
+      const newAnswers: DraftAnswer[] = []
+      for (const range of ranges) {
+        if (newAnswers.length >= ANSWERS_MAX_PER_CARD) break
+        try {
+          const ans = createAnswer(textToValidate, range.startOffset, range.endOffset)
+          newAnswers.push(ans)
+        } catch (error) {
+          if (error instanceof ClozeError) continue
+          throw error
+        }
+      }
+      setAnswers(renumber(newAnswers))
+    },
+    [paragraph],
   )
 
   const removeHighlight = useCallback((ordinal: number) => {
@@ -193,6 +236,7 @@ export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDra
     commitParagraph,
     revertDraftText,
     addHighlight,
+    setHighlights,
     removeHighlight,
     setAltAnswers,
     dismissOrphans,

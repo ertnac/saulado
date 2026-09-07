@@ -44,6 +44,7 @@ vi.mock('../../../stores/auth', () => ({
     subscribe: vi.fn(),
     getState: vi.fn(() => ({ status: 'authenticated', user: { id: 'test-user' } })),
   },
+  onAuthLogout: vi.fn(),
 }))
 
 vi.mock('../../../stores/sync', () => {

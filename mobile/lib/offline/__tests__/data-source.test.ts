@@ -9,6 +9,7 @@ import {
   getCards,
   getSet,
   getSets,
+  mirrorCardToSQLite,
   updateCard,
   updateSet,
 } from '../data-source'
@@ -37,6 +38,7 @@ vi.mock('../../../stores/auth', () => ({
   useAuthStore: {
     getState: vi.fn(() => ({ user: { id: 'user-1' } })),
   },
+  onAuthLogout: vi.fn(),
 }))
 
 describe('Offline Data Source SQLite Engine', () => {
@@ -177,5 +179,134 @@ describe('Offline Data Source SQLite Engine', () => {
     // Queue should be compacted to 0
     const state = await loadOfflineState()
     expect(state.queue).toHaveLength(0)
+  })
+
+  it('moves a card between sets and updates card counts atomically', async () => {
+    const setA = await createSet('user-1', { title: 'Set A' })
+    const setB = await createSet('user-1', { title: 'Set B' })
+
+    const card = await createCard('user-1', setA.id, {
+      paragraph: 'Card to be moved',
+      answers: [],
+    })
+
+    expect((await getSet('user-1', setA.id))?.cardCount).toBe(1)
+    expect((await getSet('user-1', setB.id))?.cardCount).toBe(0)
+
+    // Move card from setA to setB
+    const moved = await updateCard('user-1', setA.id, card.id, {
+      studySetId: setB.id,
+    })
+
+    expect(moved.studySetId).toBe(setB.id)
+
+    // Verify in SQLite: setA decremented, setB incremented
+    expect((await getSet('user-1', setA.id))?.cardCount).toBe(0)
+    expect((await getSet('user-1', setB.id))?.cardCount).toBe(1)
+
+    // Verify card in setB
+    const cardsB = await getCards('user-1', setB.id)
+    expect(cardsB).toHaveLength(1)
+    expect(cardsB[0]?.id).toBe(card.id)
+
+    const cardsA = await getCards('user-1', setA.id)
+    expect(cardsA).toHaveLength(0)
+
+    // Since card was created offline as temp-card, compaction folded create_card + update_card into create_card in setB!
+    const state = await loadOfflineState()
+    const createMut = state.queue.find((m) => m.type === 'create_card' && m.tempCardId === card.id)
+    expect(createMut).toMatchObject({
+      type: 'create_card',
+      tempCardId: card.id,
+      setId: setB.id,
+    })
+
+    // Now test moving an already-synced server card:
+    await mirrorCardToSQLite('user-1', setA.id, {
+      id: 'server-card-1',
+      studySetId: setA.id,
+      paragraph: 'Server Card',
+      answers: [],
+      tags: [],
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    })
+    await updateCard('user-1', setA.id, 'server-card-1', {
+      studySetId: setB.id,
+    })
+
+    const state2 = await loadOfflineState()
+    const updateMut = state2.queue.find(
+      (m) => m.type === 'update_card' && m.cardId === 'server-card-1',
+    )
+    expect(updateMut).toMatchObject({
+      type: 'update_card',
+      cardId: 'server-card-1',
+      studySetId: setB.id,
+    })
+  })
+
+  it('moves a set under another set and back to root level', async () => {
+    const parentSet = await createSet('user-1', { title: 'Parent Subject' })
+    const childSet = await createSet('user-1', { title: 'Child Topic' })
+
+    // Move childSet under parentSet
+    const nested = await updateSet('user-1', childSet.id, { parentId: parentSet.id })
+    expect(nested.parentId).toBe(parentSet.id)
+
+    const inDbNested = await getSet('user-1', childSet.id)
+    expect(inDbNested?.parentId).toBe(parentSet.id)
+
+    // Move back to root level (parentId: null)
+    const backToRoot = await updateSet('user-1', childSet.id, { parentId: null })
+    expect(backToRoot.parentId).toBeNull()
+
+    const inDbRoot = await getSet('user-1', childSet.id)
+    expect(inDbRoot?.parentId).toBeNull()
+  })
+
+  it('updates card set_id on conflict when mirroring to SQLite', async () => {
+    const setA = await createSet('user-1', { title: 'Set A' })
+    const setB = await createSet('user-1', { title: 'Set B' })
+
+    await mirrorCardToSQLite('user-1', setA.id, {
+      id: 'conflict-card-1',
+      studySetId: setA.id,
+      paragraph: 'Test Paragraph',
+      answers: [],
+      tags: [],
+      createdAt: '2026-09-01T00:00:00Z',
+      updatedAt: '2026-09-01T00:00:00Z',
+    })
+
+    const initialCardsA = await getCards('user-1', setA.id)
+    expect(initialCardsA.some((c) => c.id === 'conflict-card-1')).toBe(true)
+
+    await mirrorCardToSQLite('user-1', setB.id, {
+      id: 'conflict-card-1',
+      studySetId: setB.id,
+      paragraph: 'Test Paragraph Updated',
+      answers: [],
+      tags: [],
+      createdAt: '2026-09-01T00:00:00Z',
+      updatedAt: '2026-09-02T00:00:00Z',
+    })
+
+    const updatedCard = await getCard('user-1', 'conflict-card-1')
+    expect(updatedCard?.studySetId).toBe(setB.id)
+
+    const cardsInB = await getCards('user-1', setB.id)
+    expect(cardsInB.some((c) => c.id === 'conflict-card-1')).toBe(true)
+  })
+
+  it('allows local-user fallback to view and update existing local sets', async () => {
+    const set = await createSet('user-1', { title: 'User 1 Set' })
+
+    const fromGuest = await getSet('local-user', set.id)
+    expect(fromGuest).not.toBeNull()
+    expect(fromGuest?.title).toBe('User 1 Set')
+
+    const updatedByGuest = await updateSet('local-user', set.id, { title: 'Guest Renamed' })
+    expect(updatedByGuest.title).toBe('Guest Renamed')
   })
 })

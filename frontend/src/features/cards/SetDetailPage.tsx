@@ -16,6 +16,8 @@ import { setAccentClass } from './colors'
 import { cardCountLabel, childCountLabel } from './counts'
 import { CARD_PARAM } from './links'
 import { SetDialog } from './SetDialog'
+import { MoveCardDialog } from './MoveCardDialog'
+import { MoveSetDialog } from './MoveSetDialog'
 import { ExportButton } from './transfer/ExportButton'
 import {
   flattenPages,
@@ -199,12 +201,14 @@ function CardRow({
   card,
   composer,
   onEdit,
+  onMove,
   onDelete,
 }: {
   card: StudyCardSummary
   /** Rendered in place of the row while this card is open for editing. */
   composer?: ReactNode
   onEdit: () => void
+  onMove: () => void
   onDelete: () => void
 }): ReactElement {
   if (composer) return <StaggerItem as="li">{composer}</StaggerItem>
@@ -230,6 +234,9 @@ function CardRow({
           ))}
         </ul>
         <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={onMove}>
+            Move
+          </Button>
           <Button variant="ghost" size="sm" onClick={onEdit}>
             Edit
           </Button>
@@ -302,6 +309,8 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
     linked === null ? null : { kind: 'edit', cardId: linked, inRow: false },
   )
   const [editingSet, setEditingSet] = useState(false)
+  const [movingSet, setMovingSet] = useState(false)
+  const [movingCard, setMovingCard] = useState<StudyCardSummary | null>(null)
   const [addingChild, setAddingChild] = useState(false)
   const [deleting, setDeleting] = useState<StudyCardSummary | null>(null)
   const [importing, setImporting] = useState(false)
@@ -403,6 +412,14 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
           actions={
             <>
               <ExportButton setId={setId} setTitle={current.title} />
+              <Button
+                variant="soft"
+                onClick={() => {
+                  setMovingSet(true)
+                }}
+              >
+                Move set
+              </Button>
               <Button
                 variant="soft"
                 onClick={() => {
@@ -707,6 +724,9 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
                       <CardComposer setId={setId} cardId={card.id} onClose={closeComposer} />
                     ) : undefined
                   }
+                  onMove={() => {
+                    setMovingCard(card)
+                  }}
                   onEdit={() => {
                     // Ends a running import. Only one composer may be mounted at
                     // a time — see this file's header — and editing an existing
@@ -800,6 +820,15 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
           })
         }}
       />
+
+      <MoveCardDialog
+        open={movingCard !== null}
+        onClose={() => setMovingCard(null)}
+        card={movingCard}
+        currentSetId={setId}
+      />
+
+      <MoveSetDialog open={movingSet} onClose={() => setMovingSet(false)} set={current ?? null} />
     </div>
   )
 }

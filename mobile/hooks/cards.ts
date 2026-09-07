@@ -23,6 +23,7 @@ import {
 import * as api from '../services/cards'
 import * as offlineData from '../lib/offline/data-source'
 import { useAuthStore } from '../stores/auth'
+import { useOfflineSetsStore } from '../stores/offline-sets'
 import { loadAuthCache } from '../services/auth-cache'
 
 async function resolveUserId(): Promise<string> {
@@ -68,8 +69,11 @@ function isNetworkError(error: unknown): boolean {
 export const setKeys = {
   all: ['sets'] as const,
   lists: () => [...setKeys.all, 'list'] as const,
-  list: (options: { archived: boolean; parent: string | null }) =>
-    [...setKeys.lists(), options] as const,
+  list: (options: { archived?: boolean; parent?: string | null } = {}) =>
+    [
+      ...setKeys.lists(),
+      { archived: options.archived ?? false, parent: options.parent ?? null },
+    ] as const,
   details: () => [...setKeys.all, 'detail'] as const,
   detail: (id: string) => [...setKeys.details(), id] as const,
 }
@@ -126,6 +130,7 @@ function shiftCardCount(client: QueryClient, setId: string, delta: number): void
 export function useSets(options: { archived?: boolean; parent?: string | null } = {}) {
   const archived = options.archived ?? false
   const parent = options.parent ?? null
+  const client = useQueryClient()
 
   return useInfiniteQuery({
     queryKey: setKeys.list({ archived, parent }),
@@ -133,8 +138,46 @@ export function useSets(options: { archived?: boolean; parent?: string | null } 
       const userId = await resolveUserId()
       if (!onlineManager.isOnline() && userId) {
         const offlineSets = await offlineData.getSets(userId, parent)
+        const setsMap = new Map<string, StudySet>()
+
+        for (const s of offlineSets) {
+          if (s?.id) setsMap.set(s.id, s)
+        }
+
+        const cached = client.getQueryData<InfiniteData<SetsResponse>>(
+          setKeys.list({ archived, parent }),
+        )
+        if (cached?.pages) {
+          for (const page of cached.pages) {
+            if (page?.items) {
+              for (const s of page.items) {
+                if (s?.id && !setsMap.has(s.id)) {
+                  setsMap.set(s.id, s)
+                  void offlineData.mirrorSetToSQLite(userId, s)
+                }
+              }
+            }
+          }
+        }
+
+        const offlineStoreSets = useOfflineSetsStore.getState().sets
+        if (offlineStoreSets) {
+          for (const entry of Object.values(offlineStoreSets)) {
+            const s = entry.metadata
+            if (s && !setsMap.has(s.id)) {
+              if (parent === null ? !s.parentId : s.parentId === parent) {
+                setsMap.set(s.id, s)
+              }
+            }
+          }
+        }
+
+        const filtered = Array.from(setsMap.values()).filter((s) =>
+          archived ? s.archivedAt !== null : s.archivedAt === null,
+        )
+
         return {
-          items: offlineSets,
+          items: filtered,
           nextCursor: null,
         }
       }
@@ -177,7 +220,157 @@ export function useSets(options: { archived?: boolean; parent?: string | null } 
   })
 }
 
+export function useAllSets(options: { archived?: boolean } = {}) {
+  const archived = options.archived ?? false
+  const client = useQueryClient()
+
+  return useQuery({
+    queryKey: [...setKeys.all, 'all-sets', { archived }],
+    queryFn: async () => {
+      const setsMap = new Map<string, StudySet>()
+
+      // 1. Gather sets from React Query cache (instant, zero network)
+      try {
+        const cachedLists = client.getQueriesData<InfiniteData<SetsResponse>>({
+          queryKey: setKeys.lists(),
+        })
+        for (const [_key, data] of cachedLists) {
+          if (data?.pages) {
+            for (const page of data.pages) {
+              if (page?.items) {
+                for (const s of page.items) {
+                  if (s?.id) setsMap.set(s.id, s)
+                }
+              }
+            }
+          }
+        }
+
+        const cachedDetails = client.getQueriesData<SetResponse>({
+          queryKey: setKeys.details(),
+        })
+        for (const [_key, data] of cachedDetails) {
+          if (data?.set?.id) setsMap.set(data.set.id, data.set)
+        }
+      } catch {
+        // Cache read fallback
+      }
+
+      // 2. Gather sets from offline sets store
+      try {
+        const offlineSets = useOfflineSetsStore.getState().sets
+        if (offlineSets) {
+          for (const entry of Object.values(offlineSets)) {
+            if (entry?.metadata?.id) {
+              setsMap.set(entry.metadata.id, entry.metadata)
+            }
+          }
+        }
+      } catch {
+        // Offline store fallback
+      }
+
+      // 3. Gather sets from SQLite local database (offline & synced)
+      const userId = await resolveUserId()
+      if (userId) {
+        try {
+          const localSets = await offlineData.getSets(userId, undefined)
+          for (const s of localSets) {
+            if (s?.id) setsMap.set(s.id, s)
+          }
+          if (userId !== 'local-user' && setsMap.size === 0) {
+            const guestSets = await offlineData.getSets('local-user', undefined)
+            for (const s of guestSets) {
+              if (s?.id) setsMap.set(s.id, s)
+            }
+          }
+        } catch {
+          // SQLite fallback
+        }
+      }
+
+      // 4. If online, fetch from remote API safely (compatible with Render & local backends)
+      if (onlineManager.isOnline()) {
+        try {
+          // Fetch root sets without parent param (100% accepted by all backend schemas)
+          const rootRes = await api.listSets({
+            limit: 50,
+            archived: archived ? true : undefined,
+          })
+          if (rootRes?.items && Array.isArray(rootRes.items)) {
+            for (const s of rootRes.items) {
+              if (s?.id) {
+                setsMap.set(s.id, s)
+                if (userId) void offlineData.mirrorSetToSQLite(userId, s)
+              }
+            }
+
+            // Fetch direct children of sets that report children
+            const parentsWithKids = rootRes.items.filter((s) => s.childCount > 0)
+            if (parentsWithKids.length > 0) {
+              const childLists = await Promise.all(
+                parentsWithKids.map((p) =>
+                  api
+                    .listSets({
+                      limit: 50,
+                      archived: archived ? true : undefined,
+                      parent: p.id,
+                    })
+                    .then((r) => r.items ?? [])
+                    .catch(() => [] as StudySet[]),
+                ),
+              )
+              const level2Sets: StudySet[] = []
+              for (const cl of childLists) {
+                for (const cs of cl) {
+                  if (cs?.id) {
+                    setsMap.set(cs.id, cs)
+                    level2Sets.push(cs)
+                    if (userId) void offlineData.mirrorSetToSQLite(userId, cs)
+                  }
+                }
+              }
+
+              // Fetch level 3 children if any level 2 sets have children
+              const level2Parents = level2Sets.filter((s) => s.childCount > 0)
+              if (level2Parents.length > 0) {
+                const grandChildLists = await Promise.all(
+                  level2Parents.map((p) =>
+                    api
+                      .listSets({
+                        limit: 50,
+                        archived: archived ? true : undefined,
+                        parent: p.id,
+                      })
+                      .then((r) => r.items ?? [])
+                      .catch(() => [] as StudySet[]),
+                  ),
+                )
+                for (const gcl of grandChildLists) {
+                  for (const gcs of gcl) {
+                    if (gcs?.id) {
+                      setsMap.set(gcs.id, gcs)
+                      if (userId) void offlineData.mirrorSetToSQLite(userId, gcs)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[useAllSets] Failed fetching remote sets, using cached/local:', err)
+        }
+      }
+
+      const allSets = Array.from(setsMap.values())
+      return allSets.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+    },
+    staleTime: 10_000,
+  })
+}
+
 export function useSet(id: string | undefined) {
+  const client = useQueryClient()
   return useQuery({
     queryKey: setKeys.detail(id ?? ''),
     queryFn: async () => {
@@ -186,6 +379,27 @@ export function useSet(id: string | undefined) {
       if ((isTemp || !onlineManager.isOnline()) && userId && id) {
         const offlineSet = await offlineData.getSet(userId, id)
         if (offlineSet) return { set: offlineSet }
+
+        const offlineEntry = useOfflineSetsStore.getState().sets[id]
+        if (offlineEntry?.metadata) {
+          void offlineData.mirrorSetToSQLite(userId, offlineEntry.metadata)
+          return { set: offlineEntry.metadata }
+        }
+
+        const allLists = client.getQueriesData<InfiniteData<SetsResponse>>({
+          queryKey: setKeys.lists(),
+        })
+        for (const [_key, data] of allLists) {
+          if (data?.pages) {
+            for (const page of data.pages) {
+              const found = page.items?.find((s) => s.id === id)
+              if (found) {
+                void offlineData.mirrorSetToSQLite(userId, found)
+                return { set: found }
+              }
+            }
+          }
+        }
       }
 
       try {
@@ -198,6 +412,12 @@ export function useSet(id: string | undefined) {
         if (userId && id && isNetworkError(error)) {
           const offlineSet = await offlineData.getSet(userId, id)
           if (offlineSet) return { set: offlineSet }
+
+          const offlineEntry = useOfflineSetsStore.getState().sets[id]
+          if (offlineEntry?.metadata) {
+            void offlineData.mirrorSetToSQLite(userId, offlineEntry.metadata)
+            return { set: offlineEntry.metadata }
+          }
         }
         throw error
       }
@@ -351,6 +571,100 @@ export function useArchiveSet() {
   })
 }
 
+export function useMoveSet() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, parentId }: { id: string; parentId: string | null }) => {
+      const userId = await resolveUserId()
+      const isTemp = id.startsWith('temp-set-') || (parentId?.startsWith('temp-set-') ?? false)
+      if ((isTemp || !onlineManager.isOnline()) && userId) {
+        const updated = await offlineData.updateSet(userId, id, { parentId })
+        return { set: updated }
+      }
+
+      try {
+        const res = await api.updateSet(id, { parentId })
+        if (userId && res.set) {
+          void offlineData.mirrorSetToSQLite(userId, res.set)
+        }
+        return res
+      } catch (error) {
+        if (userId && isNetworkError(error)) {
+          const updated = await offlineData.updateSet(userId, id, { parentId })
+          return { set: updated }
+        }
+        throw error
+      }
+    },
+
+    onMutate: async ({ id, parentId }) => {
+      await client.cancelQueries({ queryKey: setKeys.all })
+      const previous = client.getQueriesData({ queryKey: setKeys.all })
+
+      let movingSet: StudySet | undefined
+      const detail = client.getQueryData<SetResponse>(setKeys.detail(id))
+      if (detail?.set) {
+        movingSet = { ...detail.set, parentId }
+      } else {
+        const allLists = client.getQueriesData<InfiniteData<SetsResponse>>({
+          queryKey: setKeys.lists(),
+        })
+        for (const [_key, data] of allLists) {
+          if (data?.pages) {
+            for (const page of data.pages) {
+              const found = page.items?.find((s) => s.id === id)
+              if (found) {
+                movingSet = { ...found, parentId }
+                break
+              }
+            }
+          }
+          if (movingSet) break
+        }
+      }
+
+      const oldParentId = movingSet?.parentId ?? null
+
+      patchSet(client, id, (set) => ({ ...set, parentId }))
+      patchPages<StudySet>(client, setKeys.lists(), (items) =>
+        items.filter((item) => item.id !== id),
+      )
+
+      if (movingSet) {
+        const setToAdd = { ...movingSet, parentId }
+        patchPages<StudySet>(client, setKeys.list({ parent: parentId }), (items) => {
+          if (items.some((item) => item.id === id)) return items
+          return [setToAdd, ...items]
+        })
+      }
+
+      if (oldParentId && oldParentId !== parentId) {
+        patchSet(client, oldParentId, (set) => ({
+          ...set,
+          childCount: Math.max(0, set.childCount - 1),
+        }))
+      }
+      if (parentId && parentId !== oldParentId) {
+        patchSet(client, parentId, (set) => ({
+          ...set,
+          childCount: set.childCount + 1,
+        }))
+      }
+
+      return { previous }
+    },
+
+    onError: (_error, _variables, context) => {
+      for (const [key, data] of context?.previous ?? []) client.setQueryData(key, data)
+    },
+
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: setKeys.all })
+    },
+  })
+}
+
 export function useDeleteSet() {
   const client = useQueryClient()
 
@@ -403,6 +717,7 @@ export function useDeleteSet() {
 // ── Card queries ────────────────────────────────────────────────────────────
 
 export function useCards(setId: string | undefined, tags: readonly string[] = []) {
+  const client = useQueryClient()
   return useInfiniteQuery({
     queryKey: cardKeys.list(setId ?? '', tags),
     queryFn: async ({ pageParam }) => {
@@ -410,17 +725,46 @@ export function useCards(setId: string | undefined, tags: readonly string[] = []
       const isTemp = setId?.startsWith('temp-set-')
       if ((isTemp || !onlineManager.isOnline()) && userId && setId) {
         const offlineCards = await offlineData.getCards(userId, setId)
-        const summaries: StudyCardSummary[] = offlineCards.map((c) => ({
-          id: c.id,
-          studySetId: c.studySetId,
-          paragraph: c.paragraph,
-          tags: c.tags,
-          createdAt: c.createdAt,
-          updatedAt: c.updatedAt,
-          answerCount: c.answers?.length ?? 0,
-        }))
+        if (offlineCards.length > 0) {
+          const summaries: StudyCardSummary[] = offlineCards.map((c) => ({
+            id: c.id,
+            studySetId: c.studySetId,
+            paragraph: c.paragraph,
+            tags: c.tags,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+            answerCount: c.answers?.length ?? 0,
+          }))
+          return {
+            items: summaries,
+            nextCursor: null,
+          }
+        }
+
+        const cached = client.getQueryData<InfiniteData<CardsResponse>>(cardKeys.list(setId, tags))
+        if (cached?.pages && cached.pages.length > 0) {
+          const cachedItems = cached.pages.flatMap((p) => p.items ?? [])
+          if (cachedItems.length > 0) {
+            for (const item of cachedItems) {
+              void offlineData.mirrorCardToSQLite(userId, setId, {
+                id: item.id,
+                studySetId: setId,
+                paragraph: item.paragraph,
+                answers: [],
+                tags: item.tags,
+                createdAt: item.createdAt,
+                updatedAt: item.updatedAt,
+              })
+            }
+            return {
+              items: cachedItems,
+              nextCursor: null,
+            }
+          }
+        }
+
         return {
-          items: summaries,
+          items: [],
           nextCursor: null,
         }
       }
@@ -467,17 +811,37 @@ export function useCards(setId: string | undefined, tags: readonly string[] = []
       } catch (error) {
         if (userId && setId && isNetworkError(error)) {
           const offlineCards = await offlineData.getCards(userId, setId)
-          const summaries: StudyCardSummary[] = offlineCards.map((c) => ({
-            id: c.id,
-            studySetId: c.studySetId,
-            paragraph: c.paragraph,
-            tags: c.tags,
-            createdAt: c.createdAt,
-            updatedAt: c.updatedAt,
-            answerCount: c.answers?.length ?? 0,
-          }))
+          if (offlineCards.length > 0) {
+            const summaries: StudyCardSummary[] = offlineCards.map((c) => ({
+              id: c.id,
+              studySetId: c.studySetId,
+              paragraph: c.paragraph,
+              tags: c.tags,
+              createdAt: c.createdAt,
+              updatedAt: c.updatedAt,
+              answerCount: c.answers?.length ?? 0,
+            }))
+            return {
+              items: summaries,
+              nextCursor: null,
+            }
+          }
+
+          const cached = client.getQueryData<InfiniteData<CardsResponse>>(
+            cardKeys.list(setId, tags),
+          )
+          if (cached?.pages && cached.pages.length > 0) {
+            const cachedItems = cached.pages.flatMap((p) => p.items ?? [])
+            if (cachedItems.length > 0) {
+              return {
+                items: cachedItems,
+                nextCursor: null,
+              }
+            }
+          }
+
           return {
-            items: summaries,
+            items: [],
             nextCursor: null,
           }
         }
@@ -677,6 +1041,121 @@ export function useUpdateCard(id: string) {
 
     onSettled: () => {
       void client.invalidateQueries({ queryKey: cardKeys.lists() })
+    },
+  })
+}
+
+export function useMoveCard() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      cardId,
+      sourceSetId,
+      targetSetId,
+    }: {
+      cardId: string
+      sourceSetId: string
+      targetSetId: string
+    }) => {
+      const userId = await resolveUserId()
+      const isTemp =
+        cardId.startsWith('temp-card-') ||
+        targetSetId.startsWith('temp-set-') ||
+        sourceSetId.startsWith('temp-set-')
+      if ((isTemp || !onlineManager.isOnline()) && userId) {
+        const card = await offlineData.updateCard(userId, sourceSetId, cardId, {
+          studySetId: targetSetId,
+        })
+        return { card }
+      }
+
+      try {
+        const res = await api.updateCard(cardId, { studySetId: targetSetId })
+        if (userId && res.card) {
+          void offlineData.mirrorCardToSQLite(userId, targetSetId, res.card)
+        }
+        return res
+      } catch (error) {
+        if (userId && isNetworkError(error)) {
+          const card = await offlineData.updateCard(userId, sourceSetId, cardId, {
+            studySetId: targetSetId,
+          })
+          return { card }
+        }
+        throw error
+      }
+    },
+
+    onMutate: async ({ cardId, sourceSetId, targetSetId }) => {
+      await client.cancelQueries({ queryKey: cardKeys.all })
+      await client.cancelQueries({ queryKey: setKeys.all })
+      const previous = [
+        ...client.getQueriesData({ queryKey: cardKeys.all }),
+        ...client.getQueriesData({ queryKey: setKeys.all }),
+      ]
+
+      let movingCard: StudyCardSummary | undefined
+      const sourceLists = client.getQueriesData<InfiniteData<CardsResponse>>({
+        queryKey: cardKeys.list(sourceSetId),
+      })
+      for (const [_key, data] of sourceLists) {
+        if (data?.pages) {
+          for (const page of data.pages) {
+            const found = page.items?.find((c) => c.id === cardId)
+            if (found) {
+              movingCard = { ...found, studySetId: targetSetId }
+              break
+            }
+          }
+        }
+        if (movingCard) break
+      }
+
+      if (!movingCard) {
+        const detail = client.getQueryData<CardResponse>(cardKeys.detail(cardId))
+        if (detail?.card) {
+          movingCard = {
+            id: detail.card.id,
+            studySetId: targetSetId,
+            paragraph: detail.card.paragraph,
+            tags: detail.card.tags,
+            createdAt: detail.card.createdAt,
+            updatedAt: new Date().toISOString(),
+            answerCount: detail.card.answers?.length ?? 0,
+          }
+        }
+      }
+
+      patchPages<StudyCardSummary>(client, cardKeys.list(sourceSetId), (items) =>
+        items.filter((c) => c.id !== cardId),
+      )
+
+      if (movingCard) {
+        const cardToAdd = movingCard
+        patchPages<StudyCardSummary>(client, cardKeys.list(targetSetId), (items) => {
+          if (items.some((c) => c.id === cardId)) return items
+          return [cardToAdd, ...items]
+        })
+
+        client.setQueryData<CardResponse>(cardKeys.detail(cardId), (old) =>
+          old ? { card: { ...old.card, studySetId: targetSetId } } : old,
+        )
+      }
+
+      shiftCardCount(client, sourceSetId, -1)
+      shiftCardCount(client, targetSetId, 1)
+
+      return { previous }
+    },
+
+    onError: (_error, _variables, context) => {
+      for (const [key, data] of context?.previous ?? []) client.setQueryData(key, data)
+    },
+
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: cardKeys.all })
+      void client.invalidateQueries({ queryKey: setKeys.all })
     },
   })
 }

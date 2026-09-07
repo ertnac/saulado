@@ -481,3 +481,32 @@ export function CloudIcon(props: IconProps): ReactElement {
     </Icon>
   )
 }
+
+export function FolderInputIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M2 9V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1" />
+      <Path d="M2 13h10" />
+      <Path d="m9 10 3 3-3 3" />
+    </Icon>
+  )
+}
+
+export function XIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M18 6 6 18" />
+      <Path d="m6 6 12 12" />
+    </Icon>
+  )
+}
+
+export function FolderPlusIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+      <Path d="M12 10v6" />
+      <Path d="M9 13h6" />
+    </Icon>
+  )
+}

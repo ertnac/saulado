@@ -89,6 +89,13 @@ function mapSQLiteRowToStudyCard(row: SQLiteStudyCard): StudyCard {
   }
 }
 
+export function buildUserFilter(userId: string): { sql: string; params: string[] } {
+  if (!userId || userId === 'local-user') {
+    return { sql: '1=1', params: [] }
+  }
+  return { sql: "(user_id = ? OR user_id = 'local-user')", params: [userId] }
+}
+
 // ── Sets CRUD ────────────────────────────────────────────────────────────────
 
 export async function createSet(userId: string, input: CreateSetRequest): Promise<StudySet> {
@@ -139,35 +146,36 @@ export async function createSet(userId: string, input: CreateSetRequest): Promis
 }
 
 export async function getSet(userId: string, setId: string): Promise<StudySet | null> {
-  if (!userId || !setId) return null
+  if (!setId) return null
   const db = await getDatabase()
+  const { sql, params } = buildUserFilter(userId)
   const row = await db.getFirstAsync<SQLiteStudySet>(
-    `SELECT * FROM study_sets WHERE user_id = ? AND id = ? AND is_deleted = 0`,
-    [userId, setId],
+    `SELECT * FROM study_sets WHERE ${sql} AND id = ? AND is_deleted = 0`,
+    [...params, setId],
   )
   if (!row) return null
   return mapSQLiteRowToStudySet(row)
 }
 
 export async function getSets(userId: string, parentId?: string | null): Promise<StudySet[]> {
-  if (!userId) return []
   const db = await getDatabase()
+  const { sql, params } = buildUserFilter(userId)
   let rows: SQLiteStudySet[]
 
   if (parentId === undefined) {
     rows = await db.getAllAsync<SQLiteStudySet>(
-      `SELECT * FROM study_sets WHERE user_id = ? AND is_deleted = 0 ORDER BY updated_at DESC`,
-      [userId],
+      `SELECT * FROM study_sets WHERE ${sql} AND is_deleted = 0 ORDER BY updated_at DESC`,
+      params,
     )
   } else if (parentId === null) {
     rows = await db.getAllAsync<SQLiteStudySet>(
-      `SELECT * FROM study_sets WHERE user_id = ? AND parent_id IS NULL AND is_deleted = 0 ORDER BY updated_at DESC`,
-      [userId],
+      `SELECT * FROM study_sets WHERE ${sql} AND parent_id IS NULL AND is_deleted = 0 ORDER BY updated_at DESC`,
+      params,
     )
   } else {
     rows = await db.getAllAsync<SQLiteStudySet>(
-      `SELECT * FROM study_sets WHERE user_id = ? AND parent_id = ? AND is_deleted = 0 ORDER BY updated_at DESC`,
-      [userId, parentId],
+      `SELECT * FROM study_sets WHERE ${sql} AND parent_id = ? AND is_deleted = 0 ORDER BY updated_at DESC`,
+      [...params, parentId],
     )
   }
 
@@ -179,11 +187,12 @@ export async function updateSet(
   setId: string,
   patch: UpdateSetRequest,
 ): Promise<StudySet> {
-  if (!userId || !setId) throw new Error('Cannot update set without userId and setId')
+  if (!setId) throw new Error('Cannot update set without setId')
   const db = await getDatabase()
+  const { sql, params } = buildUserFilter(userId)
   const existing = await db.getFirstAsync<SQLiteStudySet>(
-    `SELECT * FROM study_sets WHERE user_id = ? AND id = ? AND is_deleted = 0`,
-    [userId, setId],
+    `SELECT * FROM study_sets WHERE ${sql} AND id = ? AND is_deleted = 0`,
+    [...params, setId],
   )
   if (!existing) throw new Error(`Set ${setId} not found`)
 
@@ -199,8 +208,8 @@ export async function updateSet(
   await db.runAsync(
     `UPDATE study_sets 
      SET title = ?, parent_id = ?, color = ?, archived_at = ?, sync_status = ?, updated_at = ?
-     WHERE user_id = ? AND id = ?`,
-    [title, parentId, color, archivedAt, nextSyncStatus, now, userId, setId],
+     WHERE ${sql} AND id = ?`,
+    [title, parentId, color, archivedAt, nextSyncStatus, now, ...params, setId],
   )
 
   const mutation: OfflineUpdateSetMutation = {
@@ -211,7 +220,7 @@ export async function updateSet(
     color: patch.color,
     archived: patch.archived,
     clientUpdatedAt: now,
-    userId,
+    userId: existing.user_id || userId,
     idempotencyKey: generateUUID(),
     queuedAt: now,
     status: 'pending',
@@ -235,23 +244,24 @@ export async function updateSet(
 }
 
 export async function deleteSet(userId: string, setId: string): Promise<void> {
-  if (!userId || !setId) return
+  if (!setId) return
   const db = await getDatabase()
   const isTemp = setId.startsWith('temp-set-')
   const now = new Date().toISOString()
+  const { sql, params } = buildUserFilter(userId)
 
   await db.withTransactionAsync(async () => {
     if (isTemp) {
-      await db.runAsync(`DELETE FROM study_cards WHERE user_id = ? AND set_id = ?`, [userId, setId])
-      await db.runAsync(`DELETE FROM study_sets WHERE user_id = ? AND id = ?`, [userId, setId])
+      await db.runAsync(`DELETE FROM study_cards WHERE ${sql} AND set_id = ?`, [...params, setId])
+      await db.runAsync(`DELETE FROM study_sets WHERE ${sql} AND id = ?`, [...params, setId])
     } else {
       await db.runAsync(
-        `UPDATE study_cards SET is_deleted = 1, sync_status = 'pending_delete', updated_at = ? WHERE user_id = ? AND set_id = ?`,
-        [now, userId, setId],
+        `UPDATE study_cards SET is_deleted = 1, sync_status = 'pending_delete', updated_at = ? WHERE ${sql} AND set_id = ?`,
+        [now, ...params, setId],
       )
       await db.runAsync(
-        `UPDATE study_sets SET is_deleted = 1, sync_status = 'pending_delete', updated_at = ? WHERE user_id = ? AND id = ?`,
-        [now, userId, setId],
+        `UPDATE study_sets SET is_deleted = 1, sync_status = 'pending_delete', updated_at = ? WHERE ${sql} AND id = ?`,
+        [now, ...params, setId],
       )
     }
   })
@@ -295,6 +305,7 @@ export async function createCard(
     altAnswers: ans.altAnswers ?? [],
   }))
 
+  const { sql: setFilterSql, params: setFilterParams } = buildUserFilter(userId)
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO study_cards (
@@ -315,8 +326,8 @@ export async function createCard(
     await db.runAsync(
       `UPDATE study_sets 
        SET card_count = card_count + 1, subtree_card_count = subtree_card_count + 1, updated_at = ?
-       WHERE user_id = ? AND id = ?`,
-      [now, userId, setId],
+       WHERE ${setFilterSql} AND id = ?`,
+      [now, ...setFilterParams, setId],
     )
   })
 
@@ -352,22 +363,24 @@ export async function createCard(
 }
 
 export async function getCard(userId: string, cardId: string): Promise<StudyCard | null> {
-  if (!userId || !cardId) return null
+  if (!cardId) return null
   const db = await getDatabase()
+  const { sql, params } = buildUserFilter(userId)
   const row = await db.getFirstAsync<SQLiteStudyCard>(
-    `SELECT * FROM study_cards WHERE user_id = ? AND id = ? AND is_deleted = 0`,
-    [userId, cardId],
+    `SELECT * FROM study_cards WHERE ${sql} AND id = ? AND is_deleted = 0`,
+    [...params, cardId],
   )
   if (!row) return null
   return mapSQLiteRowToStudyCard(row)
 }
 
 export async function getCards(userId: string, setId: string): Promise<StudyCard[]> {
-  if (!userId || !setId) return []
+  if (!setId) return []
   const db = await getDatabase()
+  const { sql, params } = buildUserFilter(userId)
   const rows = await db.getAllAsync<SQLiteStudyCard>(
-    `SELECT * FROM study_cards WHERE user_id = ? AND set_id = ? AND is_deleted = 0 ORDER BY created_at ASC`,
-    [userId, setId],
+    `SELECT * FROM study_cards WHERE ${sql} AND set_id = ? AND is_deleted = 0 ORDER BY created_at ASC`,
+    [...params, setId],
   )
   return rows.map(mapSQLiteRowToStudyCard)
 }
@@ -378,11 +391,12 @@ export async function updateCard(
   cardId: string,
   patch: UpdateCardRequest,
 ): Promise<StudyCard> {
-  if (!userId || !cardId) throw new Error('Cannot update card without userId and cardId')
+  if (!cardId) throw new Error('Cannot update card without cardId')
   const db = await getDatabase()
+  const { sql, params } = buildUserFilter(userId)
   const existing = await db.getFirstAsync<SQLiteStudyCard>(
-    `SELECT * FROM study_cards WHERE user_id = ? AND id = ? AND is_deleted = 0`,
-    [userId, cardId],
+    `SELECT * FROM study_cards WHERE ${sql} AND id = ? AND is_deleted = 0`,
+    [...params, cardId],
   )
   if (!existing) throw new Error(`Card ${cardId} not found`)
 
@@ -427,22 +441,53 @@ export async function updateCard(
   const nextSyncStatus: SyncStatus =
     existing.sync_status === 'pending_create' ? 'pending_create' : 'pending_update'
 
-  await db.runAsync(
-    `UPDATE study_cards
-     SET paragraph = ?, answers = ?, tags = ?, sync_status = ?, updated_at = ?
-     WHERE user_id = ? AND id = ?`,
-    [paragraph, JSON.stringify(answers), JSON.stringify(tags), nextSyncStatus, now, userId, cardId],
-  )
+  const targetSetId =
+    patch.studySetId && patch.studySetId !== existing.set_id ? patch.studySetId : existing.set_id
+  const isMovingSet = targetSetId !== existing.set_id
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE study_cards
+       SET paragraph = ?, answers = ?, tags = ?, set_id = ?, sync_status = ?, updated_at = ?
+       WHERE ${sql} AND id = ?`,
+      [
+        paragraph,
+        JSON.stringify(answers),
+        JSON.stringify(tags),
+        targetSetId,
+        nextSyncStatus,
+        now,
+        ...params,
+        cardId,
+      ],
+    )
+
+    if (isMovingSet) {
+      await db.runAsync(
+        `UPDATE study_sets 
+         SET card_count = MAX(0, card_count - 1), subtree_card_count = MAX(0, subtree_card_count - 1), updated_at = ?
+         WHERE ${sql} AND id = ?`,
+        [now, ...params, existing.set_id],
+      )
+      await db.runAsync(
+        `UPDATE study_sets 
+         SET card_count = card_count + 1, subtree_card_count = subtree_card_count + 1, updated_at = ?
+         WHERE ${sql} AND id = ?`,
+        [now, ...params, targetSetId],
+      )
+    }
+  })
 
   const mutation: OfflineUpdateCardMutation = {
     type: 'update_card',
     cardId,
     setId: existing.set_id,
+    studySetId: isMovingSet ? targetSetId : undefined,
     paragraph: patch.paragraph,
     answers: patch.answers,
     tags: patch.tags,
     clientUpdatedAt: now,
-    userId,
+    userId: existing.user_id || userId,
     idempotencyKey: generateUUID(),
     queuedAt: now,
     status: 'pending',
@@ -457,6 +502,7 @@ export async function updateCard(
 
   return {
     ...mapSQLiteRowToStudyCard(existing),
+    studySetId: targetSetId,
     paragraph,
     answers,
     tags,
@@ -465,18 +511,19 @@ export async function updateCard(
 }
 
 export async function deleteCard(userId: string, setId: string, cardId: string): Promise<void> {
-  if (!userId || !cardId) return
+  if (!cardId) return
   const db = await getDatabase()
   const isTemp = cardId.startsWith('temp-card-')
   const now = new Date().toISOString()
+  const { sql, params } = buildUserFilter(userId)
 
   await db.withTransactionAsync(async () => {
     if (isTemp) {
-      await db.runAsync(`DELETE FROM study_cards WHERE user_id = ? AND id = ?`, [userId, cardId])
+      await db.runAsync(`DELETE FROM study_cards WHERE ${sql} AND id = ?`, [...params, cardId])
     } else {
       await db.runAsync(
-        `UPDATE study_cards SET is_deleted = 1, sync_status = 'pending_delete', updated_at = ? WHERE user_id = ? AND id = ?`,
-        [now, userId, cardId],
+        `UPDATE study_cards SET is_deleted = 1, sync_status = 'pending_delete', updated_at = ? WHERE ${sql} AND id = ?`,
+        [now, ...params, cardId],
       )
     }
 
@@ -484,8 +531,8 @@ export async function deleteCard(userId: string, setId: string, cardId: string):
       await db.runAsync(
         `UPDATE study_sets 
          SET card_count = MAX(0, card_count - 1), subtree_card_count = MAX(0, subtree_card_count - 1), updated_at = ?
-         WHERE user_id = ? AND id = ?`,
-        [now, userId, setId],
+         WHERE ${sql} AND id = ?`,
+        [now, ...params, setId],
       )
     }
   })
@@ -565,6 +612,7 @@ export async function mirrorCardToSQLite(
       id, set_id, user_id, paragraph, answers, tags, is_deleted, sync_status, created_at, updated_at, last_synced_at
     ) VALUES (?, ?, ?, ?, ?, ?, 0, 'synced', ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
+      set_id = excluded.set_id,
       paragraph = excluded.paragraph,
       answers = excluded.answers,
       tags = excluded.tags,

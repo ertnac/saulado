@@ -1,5 +1,15 @@
-import { useState, type ReactElement } from 'react'
-import { ActivityIndicator, Text, View } from 'react-native'
+import { useEffect, useState, type ReactElement } from 'react'
+import {
+  ActivityIndicator,
+  Keyboard,
+  LayoutAnimation,
+  Platform,
+  ScrollView,
+  Text,
+  UIManager,
+  View,
+} from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { AnswerInput, DraftAnswer, StudyCard } from '@saulado/shared'
 import { useCard, useCreateCard, useUpdateCard } from '../hooks/cards'
 import { useCardDraft } from '../hooks/useCardDraft'
@@ -95,7 +105,44 @@ function Composer({
     !editing && !pending && imported === undefined,
   )
 
+  const insets = useSafeAreaInsets()
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+          UIManager.setLayoutAnimationEnabledExperimental(true)
+        }
+        if (Platform.OS === 'android') {
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+        }
+        setKeyboardHeight(e.endCoordinates.height)
+      },
+    )
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+          UIManager.setLayoutAnimationEnabledExperimental(true)
+        }
+        if (Platform.OS === 'android') {
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+        }
+        setKeyboardHeight(0)
+      },
+    )
+    return () => {
+      showSub.remove()
+      hideSub.remove()
+    }
+  }, [])
+
   const handleClose = (): void => {
+    if (imported !== undefined) {
+      clearQueue()
+    }
     clearDraft(scope)
     onClose()
   }
@@ -147,66 +194,100 @@ function Composer({
   return (
     <View
       accessibilityLabel={editing ? 'Edit card' : 'New card'}
-      className="gap-5 bg-surface pb-10"
+      style={{
+        paddingBottom: Platform.OS === 'android' ? keyboardHeight : 0,
+      }}
+      className="flex-1 bg-surface"
     >
-      {!editing && createdCount > 0 && (
-        <View className="flex-row items-center justify-between rounded-xl border border-primary/20 bg-primary/10 px-4 py-2.5">
-          <Text className="text-xs font-bold text-primary">
-            ✓ {createdCount} {createdCount === 1 ? 'card' : 'cards'} added to this set
-          </Text>
-          <Button label="Done" size="md" variant="outline" onPress={handleClose} />
-        </View>
-      )}
-
-      {imported !== undefined && (
-        <Text className="text-sm font-medium text-muted-foreground">
-          {`From your scan — card ${String(imported.index + 1)} of ${String(imported.total)}`}
-        </Text>
-      )}
-
-      {(errors.general !== null || fieldError !== undefined) && (
-        <View accessibilityRole="alert" className="flex-row items-start gap-1.5">
-          <AlertIcon color={warning} size={16} />
-          <Text className="flex-1 text-sm text-warning">{errors.general ?? fieldError}</Text>
-        </View>
-      )}
-
-      <HighlightEditor draft={draft} />
-
-      <View className="gap-3">
-        <Button
-          label={pending ? 'Saving…' : editing ? 'Save card' : 'Add card'}
-          size="lg"
-          loading={pending}
-          disabled={!ready}
-          onPress={() => {
-            void submit(true)
-          }}
-        />
-
-        {imported === undefined ? (
-          <Button
-            label={editing ? 'Cancel' : createdCount > 0 ? 'Done adding cards' : 'Cancel'}
-            variant="ghost"
-            disabled={pending}
-            onPress={handleClose}
-          />
-        ) : (
-          <>
-            <Button label="Skip this one" variant="ghost" disabled={pending} onPress={advance} />
-            <Button
-              label="Stop importing"
-              variant="ghost"
-              disabled={pending}
-              onPress={clearQueue}
-            />
-          </>
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="p-4 gap-5 pb-6"
+        keyboardShouldPersistTaps="handled"
+      >
+        {!editing && createdCount > 0 && (
+          <View className="flex-row items-center justify-between rounded-xl border border-primary/20 bg-primary/10 px-4 py-2.5">
+            <Text className="text-xs font-bold text-primary">
+              ✓ {createdCount} {createdCount === 1 ? 'card' : 'cards'} added to this set
+            </Text>
+            <Button label="Done" size="md" variant="outline" onPress={handleClose} />
+          </View>
         )}
+
+        {imported !== undefined && (
+          <Text className="text-sm font-medium text-muted-foreground">
+            {`From your scan — card ${String(imported.index + 1)} of ${String(imported.total)}`}
+          </Text>
+        )}
+
+        {(errors.general !== null || fieldError !== undefined) && (
+          <View accessibilityRole="alert" className="flex-row items-start gap-1.5">
+            <AlertIcon color={warning} size={16} />
+            <Text className="flex-1 text-sm text-warning">{errors.general ?? fieldError}</Text>
+          </View>
+        )}
+
+        <HighlightEditor draft={draft} />
 
         {draft.answers.length === 0 && (
           <Text className="text-sm text-muted-foreground">
             A card with no blanks is still worth saving — you can highlight later.
           </Text>
+        )}
+      </ScrollView>
+
+      {/* ── Sticky Action Buttons in Single Row Above Keyboard ── */}
+      <View
+        style={{
+          paddingBottom: keyboardHeight > 0 ? 12 : Math.max(12, insets.bottom),
+        }}
+        className="flex-row items-center gap-3 border-t border-border bg-surface px-4 pt-3 shadow-lg shadow-black/10"
+      >
+        {imported === undefined ? (
+          <>
+            <View className="flex-1">
+              <Button
+                label={editing ? 'Cancel' : createdCount > 0 ? 'Done' : 'Cancel'}
+                variant="outline"
+                size="lg"
+                disabled={pending}
+                onPress={handleClose}
+              />
+            </View>
+            <View className="flex-1">
+              <Button
+                label={pending ? 'Saving…' : editing ? 'Save card' : 'Add card'}
+                size="lg"
+                loading={pending}
+                disabled={!ready}
+                onPress={() => {
+                  void submit(true)
+                }}
+              />
+            </View>
+          </>
+        ) : (
+          <>
+            <View className="flex-1">
+              <Button
+                label="Skip"
+                variant="outline"
+                size="lg"
+                disabled={pending}
+                onPress={advance}
+              />
+            </View>
+            <View className="flex-1">
+              <Button
+                label={pending ? 'Saving…' : 'Add card'}
+                size="lg"
+                loading={pending}
+                disabled={!ready}
+                onPress={() => {
+                  void submit(true)
+                }}
+              />
+            </View>
+          </>
         )}
       </View>
     </View>
@@ -254,7 +335,7 @@ export function CardComposer({
 
   if (imported === undefined && (restored === undefined || (editing && card.isPending))) {
     return (
-      <View className="items-center rounded-xl border border-border bg-surface p-8">
+      <View className="flex-1 items-center justify-center bg-surface p-8">
         <ActivityIndicator accessibilityLabel="Loading the editor" />
       </View>
     )
@@ -262,7 +343,7 @@ export function CardComposer({
 
   if (editing && card.data === undefined) {
     return (
-      <View className="gap-3 rounded-xl border border-border bg-surface p-5">
+      <View className="flex-1 gap-3 bg-surface p-5">
         <Text className="text-sm text-warning">That card could not be loaded.</Text>
         <Button label="Close" variant="outline" onPress={onClose} className="self-start" />
       </View>
