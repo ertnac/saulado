@@ -286,21 +286,6 @@ describe('GET /api/search', () => {
     expect(body.items.map((item) => item.label)).toEqual([MITOCHONDRIA_PARAGRAPH])
   })
 
-  it('requires every tag, not any of them', async () => {
-    /*
-      `@>` ("contains all"), not `&&` ("overlaps any"). Chips are a narrowing:
-      adding a second one must return a subset of what one returned, or the
-      filter does the opposite of what the UI implies.
-    */
-    const { token } = await seedLibrary('search-tags')
-
-    const one = await search(token, '?tags=core')
-    const two = await search(token, '?tags=core&tags=exam')
-
-    expect(one.total).toBe(2)
-    expect(two.items.map((item) => item.label)).toEqual([CPU_PARAGRAPH])
-  })
-
   it('includes cards that have never been studied', async () => {
     /*
       The regression guard for the LEFT JOIN. `card_schedules.user_id` belongs in

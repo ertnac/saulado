@@ -27,7 +27,7 @@ export interface RenderableCard {
   id: string
   studySetId: string
   paragraph: string
-  tags: string[]
+  tags?: string[]
   answers: { startOffset: number; endOffset: number; answerText: string; altAnswers: string[] }[]
 }
 
@@ -55,7 +55,7 @@ export function toSessionCard(
     studySetId: card.studySetId,
     segments,
     blankCount: countBlanks(segments),
-    tags: card.tags,
+    tags: card.tags ?? [],
     isNew: options.isNew,
     isLeech: options.lapses >= LEECH_THRESHOLD,
     blankOptions,
@@ -95,7 +95,6 @@ export async function loadSessionCards(
         id: true,
         studySetId: true,
         paragraph: true,
-        tags: true,
         answers: {
           orderBy: { ordinal: 'asc' },
           select: {

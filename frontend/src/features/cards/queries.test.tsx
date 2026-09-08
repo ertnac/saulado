@@ -107,13 +107,8 @@ function seedSets(client: QueryClient, archived: boolean, ...pages: StudySet[][]
   })
 }
 
-function seedCards(
-  client: QueryClient,
-  setId: string,
-  tags: string[],
-  ...pages: StudyCardSummary[][]
-): void {
-  client.setQueryData<InfiniteData<CardsResponse>>(cardKeys.list(setId, tags), {
+function seedCards(client: QueryClient, setId: string, ...pages: StudyCardSummary[][]): void {
+  client.setQueryData<InfiniteData<CardsResponse>>(cardKeys.list(setId), {
     pages: pages.map((items, index) => ({
       items,
       nextCursor: index < pages.length - 1 ? `cursor-${String(index)}` : null,
@@ -128,8 +123,8 @@ function cachedSets(client: QueryClient, archived: boolean): StudySet[] {
   )
 }
 
-function cachedCards(client: QueryClient, setId: string, tags: string[] = []): StudyCardSummary[] {
-  return flattenPages(client.getQueryData<InfiniteData<CardsResponse>>(cardKeys.list(setId, tags)))
+function cachedCards(client: QueryClient, setId: string): StudyCardSummary[] {
+  return flattenPages(client.getQueryData<InfiniteData<CardsResponse>>(cardKeys.list(setId)))
 }
 
 beforeEach(() => {
@@ -264,14 +259,9 @@ describe('useDeleteSet', () => {
   })
 
   it('drops the cards cached for a deleted set instead of refetching them', async () => {
-    // An invalidate here would fire a request per cached tag filter, each of them
-    // a 404 for a set that no longer exists.
     const client = makeClient()
     seedSets(client, false, [set()])
-    seedCards(client, 'set-1', [], [summary()])
-    // A tag-filtered list as well: a key filter ending in an empty tag array
-    // matches only the unfiltered list, so this is the one that catches it.
-    seedCards(client, 'set-1', ['computing'], [summary()])
+    seedCards(client, 'set-1', [summary()])
     mocked.deleteSet.mockResolvedValue(undefined)
 
     const { result } = renderHook(() => useDeleteSet(), { wrapper: wrapper(client) })
@@ -281,7 +271,6 @@ describe('useDeleteSet', () => {
       expect(result.current.isSuccess).toBe(true)
     })
     expect(client.getQueryData(cardKeys.list('set-1'))).toBeUndefined()
-    expect(client.getQueryData(cardKeys.list('set-1', ['computing']))).toBeUndefined()
   })
 
   it('restores the set when the delete fails', async () => {
@@ -333,7 +322,7 @@ describe('useCreateCard', () => {
     // would have to invent that text, which is the one thing the client is not
     // trusted to supply.
     const client = makeClient()
-    seedCards(client, 'set-1', [], [summary()])
+    seedCards(client, 'set-1', [summary()])
     mocked.createCard.mockReturnValue(new Promise<CardResponse>(() => undefined))
 
     const { result } = renderHook(() => useCreateCard('set-1'), { wrapper: wrapper(client) })
@@ -349,7 +338,7 @@ describe('useCreateCard', () => {
 describe('useUpdateCard', () => {
   it('shows the new paragraph in the list before the server answers', async () => {
     const client = makeClient()
-    seedCards(client, 'set-1', [], [summary()])
+    seedCards(client, 'set-1', [summary()])
     mocked.updateCard.mockReturnValue(new Promise<CardResponse>(() => undefined))
 
     const { result } = renderHook(() => useUpdateCard('card-1'), { wrapper: wrapper(client) })
@@ -362,7 +351,7 @@ describe('useUpdateCard', () => {
 
   it('keeps the answer count in step with an edited answer list', async () => {
     const client = makeClient()
-    seedCards(client, 'set-1', [], [summary({ answerCount: 1 })])
+    seedCards(client, 'set-1', [summary({ answerCount: 1 })])
     mocked.updateCard.mockReturnValue(new Promise<CardResponse>(() => undefined))
 
     const { result } = renderHook(() => useUpdateCard('card-1'), { wrapper: wrapper(client) })
@@ -403,7 +392,7 @@ describe('useUpdateCard', () => {
 
   it('rolls the list back when the edit fails', async () => {
     const client = makeClient()
-    seedCards(client, 'set-1', [], [summary()])
+    seedCards(client, 'set-1', [summary()])
     mocked.updateCard.mockRejectedValue(new Error('offline'))
 
     const { result } = renderHook(() => useUpdateCard('card-1'), { wrapper: wrapper(client) })
@@ -420,7 +409,7 @@ describe('useDeleteCard', () => {
   it('removes the card and lowers the set count', async () => {
     const client = makeClient()
     seedSets(client, false, [set({ cardCount: 2 })])
-    seedCards(client, 'set-1', [], [summary(), summary({ id: 'card-2' })])
+    seedCards(client, 'set-1', [summary(), summary({ id: 'card-2' })])
     mocked.deleteCard.mockResolvedValue(undefined)
 
     const { result } = renderHook(() => useDeleteCard('set-1'), { wrapper: wrapper(client) })
@@ -448,24 +437,9 @@ describe('useDeleteCard', () => {
     expect(cachedSets(client, false)[0]?.cardCount).toBe(0)
   })
 
-  it('removes the card from every tag filter, not just the active one', async () => {
-    const client = makeClient()
-    seedCards(client, 'set-1', [], [summary()])
-    seedCards(client, 'set-1', ['computing'], [summary()])
-    mocked.deleteCard.mockResolvedValue(undefined)
-
-    const { result } = renderHook(() => useDeleteCard('set-1'), { wrapper: wrapper(client) })
-    result.current.mutate('card-1')
-
-    await waitFor(() => {
-      expect(cachedCards(client, 'set-1', ['computing'])).toEqual([])
-    })
-    expect(cachedCards(client, 'set-1')).toEqual([])
-  })
-
   it('restores the card when the delete fails', async () => {
     const client = makeClient()
-    seedCards(client, 'set-1', [], [summary()])
+    seedCards(client, 'set-1', [summary()])
     mocked.deleteCard.mockRejectedValue(new Error('offline'))
 
     const { result } = renderHook(() => useDeleteCard('set-1'), { wrapper: wrapper(client) })
@@ -479,21 +453,8 @@ describe('useDeleteCard', () => {
 })
 
 describe('cardKeys', () => {
-  it('gives the same key regardless of tag order', () => {
-    // `hasEvery` makes ?tag=a&tag=b and ?tag=b&tag=a the same request, so they
-    // must not be two cache entries that each refetch when the chips reorder.
-    expect(cardKeys.list('set-1', ['b', 'a'])).toEqual(cardKeys.list('set-1', ['a', 'b']))
-  })
-
-  it('does not reorder the caller array', () => {
-    const tags = ['b', 'a']
-    cardKeys.list('set-1', tags)
-
-    expect(tags).toEqual(['b', 'a'])
-  })
-
-  it('separates different tag filters', () => {
-    expect(cardKeys.list('set-1', ['a'])).not.toEqual(cardKeys.list('set-1', ['a', 'b']))
+  it('builds a key for the set list', () => {
+    expect(cardKeys.list('set-1')).toEqual(['cards', 'list', 'set-1'])
   })
 })
 

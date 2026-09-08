@@ -104,13 +104,6 @@ function filterFragments(userId: string, params: SearchParams, today: string): P
     fragments.push(Prisma.sql`c.study_set_id = ${params.setId}::uuid`)
   }
 
-  if (params.tags.length > 0) {
-    // `@>` is "contains all of", not `&&` ("overlaps any of"). Two tags are a
-    // narrowing, not a widening — picking `anatomy` and `exam` should give the
-    // cards in both, which is what the filter chips look like they mean.
-    fragments.push(Prisma.sql`c.tags @> ${params.tags}::text[]`)
-  }
-
   if (params.createdFrom !== undefined) {
     fragments.push(Prisma.sql`c.created_at >= ${dayKeyToDate(params.createdFrom)}`)
   }
@@ -213,7 +206,7 @@ async function runSearch(
         c.study_set_id,
         s.title AS set_title,
         s.archived_at AS set_archived,
-        c.tags,
+        ARRAY[]::text[] AS tags,
         c.paragraph,
         sched.due_at,
         c.updated_at,
@@ -262,7 +255,7 @@ async function runBrowse(
       c.study_set_id,
       s.title AS set_title,
       s.archived_at AS set_archived,
-      c.tags,
+      ARRAY[]::text[] AS tags,
       c.paragraph,
       NULL::text AS headline,
       sched.due_at,

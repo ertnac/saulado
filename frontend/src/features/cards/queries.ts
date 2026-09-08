@@ -79,8 +79,7 @@ export const cardKeys = {
    * refetching whenever the chip order changes. Copied before sorting: sorting
    * the caller's array in place would reorder their UI as a side effect.
    */
-  list: (setId: string, tags: readonly string[] = []) =>
-    [...cardKeys.lists(), setId, [...tags].sort()] as const,
+  list: (setId: string) => [...cardKeys.lists(), setId] as const,
   details: () => [...cardKeys.all, 'detail'] as const,
   detail: (id: string) => [...cardKeys.details(), id] as const,
 }
@@ -434,15 +433,12 @@ export function useDeleteSet() {
 
 // ── Card queries ────────────────────────────────────────────────────────────
 
-export function useCards(setId: string | undefined, tags: readonly string[] = []) {
+export function useCards(setId: string | undefined) {
   return useInfiniteQuery({
-    queryKey: cardKeys.list(setId ?? '', tags),
+    queryKey: cardKeys.list(setId ?? ''),
     queryFn: ({ pageParam }) =>
       api.listCards(setId as string, {
         cursor: pageParam,
-        // An empty array would serialise to no query params anyway, but sending
-        // `undefined` keeps the request identical to an unfiltered one.
-        tag: tags.length > 0 ? [...tags] : undefined,
       }),
     getNextPageParam: (last: CardsResponse) => last?.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
@@ -495,11 +491,10 @@ export function useCreateCard(
     mutationFn: (body: CreateCardRequest) => api.createCard(setId, body),
     onSuccess: (data) => {
       client.setQueryData<CardResponse>(cardKeys.detail(data.card.id), data)
-      // Every tag filter for this set is invalidated, not just the active one:
-      // the new card may carry a tag the user is currently filtered to.
       void client.invalidateQueries({ queryKey: cardKeys.lists() })
       shiftCardCount(client, setId, 1)
-      if (data.card.tags.length > 0) void client.invalidateQueries({ queryKey: tagKeys.all })
+      if (data.card.tags && data.card.tags.length > 0)
+        void client.invalidateQueries({ queryKey: tagKeys.all })
     },
   })
 }
@@ -529,7 +524,7 @@ export function useUpdateCard(id: string) {
             ? {
                 ...item,
                 paragraph: body.paragraph ?? item.paragraph,
-                tags: body.tags ?? item.tags,
+                tags: body.tags ?? item.tags ?? [],
                 answerCount: body.answers?.length ?? item.answerCount,
               }
             : item,

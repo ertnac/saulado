@@ -120,17 +120,6 @@ describe('POST /api/sets/:setId/cards', () => {
     expect(card.answers[0]?.altAnswers).toEqual(['processor', 'central processing unit'])
   })
 
-  it('normalises and de-duplicates tags', async () => {
-    const { token } = await registerTestUser(app)
-    const setId = await createSet(token)
-
-    const card = await createCard(token, setId, {
-      tags: ['Hardware', 'hardware', '  CPU  Design '],
-    })
-
-    expect(card.tags).toEqual(['hardware', 'cpu design'])
-  })
-
   it('rejects an offset past the end of the paragraph', async () => {
     const { token } = await registerTestUser(app)
     const setId = await createSet(token)
@@ -271,24 +260,6 @@ describe('GET /api/sets/:setId/cards', () => {
     expect(item).not.toHaveProperty('answers')
   })
 
-  /** `hasEvery`, not `hasSome`: more tags narrow the list rather than widening it. */
-  it('narrows by every tag given, not any', async () => {
-    const { token } = await registerTestUser(app)
-    const setId = await createSet(token)
-
-    const both = await createCard(token, setId, {
-      tags: ['hardware', 'memory'],
-    })
-    await createCard(token, setId, { tags: ['hardware'] })
-
-    const res = await request(app)
-      .get(`/api/sets/${setId}/cards?tag=hardware&tag=memory`)
-      .set('Authorization', `Bearer ${token}`)
-
-    const items = (res.body as { items: { id: string }[] }).items
-    expect(items.map((i) => i.id)).toEqual([both.id])
-  })
-
   it('paginates without skipping or repeating', async () => {
     const { token } = await registerTestUser(app)
     const setId = await createSet(token)
@@ -355,27 +326,20 @@ describe('GET /api/cards/:id', () => {
 })
 
 describe('PATCH /api/cards/:id', () => {
-  it('updates the tags without touching the answers', async () => {
-    /*
-      This used to patch the title. Cards have no title, so `tags` is the
-      remaining field that can be changed on its own — and the property being
-      guarded is the same one: a patch that does not carry a paragraph must
-      leave the derived answers exactly where they were anchored. Re-deriving
-      them against an unchanged paragraph would be invisible here but would
-      silently reset `answerText` for anything the offsets no longer cover.
-    */
+  it('moves the card to a different set without touching the answers', async () => {
     const { token } = await registerTestUser(app)
-    const setId = await createSet(token)
-    const card = await createCard(token, setId, { answers: [CPU, BRAIN] })
+    const set1 = await createSet(token, 'Set 1')
+    const set2 = await createSet(token, 'Set 2')
+    const card = await createCard(token, set1, { answers: [CPU, BRAIN] })
 
     const res = await request(app)
       .patch(`/api/cards/${card.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ tags: ['hardware'] })
+      .send({ studySetId: set2 })
 
     expect(res.status).toBe(200)
-    const updated = (res.body as { card: CardBody }).card
-    expect(updated.tags).toEqual(['hardware'])
+    const updated = (res.body as { card: CardBody & { studySetId: string } }).card
+    expect(updated.studySetId).toBe(set2)
     expect(updated.paragraph).toBe(PARAGRAPH)
     expect(updated.answers.map((a) => a.answerText)).toEqual(['CPU', 'brain'])
   })
@@ -531,33 +495,11 @@ describe('DELETE /api/sets/:id cascade', () => {
 })
 
 describe('GET /api/tags', () => {
-  it('counts the caller’s tags, most used first', async () => {
+  it('returns an empty tags list', async () => {
     const { token } = await registerTestUser(app)
-    const setId = await createSet(token)
-
-    await createCard(token, setId, { tags: ['hardware', 'memory'] })
-    await createCard(token, setId, { tags: ['hardware'] })
-
     const res = await request(app).get('/api/tags').set('Authorization', `Bearer ${token}`)
-
     expect(res.status).toBe(200)
-    expect((res.body as { tags: { tag: string; count: number }[] }).tags).toEqual([
-      { tag: 'hardware', count: 2 },
-      { tag: 'memory', count: 1 },
-    ])
-  })
-
-  it('does not leak another user’s tags', async () => {
-    const owner = await registerTestUser(app, 'owner')
-    const other = await registerTestUser(app, 'other')
-
-    const theirSet = await createSet(other.token, 'Theirs')
-    await createCard(other.token, theirSet, { tags: ['secret-topic'] })
-
-    const res = await request(app).get('/api/tags').set('Authorization', `Bearer ${owner.token}`)
-
-    expect(res.status).toBe(200)
-    expect((res.body as { tags: { tag: string }[] }).tags).toEqual([])
+    expect(res.body).toEqual({ tags: [] })
   })
 
   it('requires authentication', async () => {

@@ -27,7 +27,6 @@ import {
   useDeleteCard,
   useSet,
   useSets,
-  useTags,
   useUpdateSet,
 } from './queries'
 
@@ -245,14 +244,7 @@ function CardRow({
         {cardLabel(card.paragraph)}
       </h3>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/30">
-        <ul className="flex flex-wrap gap-1.5">
-          {card.tags.map((tag) => (
-            <li key={tag}>
-              <Badge tone="sand">{tag}</Badge>
-            </li>
-          ))}
-        </ul>
+      <div className="flex flex-wrap items-center justify-end gap-2 pt-1 border-t border-border/30">
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="sm" onClick={onMove}>
             Move
@@ -329,7 +321,6 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
   // param that is still in the URL.
   const linked = useState(() => params.get(CARD_PARAM))[0]
 
-  const [tags, setTags] = useState<string[]>([])
   const [composing, setComposing] = useState<Composing>(
     linked === null ? null : { kind: 'edit', cardId: linked, inRow: false },
   )
@@ -343,15 +334,13 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
 
   const set = useSet(setId)
   const children = useSets({ parent: setId })
-  const cards = useCards(setId, tags)
-  const allTags = useTags()
+  const cards = useCards(setId)
   const createSet = useCreateSet()
   const update = useUpdateSet()
   const remove = useDeleteCard(setId)
 
   const items = flattenPages(cards.data)
   const childSets = flattenPages(children.data)
-  const filtering = tags.length > 0
   // Pulled out of `set.data` once: TypeScript drops narrowing on a property
   // access inside a callback, so `set.data.set.id` in the dialog's async
   // `onSubmit` would not compile even directly under a `set.data &&` guard.
@@ -364,12 +353,6 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
   const completionRate =
     totalCards > 0 ? Math.min(100, Math.round(((totalCards - waiting) / totalCards) * 100)) : 0
   const masteryRate = totalCards > 0 ? (waiting === 0 ? 100 : Math.max(60, 100 - waiting * 5)) : 0
-
-  const toggleTag = (tag: string): void => {
-    setTags((selected) =>
-      selected.includes(tag) ? selected.filter((item) => item !== tag) : [...selected, tag],
-    )
-  }
 
   /**
    * Closes whichever composer is open, and drops `?card=` with it.
@@ -671,68 +654,6 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
         </Button>
       )}
 
-      {allTags.data && allTags.data.tags.length > 0 && (
-        <div className="space-y-1.5">
-          <p id="tag-filter-label" className="text-sm font-medium">
-            Filter by tag
-          </p>
-          {/*
-            `group` + `aria-pressed` rather than checkboxes: these are toggles
-            that filter immediately, and a checkbox implies a form to submit.
-          */}
-          <div
-            role="group"
-            aria-labelledby="tag-filter-label"
-            className="flex flex-wrap items-center gap-1.5"
-          >
-            {allTags.data.tags.map(({ tag, count }) => {
-              const active = tags.includes(tag)
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => {
-                    toggleTag(tag)
-                  }}
-                  className={cn(
-                    'inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-sm font-medium',
-                    'transition-[background-color,color,box-shadow] duration-150',
-                    active
-                      ? 'bg-primary text-primary-foreground shadow-soft'
-                      : 'bg-surface-muted text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {tag} <span className="tabular-nums opacity-70">{count}</span>
-                </button>
-              )
-            })}
-
-            {filtering && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setTags([])
-                }}
-              >
-                Clear
-              </Button>
-            )}
-          </div>
-          {/*
-            Says "all of", because the API matches with `hasEvery` — two chips
-            narrow the list rather than widening it, which is the opposite of
-            what most filter bars do and worth stating outright.
-          */}
-          {tags.length > 1 && (
-            <p className="text-xs text-muted-foreground">
-              Showing cards with all of: {tags.join(', ')}.
-            </p>
-          )}
-        </div>
-      )}
-
       {cards.isPending ? (
         <ul className="space-y-3" aria-busy="true">
           {[0, 1, 2].map((key) => (
@@ -759,40 +680,21 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
         </Card>
       ) : items.length === 0 ? (
         <Card tone="dashed" className="p-8 text-center">
-          <p className="font-medium">{filtering ? 'No matching cards' : 'No cards yet'}</p>
+          <p className="font-medium">No cards yet</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-            {filtering
-              ? 'No card in this set carries every tag you picked.'
-              : 'Paste a paragraph, highlight the words worth recalling, and Saulado keeps the sentence around them.'}
+            Paste a paragraph, highlight the words worth recalling, and Saulado keeps the sentence
+            around them.
           </p>
-          {/*
-            Clearing the filter is the fix when filtering; creating a card is
-            not. The prompt to write one is dropped once the composer is already
-            open above — it would be a button pointing at a box on screen.
-          */}
-          {filtering ? (
+          {composing === null && queue === null && (
             <Button
               className="mt-5"
-              variant="soft"
               onClick={() => {
-                setTags([])
+                setComposing({ kind: 'new' })
               }}
             >
-              Clear filter
+              <PlusIcon />
+              Add your first card
             </Button>
-          ) : (
-            composing === null &&
-            queue === null && (
-              <Button
-                className="mt-5"
-                onClick={() => {
-                  setComposing({ kind: 'new' })
-                }}
-              >
-                <PlusIcon />
-                Add your first card
-              </Button>
-            )
           )}
         </Card>
       ) : (

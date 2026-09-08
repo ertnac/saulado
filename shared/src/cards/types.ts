@@ -67,7 +67,7 @@ export interface StudyCard {
   studySetId: string
   paragraph: string
   answers: CardAnswer[]
-  tags: string[]
+  tags?: string[]
   createdAt: string
   updatedAt: string
 }

@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import type { CardsResponse, StudyCardSummary, StudySet, TagsResponse } from '@saulado/shared'
+import type { CardsResponse, StudyCardSummary, StudySet } from '@saulado/shared'
 import type { ReactElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '@/services/cards'
@@ -57,13 +57,6 @@ function cardsPage(items: StudyCardSummary[]): CardsResponse {
   return { items, nextCursor: null }
 }
 
-const TAGS: TagsResponse = {
-  tags: [
-    { tag: 'computing', count: 3 },
-    { tag: 'biology', count: 1 },
-  ],
-}
-
 function renderPage(): ReactElement {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -85,7 +78,6 @@ beforeEach(() => {
   mocked.getSet.mockResolvedValue({ set: set() })
   mocked.listSets.mockResolvedValue({ items: [], nextCursor: null })
   mocked.listCards.mockResolvedValue(cardsPage([summary()]))
-  mocked.listTags.mockResolvedValue(TAGS)
   mockedStudy.getDueCounts.mockResolvedValue({
     counts: [{ studySetId: 'set-1', due: 3, newCards: 1 }],
     totalDue: 3,
@@ -129,95 +121,6 @@ describe('the card list', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('That set could not be loaded')
     })
-  })
-})
-
-describe('the tag filter', () => {
-  it('sends the tag to the server', async () => {
-    const user = userEvent.setup()
-    render(renderPage())
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'computing 3' })).toBeInTheDocument()
-    })
-    await user.click(screen.getByRole('button', { name: 'computing 3' }))
-
-    await waitFor(() => {
-      expect(mocked.listCards).toHaveBeenCalledWith(
-        'set-1',
-        expect.objectContaining({ tag: ['computing'] }),
-      )
-    })
-  })
-
-  it('sends both tags when two chips are picked', async () => {
-    const user = userEvent.setup()
-    render(renderPage())
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'computing 3' })).toBeInTheDocument()
-    })
-    await user.click(screen.getByRole('button', { name: 'computing 3' }))
-    await user.click(screen.getByRole('button', { name: 'biology 1' }))
-
-    await waitFor(() => {
-      expect(mocked.listCards).toHaveBeenCalledWith(
-        'set-1',
-        expect.objectContaining({ tag: ['computing', 'biology'] }),
-      )
-    })
-  })
-
-  it('says that two tags narrow rather than widen the list', async () => {
-    const user = userEvent.setup()
-    render(renderPage())
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'computing 3' })).toBeInTheDocument()
-    })
-    await user.click(screen.getByRole('button', { name: 'computing 3' }))
-    await user.click(screen.getByRole('button', { name: 'biology 1' }))
-
-    expect(screen.getByText(/all of: computing, biology/)).toBeInTheDocument()
-  })
-
-  it('marks the active chips as pressed', async () => {
-    const user = userEvent.setup()
-    render(renderPage())
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'computing 3' })).toBeInTheDocument()
-    })
-    await user.click(screen.getByRole('button', { name: 'computing 3' }))
-
-    expect(screen.getByRole('button', { name: 'computing 3' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
-    expect(screen.getByRole('button', { name: 'biology 1' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    )
-  })
-
-  it('offers to clear the filter, not to create a card, when nothing matches', async () => {
-    // Creating a card would not make it appear in a filtered list. Clearing is
-    // the fix; offering the other one sends the user down a dead end.
-    const user = userEvent.setup()
-    render(renderPage())
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'computing 3' })).toBeInTheDocument()
-    })
-
-    mocked.listCards.mockResolvedValue(cardsPage([]))
-    await user.click(screen.getByRole('button', { name: 'computing 3' }))
-
-    await waitFor(() => {
-      expect(screen.getByText('No matching cards')).toBeInTheDocument()
-    })
-    expect(screen.getByRole('button', { name: 'Clear filter' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Add your first card' })).not.toBeInTheDocument()
   })
 })
 

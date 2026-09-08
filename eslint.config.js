@@ -12,6 +12,8 @@ export default tseslint.config(
       'backend/src/generated/**',
       'frontend/postcss.config.js',
       '**/*.config.js',
+      'mobile/android/**',
+      'mobile/assets/**',
     ],
   },
 

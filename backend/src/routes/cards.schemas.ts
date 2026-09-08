@@ -9,11 +9,8 @@ import {
   PARAGRAPH_MIN_CODE_POINTS,
   SET_COLORS,
   SET_TITLE_MAX_LENGTH,
-  TAGS_MAX_PER_CARD,
-  TAG_MAX_LENGTH,
   codePointLength,
   normalizeParagraph,
-  normalizeTags,
 } from '@saulado/shared'
 
 /**
@@ -126,25 +123,10 @@ const answers = z
   .array(answerInput)
   .max(ANSWERS_MAX_PER_CARD, `A card can hold at most ${String(ANSWERS_MAX_PER_CARD)} blanks.`)
 
-/**
- * Tags, canonicalised on the way in.
- *
- * `normalizeTags` lowercases, collapses inner whitespace and de-duplicates, so
- * "Cell Biology" and "cell  biology" cannot become two rows in the user's
- * autocomplete list. The cap is applied *after* normalisation — 20 tags that
- * collapse to 12 is a fine request, and counting first would reject it.
- */
-const tags = z
-  .array(z.string().max(TAG_MAX_LENGTH, `Keep tags under ${String(TAG_MAX_LENGTH)} characters.`))
-  .transform(normalizeTags)
-  .refine((list) => list.length <= TAGS_MAX_PER_CARD, {
-    message: `Up to ${String(TAGS_MAX_PER_CARD)} tags per card.`,
-  })
-
 export const createCardSchema = z.object({
   paragraph,
   answers,
-  tags: tags.optional(),
+  tags: z.any().optional(),
 })
 
 /**
@@ -161,7 +143,7 @@ export const updateCardSchema = z
   .object({
     paragraph: paragraph.optional(),
     answers: answers.optional(),
-    tags: tags.optional(),
+    tags: z.any().optional(),
     studySetId: z.string().uuid('Not a valid set id.').optional(),
   })
   .refine((body) => Object.keys(body).length > 0, {
@@ -229,14 +211,10 @@ export const listSetsQuerySchema = listQuerySchema.extend({
 })
 
 export const listCardsQuerySchema = listQuerySchema.extend({
-  /** Repeatable: `?tag=anatomy&tag=biology` narrows to cards carrying all of them. */
   tag: z
-    .union([z.string(), z.array(z.string())])
+    .any()
     .optional()
-    .transform((value) => {
-      if (value === undefined) return []
-      return normalizeTags(Array.isArray(value) ? value : [value])
-    }),
+    .transform(() => []),
 })
 
 export type CreateSetBody = z.infer<typeof createSetSchema>

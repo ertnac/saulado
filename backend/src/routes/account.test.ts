@@ -574,7 +574,7 @@ describe('GET /api/account/export', () => {
     expect(body.sets).toHaveLength(1)
     expect(body.sets[0]?.cards).toHaveLength(1)
     expect(body.sets[0]?.cards[0]?.answers[0]?.answerText).toBe('CPU')
-    expect(body.sets[0]?.cards[0]?.tags).toEqual(['exam'])
+    expect(body.sets[0]?.cards[0]?.tags).toEqual([])
   })
 
   it('never contains a password hash', async () => {

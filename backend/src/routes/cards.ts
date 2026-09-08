@@ -40,7 +40,6 @@ const summarySelect = {
   id: true,
   studySetId: true,
   paragraph: true,
-  tags: true,
   createdAt: true,
   updatedAt: true,
   _count: { select: { answers: true } },
@@ -60,7 +59,7 @@ setCardsRouter.get(
   '/',
   validateQuery(listCardsQuerySchema),
   asyncHandler(async (req, res) => {
-    const { cursor, limit, tag } = req.query as unknown as ListCardsQuery
+    const { cursor, limit } = req.query as unknown as ListCardsQuery
     const setId = req.params.setId ?? ''
 
     // Ownership is checked before the list query rather than folded into it, so
@@ -80,9 +79,6 @@ setCardsRouter.get(
     const rows = await prisma.studyCard.findMany({
       where: {
         studySetId: setId,
-        // `hasEvery`, not `hasSome`: multiple tags narrow the list rather than
-        // widening it. Served by the GIN index via `@>`.
-        ...(tag.length > 0 ? { tags: { hasEvery: tag } } : {}),
         ...(decoded ? keysetWhere(decoded, 'createdAt') : {}),
       },
       select: summarySelect,
@@ -108,7 +104,7 @@ setCardsRouter.post(
   '/',
   validateBody(createCardSchema),
   asyncHandler(async (req, res) => {
-    const { paragraph, answers, tags } = req.body as CreateCardBody
+    const { paragraph, answers } = req.body as CreateCardBody
     const setId = req.params.setId ?? ''
 
     const derived = deriveAnswers(paragraph, answers)
@@ -128,7 +124,6 @@ setCardsRouter.post(
         data: {
           studySetId: setId,
           paragraph,
-          tags: tags ?? [],
           answers: { create: derived.answers },
         },
         include: cardInclude,
@@ -216,7 +211,6 @@ cardsRouter.patch(
       await tx.studyCard.update({
         where: { id: cardId },
         data: {
-          ...('tags' in body ? { tags: body.tags ?? [] } : {}),
           ...(body.studySetId ? { studySetId: body.studySetId } : {}),
           ...(rewriting ? { paragraph: body.paragraph } : {}),
         },
@@ -268,33 +262,7 @@ cardsRouter.delete(
 export const tagsRouter: Router = Router()
 tagsRouter.use(requireAuth)
 
-tagsRouter.get(
-  '/',
-  asyncHandler(async (req, res) => {
-    /**
-     * `unnest` in raw SQL rather than reading every card and counting in JS.
-     * Tags live in a `TEXT[]` column, so Prisma has no groupBy for their
-     * elements; fetching all of a user's cards to count tags client-side would
-     * scale with the library, not with the number of distinct tags.
-     *
-     * Parameterised — `$queryRaw` with a tagged template sends `userId` as a
-     * bound parameter, not string-interpolated SQL.
-     */
-    const rows = await prisma.$queryRaw<{ tag: string; count: bigint }[]>`
-      SELECT tag, COUNT(*)::bigint AS count
-      FROM study_cards c
-      JOIN study_sets s ON s.id = c.study_set_id
-      CROSS JOIN LATERAL unnest(c.tags) AS tag
-      WHERE s.user_id = ${requireUserId(req)}::uuid
-      GROUP BY tag
-      ORDER BY count DESC, tag ASC
-    `
-
-    const body: TagsResponse = {
-      // `COUNT(*)` comes back as bigint, which `JSON.stringify` throws on.
-      tags: rows.map((row) => ({ tag: row.tag, count: Number(row.count) })),
-    }
-
-    res.json(body)
-  }),
-)
+tagsRouter.get('/', (_req, res) => {
+  const body: TagsResponse = { tags: [] }
+  res.json(body)
+})

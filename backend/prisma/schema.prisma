@@ -221,7 +221,6 @@ model StudyCard {
   id         String   @id @default(uuid()) @db.Uuid
   studySetId String   @map("study_set_id") @db.Uuid
   paragraph  String
-  tags       String[] @default([])
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
@@ -239,9 +238,6 @@ model StudyCard {
   sessionCards StudySessionCard[]
 
   @@index([studySetId, createdAt(sort: Desc)], map: "idx_cards_set")
-  /// GIN, not btree: btree cannot answer `tags && '{anatomy}'`. Declared here so
-  /// Prisma owns it and `migrate diff` does not report it as drift.
-  @@index([tags(ops: ArrayOps)], map: "idx_cards_tags", type: Gin)
   @@map("study_cards")
 }
 

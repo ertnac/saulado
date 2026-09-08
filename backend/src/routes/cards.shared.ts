@@ -228,7 +228,6 @@ type CardRow = {
   id: string
   studySetId: string
   paragraph: string
-  tags: string[]
   createdAt: Date
   updatedAt: Date
   answers: AnswerRow[]
@@ -247,7 +246,7 @@ export function toStudyCard(row: CardRow): StudyCard {
       altAnswers: answer.altAnswers,
       ordinal: answer.ordinal,
     })),
-    tags: row.tags,
+    tags: [],
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
@@ -268,7 +267,7 @@ export function toStudyCardSummary(
     id: row.id,
     studySetId: row.studySetId,
     paragraph: row.paragraph,
-    tags: row.tags,
+    tags: [],
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     answerCount: row._count.answers,

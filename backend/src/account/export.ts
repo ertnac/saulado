@@ -155,7 +155,7 @@ function toExportedCard(card: CardWithRelations): ExportedCard {
       altAnswers: answer.altAnswers,
       ordinal: answer.ordinal,
     })),
-    tags: card.tags,
+    tags: [],
     createdAt: card.createdAt.toISOString(),
     updatedAt: card.updatedAt.toISOString(),
     schedule: schedule ? toExportedSchedule(schedule) : null,
