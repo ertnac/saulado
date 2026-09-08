@@ -129,7 +129,17 @@ export function generatePdfViewerHtml({
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes" />
   <title>${title}</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="file:///android_asset/pdfjs/pdf.min.js"></script>
+  <script>
+    if (typeof pdfjsLib === 'undefined') {
+      document.write('<script src="pdfjs/pdf.min.js"><\\/script>');
+    }
+  </script>
+  <script>
+    if (typeof pdfjsLib === 'undefined') {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"><\\/script>');
+    }
+  </script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -191,8 +201,9 @@ export function generatePdfViewerHtml({
     }
     #loading {
       padding: 40px 20px;
-      font-size: 16px;
+      font-size: 15px;
       text-align: center;
+      line-height: 1.5;
     }
   </style>
 </head>
@@ -209,6 +220,16 @@ export function generatePdfViewerHtml({
   </div>
 
   <script>
+    if (typeof pdfjsLib !== 'undefined') {
+      try {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'file:///android_asset/pdfjs/pdf.worker.min.js';
+      } catch (e) {
+        try {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs/pdf.worker.min.js';
+        } catch (e2) {}
+      }
+    }
+
     const pdfData = atob("${pdfBase64}");
     const uint8Array = new Uint8Array(pdfData.length);
     for (let i = 0; i < pdfData.length; i++) {
@@ -221,8 +242,6 @@ export function generatePdfViewerHtml({
     let pageNumPending = null;
     const canvas = document.getElementById('pdf-canvas');
     const ctx = canvas.getContext('2d');
-
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     function renderPage(num) {
       pageRendering = true;
@@ -244,6 +263,9 @@ export function generatePdfViewerHtml({
             pageNumPending = null;
           }
         });
+      }).catch(function(err) {
+        pageRendering = false;
+        console.warn('Page render error:', err);
       });
 
       document.getElementById('current-page').textContent = num;
@@ -271,14 +293,20 @@ export function generatePdfViewerHtml({
       queueRenderPage(pageNum);
     }
 
-    pdfjsLib.getDocument({ data: uint8Array }).promise.then(function(pdf) {
-      pdfDoc = pdf;
-      document.getElementById('total-pages').textContent = pdf.numPages;
-      document.getElementById('loading').style.display = 'none';
-      renderPage(pageNum);
-    }).catch(function(error) {
-      document.getElementById('loading').textContent = 'Error rendering PDF: ' + error.message;
-    });
+    if (typeof pdfjsLib === 'undefined') {
+      document.getElementById('loading').innerHTML =
+        '<strong>Offline Visual Engine Initializing...</strong><br/><span style="font-size: 13px; opacity: 0.8;">You can also switch to <em>Reader</em> mode at the top for instant distraction-free reading.</span>';
+    } else {
+      pdfjsLib.getDocument({ data: uint8Array }).promise.then(function(pdf) {
+        pdfDoc = pdf;
+        document.getElementById('total-pages').textContent = pdf.numPages;
+        document.getElementById('loading').style.display = 'none';
+        renderPage(pageNum);
+      }).catch(function(error) {
+        document.getElementById('loading').innerHTML =
+          '<strong>Notice:</strong> Could not render visual canvas (' + error.message + ').<br/><span style="font-size: 13px;">Please switch to <em>Reader</em> mode in the top bar to read the extracted text.</span>';
+      });
+    }
   </script>
 </body>
 </html>`
@@ -286,7 +314,9 @@ export function generatePdfViewerHtml({
 
 export interface DocumentContentResult {
   html: string
+  readerHtml?: string
   extractedText: string
+  hasReaderMode?: boolean
 }
 
 /**
@@ -315,6 +345,7 @@ export async function loadDocumentContent(
     return {
       html: fullHtml,
       extractedText: rawTextResult.value || '',
+      hasReaderMode: false,
     }
   }
 
@@ -326,7 +357,7 @@ export async function loadDocumentContent(
       bytes[i] = binary.charCodeAt(i)
     }
 
-    // Extract text for reader mode & card creation
+    // Extract text for reader mode & card creation completely offline
     let extractedText = ''
     try {
       extractedText = extractTextFromPdfStream(bytes)
@@ -334,7 +365,24 @@ export async function loadDocumentContent(
       // Fallback
     }
 
-    // Generate viewer HTML with pdf.js canvas renderer
+    // Generate formatted reader HTML for offline reading
+    const paragraphs = extractedText
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+
+    const readerBody =
+      paragraphs.length > 0
+        ? paragraphs.map((p) => `<p>${p.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`).join('')
+        : `<p>${extractedText.replace(/</g, '&lt;').replace(/>/g, '&gt;') || '<em>(No selectable text in this PDF)</em>'}</p>`
+
+    const readerHtml = generateReaderHtml({
+      title: file.name,
+      bodyHtml: readerBody,
+      isDark,
+    })
+
+    // Generate visual canvas viewer HTML with offline pdf.js
     const viewerHtml = generatePdfViewerHtml({
       pdfBase64: base64,
       title: file.name,
@@ -343,7 +391,9 @@ export async function loadDocumentContent(
 
     return {
       html: viewerHtml,
+      readerHtml,
       extractedText: extractedText || file.name,
+      hasReaderMode: true,
     }
   }
 

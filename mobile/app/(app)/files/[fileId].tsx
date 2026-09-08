@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactElement } from 'react'
-import { ActivityIndicator, Alert, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { WebView } from 'react-native-webview'
 import * as Sharing from 'expo-sharing'
@@ -27,6 +27,7 @@ export default function DocumentViewerScreen(): ReactElement {
   const [content, setContent] = useState<DocumentContentResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'visual' | 'reader'>('visual')
 
   useEffect(() => {
     async function load() {
@@ -115,9 +116,12 @@ export default function DocumentViewerScreen(): ReactElement {
     )
   }
 
+  const currentHtml =
+    viewMode === 'reader' && content.readerHtml ? content.readerHtml : content.html
+
   return (
     <View className="flex-1 bg-background">
-      {/* Top Document Details Strip */}
+      {/* Top Document Details & Controls Strip */}
       <View className="flex-row items-center justify-between px-4 py-2.5 border-b border-border bg-surface">
         <View className="flex-1 mr-3">
           <Text numberOfLines={1} className="text-sm font-bold text-foreground">
@@ -129,6 +133,36 @@ export default function DocumentViewerScreen(): ReactElement {
         </View>
 
         <View className="flex-row items-center gap-2">
+          {/* Visual / Reader Mode Toggle for PDFs */}
+          {file.fileType === 'pdf' && content.hasReaderMode && (
+            <View className="flex-row items-center rounded-full bg-surface-muted p-0.5 border border-border/60">
+              <Pressable
+                onPress={() => setViewMode('visual')}
+                className={`px-2.5 py-1 rounded-full ${viewMode === 'visual' ? 'bg-surface shadow-xs' : ''}`}
+              >
+                <Text
+                  className={`text-xs ${
+                    viewMode === 'visual' ? 'font-bold text-foreground' : 'text-muted-foreground'
+                  }`}
+                >
+                  Visual
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setViewMode('reader')}
+                className={`px-2.5 py-1 rounded-full ${viewMode === 'reader' ? 'bg-surface shadow-xs' : ''}`}
+              >
+                <Text
+                  className={`text-xs ${
+                    viewMode === 'reader' ? 'font-bold text-foreground' : 'text-muted-foreground'
+                  }`}
+                >
+                  Reader
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
           {content.extractedText.trim().length > 0 && (
             <Button label="Make Cards" onPress={handleCreateCards} />
           )}
@@ -146,13 +180,15 @@ export default function DocumentViewerScreen(): ReactElement {
       <View className="flex-1 bg-background">
         <WebView
           originWhitelist={['*']}
-          source={{ html: content.html }}
+          source={{ html: currentHtml, baseUrl: 'file:///android_asset/' }}
           style={{ flex: 1, backgroundColor: background }}
           scalesPageToFit={true}
           javaScriptEnabled={true}
           domStorageEnabled={true}
           allowFileAccess={true}
+          allowFileAccessFromFileURLs={true}
           allowUniversalAccessFromFileURLs={true}
+          mixedContentMode="always"
           startInLoadingState={true}
           renderLoading={() => (
             <View className="absolute inset-0 items-center justify-center bg-background">
