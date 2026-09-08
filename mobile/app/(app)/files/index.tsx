@@ -95,6 +95,13 @@ export default function FileRepositoryScreen(): ReactElement {
     void loadData()
   }, [loadData])
 
+  // Automatically show Cloud Files tab if user has documents in the cloud but none on device
+  useEffect(() => {
+    if (files.length === 0 && cloudFiles.length > 0) {
+      setTabScope('cloud')
+    }
+  }, [files.length, cloudFiles.length])
+
   const handleImport = async (): Promise<void> => {
     try {
       setImporting(true)

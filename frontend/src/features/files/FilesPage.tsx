@@ -22,6 +22,7 @@ import {
 } from '@/services/file-repository/api'
 import {
   deleteLocalFile,
+  getLocalFile,
   listLocalFiles,
   saveLocalFile,
   type LocalRepositoryFile,
@@ -52,6 +53,8 @@ export function FilesPage(): ReactElement {
   const [localFiles, setLocalFiles] = useState<LocalRepositoryFile[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [syncingAll, setSyncingAll] = useState(false)
+  const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set())
   const [isDragging, setIsDragging] = useState(false)
 
   const [sourceFilter, setSourceFilter] = useState<FileSourceFilter>('all')
@@ -168,6 +171,9 @@ export function FilesPage(): ReactElement {
         uploadedCloudId = cloudResult.id
       } catch (cloudErr) {
         console.warn('[files] cloud upload failed, caching locally only:', cloudErr)
+        toast.info(
+          `Cloud upload failed: ${cloudErr instanceof Error ? cloudErr.message : 'server error'}. Saved to device only.`,
+        )
       }
 
       // Save locally in IndexedDB for instant offline access
@@ -186,13 +192,84 @@ export function FilesPage(): ReactElement {
         lastViewedAt: null,
       })
 
-      toast.success(`Imported "${file.name}" successfully!`)
+      if (uploadedCloudId) {
+        toast.success(`Uploaded "${file.name}" to Cloud & saved for offline!`)
+      } else {
+        toast.info(`"${file.name}" saved to device.`)
+      }
       await loadFiles()
     } catch (err) {
       console.error('[files] import error:', err)
       toast.error('Failed to import file. Please check connection and try again.')
     } finally {
       setUploading(false)
+    }
+  }
+
+  const handleSyncItemToCloud = async (item: UnifiedFileItem) => {
+    if (!item.blob) {
+      toast.error('Local file binary data not found in cache.')
+      return
+    }
+    try {
+      setSyncingIds((prev) => new Set(prev).add(item.id))
+      const file = new File([item.blob], item.name, {
+        type: item.blob.type || 'application/octet-stream',
+      })
+      const cloudResult = await uploadCloudFile(file, item.fileType)
+
+      if (item.localId) {
+        const localRecord = await getLocalFile(item.localId)
+        if (localRecord) {
+          localRecord.cloudFileId = cloudResult.id
+          await saveLocalFile(localRecord)
+        }
+      }
+      toast.success(`"${item.name}" synced to Cloud!`)
+      await loadFiles()
+    } catch (err) {
+      console.error('[files] sync error:', err)
+      toast.error(`Sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    } finally {
+      setSyncingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(item.id)
+        return next
+      })
+    }
+  }
+
+  const handleSyncAllToCloud = async () => {
+    const unsynced = unifiedItems.filter((item) => item.isLocal && !item.isCloud && item.blob)
+    if (unsynced.length === 0) return
+
+    setSyncingAll(true)
+    let syncedCount = 0
+    for (const item of unsynced) {
+      if (!item.blob) continue
+      try {
+        const file = new File([item.blob], item.name, {
+          type: item.blob.type || 'application/octet-stream',
+        })
+        const cloudResult = await uploadCloudFile(file, item.fileType)
+        if (item.localId) {
+          const localRecord = await getLocalFile(item.localId)
+          if (localRecord) {
+            localRecord.cloudFileId = cloudResult.id
+            await saveLocalFile(localRecord)
+          }
+        }
+        syncedCount++
+      } catch (err) {
+        console.warn(`[files] failed to sync ${item.name}:`, err)
+      }
+    }
+    setSyncingAll(false)
+    if (syncedCount > 0) {
+      toast.success(`Synced ${syncedCount} file${syncedCount === 1 ? '' : 's'} to Cloud!`)
+      await loadFiles()
+    } else {
+      toast.error('Failed to sync files to cloud. Please check backend connection.')
     }
   }
 
@@ -248,9 +325,12 @@ export function FilesPage(): ReactElement {
       await loadFiles()
     } catch (err) {
       console.warn('[files] delete error:', err)
-      toast.error('Could not delete file.')
     }
   }
+
+  const unsyncedCount = unifiedItems.filter(
+    (item) => item.isLocal && !item.isCloud && item.blob,
+  ).length
 
   return (
     <div
@@ -289,6 +369,32 @@ export function FilesPage(): ReactElement {
       {isDragging && (
         <div className="rounded-2xl border-2 border-dashed border-primary bg-primary/10 p-8 text-center text-primary font-semibold animate-pulse">
           Drop PDF or Word document here to import
+        </div>
+      )}
+
+      {/* Unsynced Banner */}
+      {unsyncedCount > 0 && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-4 text-sky-700 dark:text-sky-300">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">☁️</span>
+            <div>
+              <p className="text-sm font-bold">
+                {unsyncedCount} document{unsyncedCount === 1 ? '' : 's'} stored only on this browser
+              </p>
+              <p className="text-xs opacity-80">
+                Sync them to your cloud account so they automatically render on your mobile app!
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="default"
+            size="sm"
+            disabled={syncingAll}
+            onClick={() => void handleSyncAllToCloud()}
+            className="whitespace-nowrap"
+          >
+            {syncingAll ? 'Syncing…' : 'Sync All to Cloud ☁️'}
+          </Button>
         </div>
       )}
 
@@ -478,6 +584,18 @@ export function FilesPage(): ReactElement {
                   </Button>
 
                   <div className="flex items-center gap-1">
+                    {item.isLocal && !item.isCloud && item.blob && (
+                      <Button
+                        variant="soft"
+                        size="sm"
+                        disabled={syncingIds.has(item.id)}
+                        onClick={() => void handleSyncItemToCloud(item)}
+                        title="Upload this document to your cloud account"
+                        className="text-xs text-sky-600 dark:text-sky-400 font-semibold hover:bg-sky-500/15"
+                      >
+                        {syncingIds.has(item.id) ? 'Syncing…' : '☁️ Sync'}
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"

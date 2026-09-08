@@ -246,6 +246,8 @@ export class SyncEngine {
     await queryClient.invalidateQueries({ queryKey: ['sets'] })
     await queryClient.invalidateQueries({ queryKey: ['cards'] })
     await queryClient.invalidateQueries({ queryKey: ['dueCounts'] })
+    await queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    await queryClient.invalidateQueries({ queryKey: ['progress'] })
   }
 
   private async processMutation(mutation: OfflineMutation) {

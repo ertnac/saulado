@@ -38,7 +38,7 @@ export function createApp(): Express {
   app.use(helmet())
   app.use(compression({ threshold: 512 }))
   app.use(cors({ origin: env.corsOrigins, credentials: true }))
-  app.use(express.json({ limit: '1mb' }))
+  app.use(express.json({ limit: '50mb' }))
   app.use(cookieParser())
 
   app.use('/api', healthRouter)
