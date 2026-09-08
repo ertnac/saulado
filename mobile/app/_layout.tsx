@@ -1,5 +1,6 @@
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { Stack } from 'expo-router'
+import * as SplashScreen from 'expo-splash-screen'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, type ReactElement } from 'react'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
@@ -8,6 +9,9 @@ import { asyncStoragePersister, queryClient } from '../lib/query-client'
 import { useAuthStore } from '../stores/auth'
 import { useOfflineSetsStore } from '../stores/offline-sets'
 import { useTheme, useTokenColor } from '../stores/theme'
+
+// Keep the native splash screen visible while the app is loading
+void SplashScreen.preventAutoHideAsync()
 
 /**
  * The root layout, ported from `frontend/src/App.tsx`.
@@ -45,6 +49,11 @@ function useSessionRestore(): void {
 
 export default function RootLayout(): ReactElement {
   useSessionRestore()
+
+  useEffect(() => {
+    // Hide splash screen once the initial React component hierarchy is mounted
+    void SplashScreen.hideAsync()
+  }, [])
 
   const { isDark } = useTheme()
   const background = useTokenColor('--background')

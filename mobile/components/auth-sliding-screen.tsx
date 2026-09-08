@@ -27,6 +27,7 @@ import { useFormErrors } from '../hooks/useFormErrors'
 import { useAuthStore } from '../stores/auth'
 import { MailIcon, LockIcon, EyeIcon, EyeOffIcon, GoogleIcon } from './icons'
 import { useTokenColor } from '../stores/theme'
+import * as SplashScreen from 'expo-splash-screen'
 import { SauladoLogo, type SauladoLogoAnimation } from './saulado-logo'
 
 interface AuthSlidingScreenProps {
@@ -72,6 +73,9 @@ export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenPro
   const logoTravelDistance = Math.max(0, windowHeight / 2 - (headerPaddingTop + 60))
 
   useEffect(() => {
+    // Hide native splash screen as soon as AuthSlidingScreen has mounted and started star-gyro
+    void SplashScreen.hideAsync()
+
     // Start centered with Star Gyro animation, then after brief delay smoothly glide upwards
     introProgress.value = withDelay(
       500,
