@@ -41,7 +41,8 @@ import { useTokenColor } from '../../stores/theme'
 const SCREENS: { name: string; title: string }[] = [
   { name: 'index', title: 'Dashboard' },
   { name: 'sets/index', title: 'Sets' },
-  { name: 'progress', title: 'Progress' },
+  { name: 'files/index', title: 'File Repository' },
+  { name: 'files/[fileId]', title: 'Document Viewer' },
   { name: 'scan', title: 'Scan a page' },
   { name: 'sets/[setId]', title: 'Set' },
   { name: 'study', title: 'Study' },
@@ -183,7 +184,10 @@ export default function AppLayout(): ReactElement {
                 ? {
                     headerShown: false,
                   }
-                : name === 'scan' || name === 'scan-review' || name === 'sets/[setId]'
+                : name === 'scan' ||
+                    name === 'scan-review' ||
+                    name === 'sets/[setId]' ||
+                    name === 'files/[fileId]'
                   ? {
                       headerLeft: () => (
                         <Pressable
@@ -193,7 +197,7 @@ export default function AppLayout(): ReactElement {
                             if (router.canGoBack()) {
                               router.back()
                             } else {
-                              router.replace('/')
+                              router.replace('/files')
                             }
                           }}
                           className="h-11 w-11 items-center justify-center rounded-md ml-2 active:opacity-60"

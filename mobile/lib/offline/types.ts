@@ -192,3 +192,33 @@ export interface OfflineSetPayload {
   metadata: StudySet
   cards: StudyCard[]
 }
+
+export type RepositoryFileType = 'pdf' | 'doc' | 'docx'
+
+export interface SQLiteRepositoryFile {
+  id: string
+  user_id: string
+  name: string
+  file_type: RepositoryFileType
+  mime_type: string
+  file_uri: string
+  file_size: number
+  page_count?: number | null
+  created_at: string
+  updated_at: string
+  last_viewed_at?: string | null
+}
+
+export interface RepositoryFile {
+  id: string
+  userId: string
+  name: string
+  fileType: RepositoryFileType
+  mimeType: string
+  fileUri: string
+  fileSize: number
+  pageCount?: number | null
+  createdAt: string
+  updatedAt: string
+  lastViewedAt?: string | null
+}

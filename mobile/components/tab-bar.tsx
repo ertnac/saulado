@@ -4,8 +4,8 @@ import { useRouter, type Tabs } from 'expo-router'
 import { onlineManager } from '@tanstack/react-query'
 import { useTokenColor } from '../stores/theme'
 import {
-  ChartIcon,
   FileTextIcon,
+  FolderIcon,
   HomeIcon,
   LayersIcon,
   ScanIcon,
@@ -24,7 +24,7 @@ export type BottomTabBarProps = Parameters<
  * pill-shaped floating bar on the right containing the other tab destinations:
  * - Home (HomeIcon)
  * - Sets (LayersIcon)
- * - Progress (ChartIcon)
+ * - Files (FolderIcon)
  * - Account (UserIcon)
  *
  * Icons only inside the pill (no text labels, matching the premium reference layout).
@@ -41,7 +41,7 @@ interface Destination {
 const DESTINATIONS: Destination[] = [
   { name: 'index', label: 'Home', icon: HomeIcon },
   { name: 'sets/index', label: 'Sets', icon: LayersIcon },
-  { name: 'progress', label: 'Progress', icon: ChartIcon },
+  { name: 'files/index', label: 'Files', icon: FolderIcon },
   { name: 'account', label: 'Account', icon: UserIcon },
 ]
 
@@ -65,10 +65,13 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
     navigation.navigate(name)
   }
 
-  // Active check helper that handles sub-routes (e.g. nested set screens)
+  // Active check helper that handles sub-routes (e.g. nested set or file screens)
   const isTabActive = (tabName: string): boolean => {
     if (tabName === 'sets/index') {
       return active === 'sets/index' || active.startsWith('sets/')
+    }
+    if (tabName === 'files/index') {
+      return active === 'files/index' || active.startsWith('files/')
     }
     return active === tabName
   }

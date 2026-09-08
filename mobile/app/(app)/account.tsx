@@ -22,6 +22,7 @@ import {
 import * as DocumentPicker from 'expo-document-picker'
 import { File } from 'expo-file-system'
 import * as ImagePicker from 'expo-image-picker'
+import { ProgressSection } from '../../components/progress-section'
 import { Button } from '../../components/button'
 import { Card } from '../../components/card'
 import { Field, FormAlert, FormStack } from '../../components/form'
@@ -90,6 +91,7 @@ export default function AccountScreen(): ReactElement {
       </View>
 
       <ProfileSection />
+      <ProgressSection />
       <ArchivedSetsSection />
       <JsonTransferSection />
       <ChangeEmailSection currentEmail={email} />

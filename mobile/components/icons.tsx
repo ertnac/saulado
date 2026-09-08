@@ -511,4 +511,24 @@ export function FolderPlusIcon(props: IconProps): ReactElement {
   )
 }
 
+export function FolderIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+    </Icon>
+  )
+}
+
+export function DocumentIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <Path d="M14 2v6h6" />
+      <Path d="M16 13H8" />
+      <Path d="M16 17H8" />
+      <Path d="M10 9H8" />
+    </Icon>
+  )
+}
+
 export { SauladoLogo, SauladoIcon, type SauladoLogoProps } from './saulado-logo'

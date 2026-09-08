@@ -63,6 +63,20 @@ export async function initDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
       entity_type TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS repository_files (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      file_type TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      file_uri TEXT NOT NULL,
+      file_size INTEGER NOT NULL,
+      page_count INTEGER,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_viewed_at TEXT
+    );
   `)
 
   // Step 2: Run column migrations first before indexes
@@ -85,6 +99,9 @@ export async function initDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_cards_sync ON study_cards (sync_status);
 
     CREATE INDEX IF NOT EXISTS idx_mappings_server ON id_mappings (server_id);
+
+    CREATE INDEX IF NOT EXISTS idx_repo_files_user ON repository_files (user_id, file_type);
+    CREATE INDEX IF NOT EXISTS idx_repo_files_updated ON repository_files (user_id, updated_at);
   `)
 }
 
