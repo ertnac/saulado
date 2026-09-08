@@ -70,6 +70,11 @@ const envSchema = z.object({
 
   /** Comma-separated list of admin email addresses. */
   ADMIN_EMAILS: z.string().default(''),
+
+  /** Cloudinary raw document storage credentials. */
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)

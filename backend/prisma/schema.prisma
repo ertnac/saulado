@@ -452,9 +452,11 @@ model CloudFile {
   name      String
   fileType  String   @map("file_type")
   mimeType  String   @map("mime_type")
-  fileSize  Int      @map("file_size")
-  data      Bytes
-  createdAt DateTime @default(now()) @map("created_at")
+  fileSize   Int      @map("file_size")
+  fileUrl    String?  @map("file_url")
+  storageKey String?  @map("storage_key")
+  data       Bytes?
+  createdAt  DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -981,7 +981,8 @@ export function useCreateCard(
       shiftCardCount(client, setId, 1)
       void client.invalidateQueries({ queryKey: cardKeys.lists() })
       void client.invalidateQueries({ queryKey: setKeys.all })
-      if (data.card.tags.length > 0) void client.invalidateQueries({ queryKey: tagKeys.all })
+      if (data.card.tags && data.card.tags.length > 0)
+        void client.invalidateQueries({ queryKey: tagKeys.all })
     },
   })
 }

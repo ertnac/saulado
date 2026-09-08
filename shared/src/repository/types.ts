@@ -7,6 +7,7 @@ export interface CloudFileSummary {
   fileType: RepositoryFileType
   mimeType: string
   fileSize: number
+  fileUrl?: string
   createdAt: string
   updatedAt: string
 }

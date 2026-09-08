@@ -8,11 +8,16 @@ import { prisma } from '../db/client.js'
 import { sendError } from '../http/errors.js'
 import { requireAuth } from '../http/require-auth.js'
 import { asyncHandler } from '../http/validate.js'
+import {
+  deleteDocumentFromCloudinary,
+  isCloudinaryConfigured,
+  uploadDocumentToCloudinary,
+} from '../storage/cloudinary.js'
 
 export const filesRouter: Router = Router()
 
 // Increase body limit specifically for file uploads
-filesRouter.use(express.json({ limit: '35mb' }))
+filesRouter.use(express.json({ limit: '50mb' }))
 filesRouter.use(requireAuth)
 
 function requireUserId(req: Request): string {
@@ -60,6 +65,7 @@ filesRouter.get(
         fileType: true,
         mimeType: true,
         fileSize: true,
+        fileUrl: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -74,6 +80,7 @@ filesRouter.get(
         fileType: f.fileType as RepositoryFileType,
         mimeType: f.mimeType,
         fileSize: f.fileSize,
+        fileUrl: f.fileUrl ?? undefined,
         createdAt: f.createdAt.toISOString(),
         updatedAt: f.updatedAt.toISOString(),
       })),
@@ -130,6 +137,22 @@ filesRouter.post(
       return
     }
 
+    let fileUrl: string | null = null
+    let storageKey: string | null = null
+    let dataBuffer: Uint8Array | null = new Uint8Array(buffer)
+
+    // If Cloudinary is configured, stream to Cloudinary raw storage and keep Postgres lean
+    if (isCloudinaryConfigured()) {
+      try {
+        const uploadResult = await uploadDocumentToCloudinary(buffer, name, userId)
+        fileUrl = uploadResult.secureUrl
+        storageKey = uploadResult.publicId
+        dataBuffer = null // Don't bloat PostgreSQL with binary data
+      } catch (uploadErr) {
+        console.warn('[files] Cloudinary upload failed, falling back to db storage:', uploadErr)
+      }
+    }
+
     const created = await prisma.cloudFile.create({
       data: {
         userId,
@@ -137,7 +160,9 @@ filesRouter.post(
         fileType,
         mimeType,
         fileSize: buffer.length,
-        data: buffer,
+        fileUrl,
+        storageKey,
+        data: dataBuffer as unknown as Uint8Array<ArrayBuffer> | null,
       },
       select: {
         id: true,
@@ -146,6 +171,7 @@ filesRouter.post(
         fileType: true,
         mimeType: true,
         fileSize: true,
+        fileUrl: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -159,6 +185,7 @@ filesRouter.post(
         fileType: created.fileType as RepositoryFileType,
         mimeType: created.mimeType,
         fileSize: created.fileSize,
+        fileUrl: created.fileUrl ?? undefined,
         createdAt: created.createdAt.toISOString(),
         updatedAt: created.updatedAt.toISOString(),
       },
@@ -181,6 +208,7 @@ filesRouter.get(
         name: true,
         mimeType: true,
         fileSize: true,
+        fileUrl: true,
         data: true,
       },
     })
@@ -194,7 +222,27 @@ filesRouter.get(
     res.setHeader('Content-Length', file.fileSize)
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.name)}"`)
 
-    res.send(Buffer.from(file.data))
+    // If file is stored in Cloudinary, stream directly from Cloudinary CDN
+    if (file.fileUrl) {
+      try {
+        const upstream = await fetch(file.fileUrl)
+        if (upstream.ok) {
+          const arrayBuffer = await upstream.arrayBuffer()
+          res.send(Buffer.from(arrayBuffer))
+          return
+        }
+      } catch (streamErr) {
+        console.warn(`[files] Failed to fetch from storage url: ${file.fileUrl}`, streamErr)
+      }
+    }
+
+    // Fallback to locally stored binary data if present
+    if (file.data) {
+      res.send(Buffer.from(file.data))
+      return
+    }
+
+    sendError(res, 'NOT_FOUND', 'File content unavailable')
   }),
 )
 
@@ -207,14 +255,24 @@ filesRouter.delete(
     const userId = requireUserId(req)
     const fileId = req.params.id
 
-    const deleted = await prisma.cloudFile.deleteMany({
+    const target = await prisma.cloudFile.findFirst({
       where: { id: fileId, userId },
+      select: { id: true, storageKey: true },
     })
 
-    if (deleted.count === 0) {
+    if (!target) {
       sendError(res, 'NOT_FOUND', 'Cloud file not found')
       return
     }
+
+    // If stored in Cloudinary, remove from Cloudinary
+    if (target.storageKey) {
+      await deleteDocumentFromCloudinary(target.storageKey)
+    }
+
+    await prisma.cloudFile.delete({
+      where: { id: fileId },
+    })
 
     res.status(204).end()
   }),
