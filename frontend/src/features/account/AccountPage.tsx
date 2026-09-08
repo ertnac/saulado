@@ -18,6 +18,7 @@ import {
 } from './queries'
 import { Section } from './SettingsControls'
 import { ArchivedSetsSection } from './ArchivedSetsSection'
+import { ProgressSection } from '../dashboard/ProgressSection'
 
 /**
  * Account and data (plan §6.5).
@@ -33,7 +34,7 @@ export function AccountPage(): ReactElement {
   const email = useAuthStore((s) => s.user?.email ?? '')
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
         title="Account"
         description={
@@ -48,6 +49,12 @@ export function AccountPage(): ReactElement {
       />
 
       <ProfileSection />
+
+      {/* Embedded Study Progress and Charts */}
+      <Card className="p-6">
+        <ProgressSection showHeader={true} />
+      </Card>
+
       <ArchivedSetsSection />
       <ChangeEmailSection currentEmail={email} />
       <ChangePasswordSection />

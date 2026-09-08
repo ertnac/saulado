@@ -14,6 +14,7 @@ import { dashboardRouter, progressRouter } from './routes/progress.js'
 import { searchRouter } from './routes/search.js'
 import { setsRouter } from './routes/sets.js'
 import { studyRouter } from './routes/study.js'
+import { filesRouter } from './routes/files.js'
 
 /**
  * App construction is separated from server startup so integration tests can
@@ -57,6 +58,7 @@ export function createApp(): Express {
   app.use('/api/progress', progressRouter)
   app.use('/api/search', searchRouter)
   app.use('/api/settings', settingsRouter)
+  app.use('/api/files', filesRouter)
   /**
    * Both mounted at the same path, public first. accountPublicRouter carries
    * only the email-change confirmation, which is reached by a link in an inbox

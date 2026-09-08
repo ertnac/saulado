@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import {
-  ChartIcon,
+  FolderIcon,
   HomeIcon,
   LayersIcon,
   LogoutIcon,
@@ -33,7 +33,7 @@ import { cn } from '@/lib/utils'
 const NAV: { to: string; label: string; end: boolean; icon: ComponentType<IconProps> }[] = [
   { to: '/', label: 'Dashboard', end: true, icon: HomeIcon },
   { to: '/sets', label: 'Sets', end: false, icon: LayersIcon },
-  { to: '/progress', label: 'Progress', end: false, icon: ChartIcon },
+  { to: '/files', label: 'Files', end: false, icon: FolderIcon },
 ]
 
 /**

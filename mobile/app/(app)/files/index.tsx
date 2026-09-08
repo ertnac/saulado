@@ -13,13 +13,18 @@ import {
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Sharing from 'expo-sharing'
+import type { CloudFileSummary } from '@saulado/shared'
 import { Button } from '../../../components/button'
 import { Card } from '../../../components/card'
 import { DocumentIcon, FolderIcon, SearchIcon, CloseIcon } from '../../../components/icons'
 import type { RepositoryFile, RepositoryFileType } from '../../../lib/offline/types'
 import {
+  deleteCloudFile,
   deleteRepositoryFile,
+  downloadCloudFile,
+  fetchCloudFiles,
   formatFileSize,
+  getDownloadedCloudFileMap,
   getRepositoryFiles,
   getRepositoryStats,
   pickAndImportFiles,
@@ -38,7 +43,14 @@ export default function FileRepositoryScreen(): ReactElement {
   const primary = useTokenColor('--primary')
   const mutedForeground = useTokenColor('--muted-foreground')
 
+  // Scopes: Device Files (100% offline on phone) vs Cloud Files (from web app / account)
+  const [tabScope, setTabScope] = useState<'device' | 'cloud'>('device')
+
   const [files, setFiles] = useState<RepositoryFile[]>([])
+  const [cloudFiles, setCloudFiles] = useState<CloudFileSummary[]>([])
+  const [downloadedMap, setDownloadedMap] = useState<Map<string, string>>(new Map())
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set())
+
   const [stats, setStats] = useState<RepositoryStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -53,19 +65,31 @@ export default function FileRepositoryScreen(): ReactElement {
 
   const loadData = useCallback(async () => {
     try {
-      const [fileList, fileStats] = await Promise.all([
+      const [fileList, fileStats, cloudMap] = await Promise.all([
         getRepositoryFiles(userId, activeFilter, searchQuery),
         getRepositoryStats(userId),
+        getDownloadedCloudFileMap(userId),
       ])
       setFiles(fileList)
       setStats(fileStats)
+      setDownloadedMap(cloudMap)
+
+      // Fetch cloud files if user is authenticated
+      if (user) {
+        try {
+          const remoteFiles = await fetchCloudFiles()
+          setCloudFiles(remoteFiles)
+        } catch (cloudErr) {
+          console.warn('[file-repository] remote files fetch error:', cloudErr)
+        }
+      }
     } catch (error) {
       console.warn('[file-repository] failed to load files:', error)
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [userId, activeFilter, searchQuery])
+  }, [userId, user, activeFilter, searchQuery])
 
   useEffect(() => {
     void loadData()
@@ -79,7 +103,7 @@ export default function FileRepositoryScreen(): ReactElement {
         await loadData()
         Alert.alert(
           'Files Imported',
-          `Successfully imported ${imported.length} document${imported.length === 1 ? '' : 's'} into your repository.`,
+          `Successfully imported ${imported.length} document${imported.length === 1 ? '' : 's'} into your device repository.`,
         )
       }
     } catch (error) {
@@ -90,10 +114,37 @@ export default function FileRepositoryScreen(): ReactElement {
     }
   }
 
+  const handleDownloadCloud = async (cloudFile: CloudFileSummary): Promise<void> => {
+    try {
+      setDownloadingIds((prev) => new Set(prev).add(cloudFile.id))
+      const downloaded = await downloadCloudFile(cloudFile, userId)
+
+      // Update map & local list
+      setDownloadedMap((prev) => new Map(prev).set(cloudFile.id, downloaded.id))
+      await loadData()
+      Alert.alert(
+        'Downloaded for Offline',
+        `"${cloudFile.name}" has been saved to your device and is ready for 100% offline reading!`,
+      )
+    } catch (error) {
+      console.warn('[file-repository] cloud download error:', error)
+      Alert.alert(
+        'Download Failed',
+        'Could not download the file from the cloud. Please check your connection and try again.',
+      )
+    } finally {
+      setDownloadingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(cloudFile.id)
+        return next
+      })
+    }
+  }
+
   const handleDelete = (file: RepositoryFile): void => {
     Alert.alert(
       'Delete Document?',
-      `Are you sure you want to remove "${file.name}" from your repository? This removes the local sandboxed copy.`,
+      `Are you sure you want to remove "${file.name}" from your device? This removes the local sandboxed copy.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -101,6 +152,23 @@ export default function FileRepositoryScreen(): ReactElement {
           style: 'destructive',
           onPress: () => {
             void deleteRepositoryFile(file.id).then(() => loadData())
+          },
+        },
+      ],
+    )
+  }
+
+  const handleDeleteCloud = (cloudFile: CloudFileSummary): void => {
+    Alert.alert(
+      'Delete Cloud Document?',
+      `Are you sure you want to delete "${cloudFile.name}" from your cloud account?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void deleteCloudFile(cloudFile.id).then(() => loadData())
           },
         },
       ],
@@ -125,10 +193,15 @@ export default function FileRepositoryScreen(): ReactElement {
 
   const handleRenameConfirm = async (): Promise<void> => {
     if (!renameTarget || !newTitle.trim()) return
-    await renameRepositoryFile(renameTarget.id, newTitle.trim())
-    setRenameTarget(null)
-    setNewTitle('')
-    await loadData()
+    try {
+      await renameRepositoryFile(renameTarget.id, newTitle.trim())
+      setRenameTarget(null)
+      setNewTitle('')
+      await loadData()
+    } catch (error) {
+      console.warn('[file-repository] rename error:', error)
+      Alert.alert('Rename Failed', 'Could not rename file.')
+    }
   }
 
   const renderBadge = (type: RepositoryFileType) => {
@@ -147,11 +220,20 @@ export default function FileRepositoryScreen(): ReactElement {
       )
     }
     return (
-      <View className="rounded px-2 py-0.5 bg-sky-600/15 dark:bg-sky-600/25 border border-sky-600/30">
-        <Text className="text-[11px] font-bold text-sky-700 dark:text-sky-300">DOC</Text>
+      <View className="rounded px-2 py-0.5 bg-amber-500/15 dark:bg-amber-500/25 border border-amber-500/30">
+        <Text className="text-[11px] font-bold text-amber-700 dark:text-amber-400">DOC</Text>
       </View>
     )
   }
+
+  // Filter cloud files according to search and type
+  const filteredCloudFiles = cloudFiles.filter((cf) => {
+    if (activeFilter !== 'all' && cf.fileType !== activeFilter) return false
+    if (searchQuery.trim().length > 0) {
+      return cf.name.toLowerCase().includes(searchQuery.toLowerCase())
+    }
+    return true
+  })
 
   return (
     <View className="flex-1 bg-background">
@@ -177,20 +259,53 @@ export default function FileRepositoryScreen(): ReactElement {
               File Repository
             </Text>
             <Text className="text-xs text-muted-foreground">
-              Store and view your downloaded PDF & Word documents.
+              {tabScope === 'device'
+                ? 'Documents saved on this device (100% offline).'
+                : 'Documents stored in your cloud account from web app.'}
             </Text>
           </View>
-          <Button
-            label={importing ? 'Importing…' : '+ Import'}
-            onPress={() => {
-              void handleImport()
-            }}
-            disabled={importing}
-          />
+          {tabScope === 'device' && (
+            <Button
+              label={importing ? 'Importing…' : '+ Import'}
+              onPress={() => {
+                void handleImport()
+              }}
+              disabled={importing}
+            />
+          )}
+        </View>
+
+        {/* Scope Switcher: Device Files vs Cloud Files */}
+        <View className="flex-row items-center rounded-full bg-surface-muted p-1 border border-border/80 self-start">
+          <Pressable
+            onPress={() => setTabScope('device')}
+            className={`px-3.5 py-1.5 rounded-full ${tabScope === 'device' ? 'bg-surface shadow-xs' : ''}`}
+          >
+            <Text
+              className={`text-xs ${
+                tabScope === 'device' ? 'font-bold text-foreground' : 'text-muted-foreground'
+              }`}
+            >
+              📱 Device Files ({files.length})
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setTabScope('cloud')}
+            className={`px-3.5 py-1.5 rounded-full ${tabScope === 'cloud' ? 'bg-surface shadow-xs' : ''}`}
+          >
+            <Text
+              className={`text-xs ${
+                tabScope === 'cloud' ? 'font-bold text-foreground' : 'text-muted-foreground'
+              }`}
+            >
+              ☁️ Cloud Files ({cloudFiles.length})
+            </Text>
+          </Pressable>
         </View>
 
         {/* Storage Stats Banner */}
-        {stats && stats.totalFiles > 0 && (
+        {tabScope === 'device' && stats && stats.totalFiles > 0 && (
           <Card className="p-4 bg-surface border border-border">
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center gap-3">
@@ -202,7 +317,7 @@ export default function FileRepositoryScreen(): ReactElement {
                     {stats.totalFiles} {stats.totalFiles === 1 ? 'Document' : 'Documents'}
                   </Text>
                   <Text className="text-xs text-muted-foreground">
-                    {formatFileSize(stats.totalSizeBytes)} stored locally
+                    {formatFileSize(stats.totalSizeBytes)} ready offline
                   </Text>
                 </View>
               </View>
@@ -278,99 +393,209 @@ export default function FileRepositoryScreen(): ReactElement {
           })}
         </View>
 
-        {/* Document List */}
-        {loading ? (
-          <View className="py-12 items-center justify-center gap-3">
-            <ActivityIndicator size="small" color={primary} />
-            <Text className="text-xs text-muted-foreground">Loading documents…</Text>
-          </View>
-        ) : files.length === 0 ? (
-          <Card tone="dashed" className="p-8 items-center justify-center gap-3 text-center">
-            <View className="h-14 w-14 rounded-2xl bg-surface-muted items-center justify-center mb-1">
-              <DocumentIcon color={primary} size={28} />
-            </View>
-            <Text className="text-base font-semibold text-foreground text-center">
-              {searchQuery ? 'No matching documents' : 'No documents in repository'}
-            </Text>
-            <Text className="text-xs text-muted-foreground text-center max-w-[280px]">
-              {searchQuery
-                ? 'Try a different search term or clear the filter.'
-                : 'Import downloaded PDFs or Word documents (.docx, .doc) from your device to view and study them offline.'}
-            </Text>
-            {!searchQuery && (
-              <Button
-                label="+ Import Documents"
-                className="mt-3"
-                onPress={() => {
-                  void handleImport()
-                }}
-                disabled={importing}
-              />
-            )}
-          </Card>
-        ) : (
-          <View className="gap-2.5">
-            {files.map((file) => (
-              <Pressable
-                key={file.id}
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${file.name}`}
-                onPress={() => {
-                  router.push(`/files/${file.id}`)
-                }}
-                className="rounded-2xl border border-border bg-surface p-4 active:opacity-85 gap-3"
-              >
-                <View className="flex-row items-start justify-between gap-3">
-                  <View className="flex-1 flex-row items-start gap-3">
-                    <View className="mt-0.5">{renderBadge(file.fileType)}</View>
-                    <View className="flex-1 gap-1">
-                      <Text numberOfLines={1} className="text-sm font-semibold text-foreground">
-                        {file.name}
-                      </Text>
-                      <Text className="text-xs text-muted-foreground">
-                        {formatFileSize(file.fileSize)} · Added{' '}
-                        {new Date(file.createdAt).toLocaleDateString()}
-                      </Text>
+        {/* TAB 1: DEVICE FILES */}
+        {tabScope === 'device' && (
+          <>
+            {loading ? (
+              <View className="py-12 items-center justify-center gap-3">
+                <ActivityIndicator size="small" color={primary} />
+                <Text className="text-xs text-muted-foreground">Loading device documents…</Text>
+              </View>
+            ) : files.length === 0 ? (
+              <Card tone="dashed" className="p-8 items-center justify-center gap-3 text-center">
+                <View className="h-14 w-14 rounded-2xl bg-surface-muted items-center justify-center mb-1">
+                  <DocumentIcon color={primary} size={28} />
+                </View>
+                <Text className="text-base font-semibold text-foreground text-center">
+                  {searchQuery ? 'No matching documents' : 'No documents on device'}
+                </Text>
+                <Text className="text-xs text-muted-foreground text-center max-w-[280px]">
+                  {searchQuery
+                    ? 'Try a different search term or clear the filter.'
+                    : 'Import downloaded PDFs or Word documents from your phone or download them from the Cloud tab for offline study.'}
+                </Text>
+                {!searchQuery && (
+                  <Button
+                    label="+ Import Documents"
+                    className="mt-3"
+                    onPress={() => {
+                      void handleImport()
+                    }}
+                    disabled={importing}
+                  />
+                )}
+              </Card>
+            ) : (
+              <View className="gap-2.5">
+                {files.map((file) => (
+                  <Pressable
+                    key={file.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${file.name}`}
+                    onPress={() => {
+                      router.push(`/files/${file.id}`)
+                    }}
+                    className="rounded-2xl border border-border bg-surface p-4 active:opacity-85 gap-3"
+                  >
+                    <View className="flex-row items-start justify-between gap-3">
+                      <View className="flex-1 flex-row items-start gap-3">
+                        <View className="mt-0.5">{renderBadge(file.fileType)}</View>
+                        <View className="flex-1 gap-1">
+                          <Text numberOfLines={1} className="text-sm font-semibold text-foreground">
+                            {file.name}
+                          </Text>
+                          <Text className="text-xs text-muted-foreground">
+                            {formatFileSize(file.fileSize)} ·{' '}
+                            {file.cloudFileId ? '🟢 Synced from Cloud' : '📱 On Device'}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
-                  </View>
+
+                    {/* Bottom Card Actions */}
+                    <View className="flex-row items-center justify-end gap-2 pt-2 border-t border-border/50">
+                      <Pressable
+                        onPress={(e) => {
+                          e.stopPropagation()
+                          setRenameTarget(file)
+                          setNewTitle(file.name)
+                        }}
+                        className="px-2.5 py-1 rounded-md bg-surface-muted active:opacity-70"
+                      >
+                        <Text className="text-xs text-muted-foreground font-medium">Rename</Text>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={(e) => {
+                          e.stopPropagation()
+                          void handleShare(file)
+                        }}
+                        className="px-2.5 py-1 rounded-md bg-surface-muted active:opacity-70"
+                      >
+                        <Text className="text-xs text-muted-foreground font-medium">Share</Text>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={(e) => {
+                          e.stopPropagation()
+                          handleDelete(file)
+                        }}
+                        className="px-2.5 py-1 rounded-md bg-destructive/10 active:opacity-70"
+                      >
+                        <Text className="text-xs text-destructive font-medium">Delete</Text>
+                      </Pressable>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </>
+        )}
+
+        {/* TAB 2: CLOUD FILES */}
+        {tabScope === 'cloud' && (
+          <>
+            {loading ? (
+              <View className="py-12 items-center justify-center gap-3">
+                <ActivityIndicator size="small" color={primary} />
+                <Text className="text-xs text-muted-foreground">Checking cloud files…</Text>
+              </View>
+            ) : filteredCloudFiles.length === 0 ? (
+              <Card tone="dashed" className="p-8 items-center justify-center gap-3 text-center">
+                <View className="h-14 w-14 rounded-2xl bg-surface-muted items-center justify-center mb-1">
+                  <FolderIcon color={primary} size={28} />
                 </View>
+                <Text className="text-base font-semibold text-foreground text-center">
+                  {searchQuery ? 'No matching cloud files' : 'No files in cloud account'}
+                </Text>
+                <Text className="text-xs text-muted-foreground text-center max-w-[280px]">
+                  {searchQuery
+                    ? 'Try another search query.'
+                    : 'Upload PDF or Word documents from the web app under your account, and they will appear here ready to download for offline study!'}
+                </Text>
+              </Card>
+            ) : (
+              <View className="gap-2.5">
+                {filteredCloudFiles.map((cloudFile) => {
+                  const isDownloaded = downloadedMap.has(cloudFile.id)
+                  const localId = downloadedMap.get(cloudFile.id)
+                  const isDownloading = downloadingIds.has(cloudFile.id)
 
-                {/* Bottom Card Actions */}
-                <View className="flex-row items-center justify-end gap-2 pt-2 border-t border-border/50">
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation()
-                      setRenameTarget(file)
-                      setNewTitle(file.name)
-                    }}
-                    className="px-2.5 py-1 rounded-md bg-surface-muted active:opacity-70"
-                  >
-                    <Text className="text-xs text-muted-foreground font-medium">Rename</Text>
-                  </Pressable>
+                  return (
+                    <View
+                      key={cloudFile.id}
+                      className="rounded-2xl border border-border bg-surface p-4 gap-3"
+                    >
+                      <View className="flex-row items-start justify-between gap-3">
+                        <View className="flex-1 flex-row items-start gap-3">
+                          <View className="mt-0.5">{renderBadge(cloudFile.fileType)}</View>
+                          <View className="flex-1 gap-1">
+                            <Text
+                              numberOfLines={1}
+                              className="text-sm font-semibold text-foreground"
+                            >
+                              {cloudFile.name}
+                            </Text>
+                            <Text className="text-xs text-muted-foreground">
+                              {formatFileSize(cloudFile.fileSize)} ·{' '}
+                              {new Date(cloudFile.updatedAt).toLocaleDateString()}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
 
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation()
-                      void handleShare(file)
-                    }}
-                    className="px-2.5 py-1 rounded-md bg-surface-muted active:opacity-70"
-                  >
-                    <Text className="text-xs text-muted-foreground font-medium">Share</Text>
-                  </Pressable>
+                      {/* Status indicator & Actions */}
+                      <View className="flex-row items-center justify-between pt-2 border-t border-border/50">
+                        {isDownloaded ? (
+                          <View className="flex-row items-center gap-1.5">
+                            <Text className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                              🟢 Available Offline
+                            </Text>
+                          </View>
+                        ) : (
+                          <View className="flex-row items-center gap-1.5">
+                            <Text className="text-xs font-semibold text-sky-600 dark:text-sky-400">
+                              ☁️ In Cloud
+                            </Text>
+                          </View>
+                        )}
 
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation()
-                      handleDelete(file)
-                    }}
-                    className="px-2.5 py-1 rounded-md bg-destructive/10 active:opacity-70"
-                  >
-                    <Text className="text-xs text-destructive font-medium">Delete</Text>
-                  </Pressable>
-                </View>
-              </Pressable>
-            ))}
-          </View>
+                        <View className="flex-row items-center gap-2">
+                          {isDownloaded && localId ? (
+                            <Pressable
+                              onPress={() => router.push(`/files/${localId}`)}
+                              className="px-3 py-1.5 rounded-md bg-primary active:opacity-80"
+                            >
+                              <Text className="text-xs font-semibold text-primary-foreground">
+                                Open Offline
+                              </Text>
+                            </Pressable>
+                          ) : (
+                            <Pressable
+                              disabled={isDownloading}
+                              onPress={() => void handleDownloadCloud(cloudFile)}
+                              className={`px-3 py-1.5 rounded-md bg-primary active:opacity-80 ${isDownloading ? 'opacity-50' : ''}`}
+                            >
+                              <Text className="text-xs font-semibold text-primary-foreground">
+                                {isDownloading ? 'Downloading…' : 'Download for Offline'}
+                              </Text>
+                            </Pressable>
+                          )}
+
+                          <Pressable
+                            onPress={() => handleDeleteCloud(cloudFile)}
+                            className="px-2.5 py-1.5 rounded-md bg-destructive/10 active:opacity-70"
+                          >
+                            <Text className="text-xs text-destructive font-medium">Delete</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    </View>
+                  )
+                })}
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
 

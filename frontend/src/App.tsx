@@ -17,6 +17,8 @@ import { SetDetailPage } from '@/features/cards/SetDetailPage'
 import { SetsPage } from '@/features/cards/SetsPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { ProgressPage } from '@/features/dashboard/ProgressPage'
+import { FilesPage } from '@/features/files/FilesPage'
+import { FileViewerPage } from '@/features/files/FileViewerPage'
 import { SearchPage } from '@/features/search/SearchPage'
 import { StudySessionPage } from '@/features/study/StudySessionPage'
 import { LogoPreviewPage } from '@/features/preview/LogoPreviewPage'
@@ -136,6 +138,8 @@ export function App(): ReactElement {
                 >
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/sets" element={<SetsPage />} />
+                  <Route path="/files" element={<FilesPage />} />
+                  <Route path="/files/:fileId" element={<FileViewerPage />} />
                   <Route path="/progress" element={<ProgressPage />} />
                   {/*
                     One route, not two. Studying a single set is `?set=<id>` on the

@@ -1,7 +1,10 @@
 import * as DocumentPicker from 'expo-document-picker'
 import * as FileSystem from 'expo-file-system/legacy'
+import type { CloudFileListResponse, CloudFileSummary } from '@saulado/shared'
 import { getDatabase } from '../lib/offline/db'
 import type { RepositoryFile, RepositoryFileType, SQLiteRepositoryFile } from '../lib/offline/types'
+import { authorizedRequest, getAccessToken } from './api'
+import { apiUrl } from './config'
 
 export const ALLOWED_MIME_TYPES = [
   'application/pdf',
@@ -107,6 +110,7 @@ function mapRowToRepositoryFile(row: SQLiteRepositoryFile): RepositoryFile {
   return {
     id: row.id,
     userId: row.user_id,
+    cloudFileId: row.cloud_file_id ?? null,
     name: row.name,
     fileType: row.file_type,
     mimeType: row.mime_type,
@@ -319,4 +323,126 @@ export async function getRepositoryStats(userId: string): Promise<RepositoryStat
   }
 
   return { totalFiles, totalSizeBytes, pdfCount, docxCount, docCount }
+}
+
+/**
+ * Fetches the user's online files from the cloud account.
+ */
+export async function fetchCloudFiles(): Promise<CloudFileSummary[]> {
+  const response = await authorizedRequest<CloudFileListResponse>('/api/files')
+  return response.files
+}
+
+/**
+ * Downloads a cloud file from the backend API into the mobile device sandbox,
+ * verifies magic bytes, and records it in SQLite so it becomes available 100% offline.
+ */
+export async function downloadCloudFile(
+  cloudFile: CloudFileSummary,
+  userId: string,
+): Promise<RepositoryFile> {
+  if (!userId) throw new Error('User must be authenticated to download cloud files.')
+
+  await ensureRepositoryDirectory()
+  const db = await getDatabase()
+
+  const sanitizedName = cloudFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const destinationPath = `${REPOSITORY_DIR}${cloudFile.id}_${sanitizedName}`
+
+  const downloadUrl = apiUrl(`/api/files/${cloudFile.id}/download`)
+  const token = getAccessToken()
+  const headers: Record<string, string> = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const downloadResult = await FileSystem.downloadAsync(downloadUrl, destinationPath, {
+    headers,
+  })
+
+  if (downloadResult.status < 200 || downloadResult.status >= 300) {
+    throw new Error(`Cloud download failed with status ${downloadResult.status}`)
+  }
+
+  // Verify file validity
+  const isValid = await verifyMagicBytes(destinationPath, cloudFile.fileType)
+  if (!isValid) {
+    console.warn(`[file-repository] Downloaded file failed magic bytes check: ${cloudFile.name}`)
+  }
+
+  const now = new Date().toISOString()
+  let localFileId = generateUUID()
+
+  // Check if row already exists in SQLite for this cloud file
+  const existing = await db.getFirstAsync<SQLiteRepositoryFile>(
+    'SELECT * FROM repository_files WHERE cloud_file_id = ? AND user_id = ?',
+    [cloudFile.id, userId],
+  )
+
+  if (existing) {
+    localFileId = existing.id
+    await db.runAsync(
+      'UPDATE repository_files SET file_uri = ?, file_size = ?, updated_at = ? WHERE id = ?',
+      [destinationPath, cloudFile.fileSize, now, existing.id],
+    )
+  } else {
+    await db.runAsync(
+      `INSERT INTO repository_files (
+        id, user_id, cloud_file_id, name, file_type, mime_type, file_uri, file_size, page_count, created_at, updated_at, last_viewed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL)`,
+      [
+        localFileId,
+        userId,
+        cloudFile.id,
+        cloudFile.name,
+        cloudFile.fileType,
+        cloudFile.mimeType,
+        destinationPath,
+        cloudFile.fileSize,
+        now,
+        now,
+      ],
+    )
+  }
+
+  return {
+    id: localFileId,
+    userId,
+    cloudFileId: cloudFile.id,
+    name: cloudFile.name,
+    fileType: cloudFile.fileType,
+    mimeType: cloudFile.mimeType,
+    fileUri: destinationPath,
+    fileSize: cloudFile.fileSize,
+    pageCount: null,
+    createdAt: now,
+    updatedAt: now,
+    lastViewedAt: null,
+  }
+}
+
+/**
+ * Removes a file from the user's cloud account.
+ */
+export async function deleteCloudFile(cloudFileId: string): Promise<void> {
+  await authorizedRequest<void>(`/api/files/${cloudFileId}`, {
+    method: 'DELETE',
+  })
+}
+
+/**
+ * Returns a map of cloudFileId -> localFileId for all files currently downloaded on device.
+ */
+export async function getDownloadedCloudFileMap(userId: string): Promise<Map<string, string>> {
+  if (!userId) return new Map()
+  const db = await getDatabase()
+  const rows = await db.getAllAsync<{ id: string; cloud_file_id: string }>(
+    'SELECT id, cloud_file_id FROM repository_files WHERE user_id = ? AND cloud_file_id IS NOT NULL',
+    [userId],
+  )
+  const map = new Map<string, string>()
+  for (const r of rows) {
+    if (r.cloud_file_id) {
+      map.set(r.cloud_file_id, r.id)
+    }
+  }
+  return map
 }

@@ -389,3 +389,23 @@ export function XIcon(props: IconProps): ReactElement {
     </Icon>
   )
 }
+
+export function FolderIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+    </Icon>
+  )
+}
+
+export function DocumentIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      <path d="M16 13H8" />
+      <path d="M16 17H8" />
+      <path d="M10 9H8" />
+    </Icon>
+  )
+}

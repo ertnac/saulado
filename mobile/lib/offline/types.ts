@@ -198,6 +198,7 @@ export type RepositoryFileType = 'pdf' | 'doc' | 'docx'
 export interface SQLiteRepositoryFile {
   id: string
   user_id: string
+  cloud_file_id?: string | null
   name: string
   file_type: RepositoryFileType
   mime_type: string
@@ -212,6 +213,7 @@ export interface SQLiteRepositoryFile {
 export interface RepositoryFile {
   id: string
   userId: string
+  cloudFileId?: string | null
   name: string
   fileType: RepositoryFileType
   mimeType: string

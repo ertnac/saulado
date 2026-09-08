@@ -1,5 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 
+vi.mock('expo-secure-store', () => ({
+  getItemAsync: vi.fn(),
+  setItemAsync: vi.fn(),
+  deleteItemAsync: vi.fn(),
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY',
+}))
+
+vi.mock('../api', () => ({
+  authorizedRequest: vi.fn(),
+  getAccessToken: vi.fn(() => 'mock-token'),
+  apiUrl: vi.fn((path: string) => `http://localhost:3000${path}`),
+}))
+
 vi.mock('expo-document-picker', () => ({
   getDocumentAsync: vi.fn(),
 }))
@@ -14,13 +27,22 @@ vi.mock('expo-file-system/legacy', () => ({
   makeDirectoryAsync: vi.fn(),
   copyAsync: vi.fn(),
   deleteAsync: vi.fn(),
+  downloadAsync: vi.fn(),
   documentDirectory: 'file:///test-dir/',
   EncodingType: { Base64: 'base64' },
 }))
 
-import { detectFileType, formatFileSize, verifyMagicBytes } from '../file-repository'
+import {
+  detectFileType,
+  formatFileSize,
+  verifyMagicBytes,
+  fetchCloudFiles,
+  getDownloadedCloudFileMap,
+} from '../file-repository'
 import { generateReaderHtml, generatePdfViewerHtml } from '../document-viewer'
 import * as FileSystem from 'expo-file-system/legacy'
+import { authorizedRequest } from '../api'
+import { getDatabase } from '../../lib/offline/db'
 
 describe('file-repository service', () => {
   describe('detectFileType', () => {
@@ -123,6 +145,48 @@ describe('file-repository service', () => {
       expect(html).toContain('pdf-canvas')
       expect(html).toContain('prevPage()')
       expect(html).toContain('nextPage()')
+    })
+  })
+
+  describe('cloud files integration', () => {
+    it('fetches cloud files through authorizedRequest', async () => {
+      const mockList = [
+        {
+          id: 'cloud-1',
+          name: 'biology.pdf',
+          fileType: 'pdf' as const,
+          fileSize: 1024,
+          mimeType: 'application/pdf',
+          createdAt: '2026-01-01',
+          updatedAt: '2026-01-01',
+        },
+      ]
+      vi.mocked(authorizedRequest).mockResolvedValueOnce({ files: mockList })
+
+      const result = await fetchCloudFiles()
+      expect(authorizedRequest).toHaveBeenCalledWith('/api/files')
+      expect(result).toEqual(mockList)
+    })
+
+    it('returns a map of downloaded cloud file ids to local file ids', async () => {
+      const mockDb = {
+        getAllAsync: vi.fn().mockResolvedValueOnce([
+          { id: 'local-1', cloud_file_id: 'cloud-1' },
+          { id: 'local-2', cloud_file_id: 'cloud-2' },
+        ]),
+      }
+      vi.mocked(getDatabase).mockResolvedValueOnce(
+        mockDb as unknown as ReturnType<typeof getDatabase> extends Promise<infer U> ? U : never,
+      )
+
+      const map = await getDownloadedCloudFileMap('user-123')
+      expect(mockDb.getAllAsync).toHaveBeenCalledWith(
+        expect.stringContaining('cloud_file_id IS NOT NULL'),
+        ['user-123'],
+      )
+      expect(map.get('cloud-1')).toBe('local-1')
+      expect(map.get('cloud-2')).toBe('local-2')
+      expect(map.get('cloud-3')).toBeUndefined()
     })
   })
 })

@@ -67,6 +67,7 @@ export async function initDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
     CREATE TABLE IF NOT EXISTS repository_files (
       id TEXT PRIMARY KEY NOT NULL,
       user_id TEXT NOT NULL,
+      cloud_file_id TEXT,
       name TEXT NOT NULL,
       file_type TEXT NOT NULL,
       mime_type TEXT NOT NULL,
@@ -88,6 +89,12 @@ export async function initDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
     // Column already exists
   }
 
+  try {
+    await db.execAsync(`ALTER TABLE repository_files ADD COLUMN cloud_file_id TEXT;`)
+  } catch {
+    // Column already exists
+  }
+
   // Step 3: Create indexes after columns are guaranteed to exist
   await db.execAsync(`
     CREATE INDEX IF NOT EXISTS idx_sets_user ON study_sets (user_id, is_deleted);
@@ -102,6 +109,7 @@ export async function initDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_repo_files_user ON repository_files (user_id, file_type);
     CREATE INDEX IF NOT EXISTS idx_repo_files_updated ON repository_files (user_id, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_repo_files_cloud ON repository_files (cloud_file_id);
   `)
 }
 
