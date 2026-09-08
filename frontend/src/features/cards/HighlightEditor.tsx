@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
-import { ANSWERS_MAX_PER_CARD, codePointLength, PARAGRAPH_MAX_CODE_POINTS } from '@saulado/shared'
+import {
+  ANSWERS_MAX_PER_CARD,
+  codePointLength,
+  PARAGRAPH_MAX_CODE_POINTS,
+  sliceCodePoints,
+} from '@saulado/shared'
 import { Button } from '@/components/ui/button'
 import { AlertIcon } from '@/components/ui/icons'
 import { cn } from '@/lib/utils'
@@ -220,6 +225,59 @@ export function HighlightEditor({ draft }: HighlightEditorProps): ReactElement {
             <kbd className="rounded-full bg-surface-muted px-2 py-0.5 font-medium">H</kbd> also
             works, and Tab moves between blanks.
           </p>
+
+          {answers.length > 0 && (
+            <div className="space-y-2 rounded-2xl border border-border/70 bg-surface-muted/30 p-3.5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Answer Options ({answers.length})
+                </h4>
+                <span className="text-[11px] text-muted-foreground">
+                  Click to edit alternatives
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {answers.map((ans) => {
+                  const text = sliceCodePoints(paragraph, ans.startOffset, ans.endOffset)
+                  return (
+                    <div
+                      key={ans.ordinal}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-border/70 bg-surface px-2.5 py-1 text-xs shadow-2xs hover:border-primary/50 transition-colors"
+                    >
+                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground tabular-nums shrink-0">
+                        {ans.ordinal + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenOrdinal(ans.ordinal)
+                        }}
+                        aria-label={`Options for blank ${String(ans.ordinal + 1)}: ${text}`}
+                        className="font-medium text-foreground hover:text-primary transition-colors text-left"
+                      >
+                        {text}
+                        {ans.altAnswers.length > 0 && (
+                          <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                            (+{ans.altAnswers.length})
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          removeHighlight(ans.ordinal)
+                        }}
+                        aria-label={`Remove blank ${String(ans.ordinal + 1)}: ${text}`}
+                        className="ml-1 flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:bg-danger/10 hover:text-danger transition-colors text-[11px]"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

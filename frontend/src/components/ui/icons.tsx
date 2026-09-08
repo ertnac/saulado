@@ -202,6 +202,15 @@ export function ShieldIcon(props: IconProps): ReactElement {
   )
 }
 
+export function UserIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </Icon>
+  )
+}
+
 export function UsersIcon(props: IconProps): ReactElement {
   return (
     <Icon {...props}>
@@ -406,6 +415,25 @@ export function DocumentIcon(props: IconProps): ReactElement {
       <path d="M16 13H8" />
       <path d="M16 17H8" />
       <path d="M10 9H8" />
+    </Icon>
+  )
+}
+
+export function CoinIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8v8" />
+      <path d="M9.5 10a2.5 2.5 0 0 1 5 0c0 1.5-1.5 2-2.5 2s-2.5.5-2.5 2a2.5 2.5 0 0 0 5 0" />
+    </Icon>
+  )
+}
+
+export function BadgeRibbonIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="8" r="6" />
+      <path d="m8.21 13.89-1.71 7.11 5.5-3 5.5 3-1.71-7.11" />
     </Icon>
   )
 }

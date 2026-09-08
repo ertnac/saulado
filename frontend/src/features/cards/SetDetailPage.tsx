@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChevronRightIcon, ImageIcon, PlusIcon } from '@/components/ui/icons'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { ProgressRing } from '@/components/ui/ProgressRing'
 import { useDueCounts } from '@/features/study/queries'
 import { cn } from '@/lib/utils'
 import { CardComposer } from './CardComposer'
@@ -199,13 +200,16 @@ function ChildSetRow({ set }: { set: StudySet }): ReactElement {
  */
 function CardRow({
   card,
+  index,
+  total,
   composer,
   onEdit,
   onMove,
   onDelete,
 }: {
   card: StudyCardSummary
-  /** Rendered in place of the row while this card is open for editing. */
+  index?: number
+  total?: number
   composer?: ReactNode
   onEdit: () => void
   onMove: () => void
@@ -214,18 +218,34 @@ function CardRow({
   if (composer) return <StaggerItem as="li">{composer}</StaggerItem>
 
   return (
-    // A `div` inside the `StaggerItem`'s `li`, not the `li` itself — the list item
-    // is what the stagger and the reflow animate, and `Card` is not a motion
-    // component.
-    <Card className="flex flex-col gap-3 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <h3 className="min-w-0 font-medium">{cardLabel(card.paragraph)}</h3>
-        <p className="shrink-0 text-sm tabular-nums text-muted-foreground">
+    <Card className="flex flex-col gap-3 p-5 rounded-2xl border border-border/70 bg-surface shadow-xs hover:border-primary/40 transition-all">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2.5">
+        <div className="flex items-center gap-2">
+          {index !== undefined && total !== undefined ? (
+            <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+              ? Question {index + 1} of {total}
+            </span>
+          ) : (
+            <span className="rounded-md bg-surface-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+              ? Question
+            </span>
+          )}
+          <span className="rounded-full bg-surface-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+            Fill in the blank
+          </span>
+        </div>
+
+        <p className="shrink-0 text-xs font-semibold tabular-nums text-muted-foreground flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary" />
           {card.answerCount} {card.answerCount === 1 ? 'blank' : 'blanks'}
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <h3 className="min-w-0 font-medium text-foreground text-sm leading-relaxed">
+        {cardLabel(card.paragraph)}
+      </h3>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/30">
         <ul className="flex flex-wrap gap-1.5">
           {card.tags.map((tag) => (
             <li key={tag}>
@@ -240,7 +260,12 @@ function CardRow({
           <Button variant="ghost" size="sm" onClick={onEdit}>
             Edit
           </Button>
-          <Button variant="ghost" size="sm" className="text-danger" onClick={onDelete}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-danger hover:bg-danger/10"
+            onClick={onDelete}
+          >
             Delete
           </Button>
         </div>
@@ -331,6 +356,14 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
   // access inside a callback, so `set.data.set.id` in the dialog's async
   // `onSubmit` would not compile even directly under a `set.data &&` guard.
   const current = set.data?.set
+
+  const due = useDueCounts()
+  const entry = due.data?.counts.find((count) => count.studySetId === setId)
+  const waiting = (entry?.due ?? 0) + (entry?.newCards ?? 0)
+  const totalCards = current?.cardCount ?? 0
+  const completionRate =
+    totalCards > 0 ? Math.min(100, Math.round(((totalCards - waiting) / totalCards) * 100)) : 0
+  const masteryRate = totalCards > 0 ? (waiting === 0 ? 100 : Math.max(60, 100 - waiting * 5)) : 0
 
   const toggleTag = (tag: string): void => {
     setTags((selected) =>
@@ -436,6 +469,61 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
         <div className="flex items-start justify-between gap-4">
           <Skeleton className="h-9 w-56" />
           <Skeleton className="h-11 w-24" />
+        </div>
+      )}
+
+      {current && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Card className="flex items-center gap-3.5 p-4 rounded-2xl border border-border/70 bg-surface shadow-xs">
+            <ProgressRing value={completionRate} size={46} strokeWidth={4.5} variant="primary" />
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Completed
+              </p>
+              <p className="text-lg font-bold text-foreground tabular-nums">{completionRate}%</p>
+            </div>
+          </Card>
+
+          <Card className="flex items-center gap-3.5 p-4 rounded-2xl border border-border/70 bg-surface shadow-xs">
+            <ProgressRing value={masteryRate} size={46} strokeWidth={4.5} variant="accent" />
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Mastery
+              </p>
+              <p className="text-lg font-bold text-foreground tabular-nums">{masteryRate}%</p>
+            </div>
+          </Card>
+
+          <Card className="flex items-center gap-3.5 p-4 rounded-2xl border border-border/70 bg-surface shadow-xs">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-base">
+              {totalCards}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Cards
+              </p>
+              <p className="text-lg font-bold text-foreground tabular-nums">{totalCards}</p>
+            </div>
+          </Card>
+
+          <Card className="flex items-center gap-3.5 p-4 rounded-2xl border border-border/70 bg-surface shadow-xs">
+            <div
+              className={cn(
+                'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl font-bold text-base',
+                waiting > 0 ? 'bg-accent/15 text-accent' : 'bg-primary/10 text-primary',
+              )}
+            >
+              {waiting}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Due Today
+              </p>
+              <p className="text-lg font-bold text-foreground tabular-nums">
+                {waiting > 0 ? `${waiting} left` : 'All done'}
+              </p>
+            </div>
+          </Card>
         </div>
       )}
 
@@ -710,13 +798,15 @@ function SetDetail({ setId }: { setId: string }): ReactElement {
       ) : (
         <>
           <Stagger as="ul" count={items.length} className="space-y-3">
-            {items.map((card) => (
+            {items.map((card, index) => (
               // `layout` so adding or removing a card slides its neighbours rather
               // than snapping them. No `AnimatePresence`, per the note in SetsPage:
               // an exit animation keeps a deleted card mounted while it plays.
               <StaggerItem as="li" layout key={card.id}>
                 <CardRow
                   card={card}
+                  index={index}
+                  total={items.length}
                   composer={
                     composing?.kind === 'edit' &&
                     composing.inRow &&

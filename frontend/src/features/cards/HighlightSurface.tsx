@@ -260,18 +260,18 @@ function HighlightMark({ ordinal, text, onOpen, onRemove }: HighlightMarkProps):
       }}
       aria-label={`Blank ${String(label)}: ${text}. Enter for options, Delete to remove.`}
       className={cn(
-        'rounded px-0.5 text-left align-baseline',
-        'bg-highlight text-highlight-foreground',
+        'inline-flex items-center gap-1 mx-0.5 rounded-lg px-2 py-0.5 text-left align-baseline font-semibold transition-all shadow-2xs',
+        'bg-highlight/35 text-foreground border border-highlight hover:bg-highlight/50 focus-visible:ring-2 focus-visible:ring-primary',
       )}
     >
-      <mark className="bg-transparent text-inherit">{text}</mark>
-      <sup
+      <span
         aria-hidden="true"
         {...{ [PARAGRAPH_DECORATION_ATTR]: '' }}
-        className="ml-0.5 text-[0.625rem] font-semibold tabular-nums opacity-70"
+        className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground tabular-nums shrink-0"
       >
         {label}
-      </sup>
+      </span>
+      <mark className="bg-transparent text-inherit font-semibold">{text}</mark>
     </button>
   )
 }

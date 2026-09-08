@@ -215,6 +215,25 @@ function Composer({ setId, card, onClose, importQueue }: ComposerProps): ReactEl
         </div>
       )}
 
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
+        <div className="flex items-center gap-2">
+          <span className="rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
+            {editing ? 'Card Studio • Edit' : 'Card Studio • New Card'}
+          </span>
+          <span className="text-xs text-muted-foreground font-medium">Cloze Deletion</span>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="tabular-nums font-medium">
+            {draft.answers.length} {draft.answers.length === 1 ? 'blank' : 'blanks'}
+          </span>
+          <span>•</span>
+          <span className="tabular-nums">
+            ~{Math.max(5, Math.round(draft.paragraph.split(/\s+/).filter(Boolean).length * 0.4))}s
+            review
+          </span>
+        </div>
+      </div>
+
       <form
         className="space-y-5"
         onSubmit={(event) => {
