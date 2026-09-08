@@ -1,3 +1,7 @@
+/**
+ * Cloud files storage & cross-platform document sync API route.
+ * Supports Cloudinary storage for raw documents (PDF, DOCX) with PostgreSQL metadata.
+ */
 import express, { Router, type Request, type Response } from 'express'
 import type {
   CloudFileListResponse,
