@@ -1,9 +1,10 @@
 import { Redirect, useRouter, usePathname, Tabs } from 'expo-router'
 import type { ReactElement } from 'react'
-import { ActivityIndicator, Pressable, View } from 'react-native'
+import { Pressable, View } from 'react-native'
 import { ChevronLeftIcon, SettingsIcon } from '../../components/icons'
 import { TabBar } from '../../components/tab-bar'
 import { ThemeToggle } from '../../components/theme-toggle'
+import { SauladoLogo } from '../../components/saulado-logo'
 import { useAuthStore } from '../../stores/auth'
 import { useTokenColor } from '../../stores/theme'
 
@@ -73,7 +74,6 @@ export default function AppLayout(): ReactElement {
   const pathname = usePathname()
   const router = useRouter()
 
-  const primary = useTokenColor('--primary')
   const foreground = useTokenColor('--foreground')
   const background = useTokenColor('--background')
 
@@ -84,12 +84,8 @@ export default function AppLayout(): ReactElement {
    */
   if (status === 'restoring') {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator
-          accessibilityLabel="Restoring your session"
-          color={primary}
-          size="large"
-        />
+      <View className="flex-1 items-center justify-center bg-[#052e24] dark:bg-[#031a14]">
+        <SauladoLogo size={120} animation="star-gyro" />
       </View>
     )
   }

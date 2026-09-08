@@ -1,15 +1,25 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactElement,
+} from 'react'
 import { ActivityIndicator, type LayoutChangeEvent, Pressable, Text, View } from 'react-native'
 import { CameraView, useCameraPermissions } from 'expo-camera'
+import * as DocumentPicker from 'expo-document-picker'
 import * as ImagePicker from 'expo-image-picker'
 import { useLocalSearchParams, useRouter } from 'expo-router'
+import { onlineManager } from '@tanstack/react-query'
 import { Button } from '../../components/button'
-import { AlertIcon, ImageIcon } from '../../components/icons'
+import { AlertIcon, FileTextIcon, ImageIcon } from '../../components/icons'
 import { LensArOverlay, type InboundBox } from '../../components/lens-ar-overlay'
 import { setScannedPage } from '../../lib/scan-handoff'
 import {
   filterBlocksByInboundBox,
   formatScannedDocument,
+  processDocumentFile,
   recognize,
   recognizeWithLayout,
   type RecognizedLayout,
@@ -68,6 +78,21 @@ export default function ScanScreen(): ReactElement {
   const previous = useRef<string | null>(null)
   const busy = useRef(false)
   const alive = useRef(true)
+
+  const isOnline = useSyncExternalStore(
+    (onStoreChange) => onlineManager.subscribe(onStoreChange),
+    () => onlineManager.isOnline(),
+  )
+
+  useEffect(() => {
+    if (!isOnline) {
+      router.replace(
+        setId === undefined || setId.length === 0
+          ? '/scan-review?mode=paste'
+          : `/scan-review?mode=paste&setId=${encodeURIComponent(setId)}`,
+      )
+    }
+  }, [isOnline, router, setId])
 
   useEffect(() => {
     alive.current = true
@@ -218,6 +243,32 @@ export default function ScanScreen(): ReactElement {
     })()
   }, [accept])
 
+  const pickDocument = useCallback((): void => {
+    void (async (): Promise<void> => {
+      try {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: ['application/pdf', 'image/*', 'text/plain'],
+          copyToCacheDirectory: true,
+        })
+        if (result.canceled || !result.assets || result.assets.length === 0) return
+        const asset = result.assets[0]
+        if (!asset) return
+
+        setPhase({ kind: 'reading' })
+        const text = await processDocumentFile(asset.uri, asset.mimeType, asset.name)
+        if (!alive.current) return
+
+        if (text.length < MIN_PAGE_CODE_POINTS) {
+          setPhase({ kind: 'error', message: NO_TEXT_IN_FRAME })
+          return
+        }
+        accept(text)
+      } catch {
+        if (alive.current) setPhase({ kind: 'error', message: FAILED })
+      }
+    })()
+  }, [accept])
+
   const handleLayout = (e: LayoutChangeEvent): void => {
     const { width, height } = e.nativeEvent.layout
     setViewport({ width, height })
@@ -355,8 +406,32 @@ export default function ScanScreen(): ReactElement {
             </View>
           </Pressable>
 
-          <View className="h-16 w-16" />
+          {/* Document / PDF Import Button */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Import a PDF or document"
+            onPress={pickDocument}
+            className="h-16 w-16 items-center justify-center rounded-full active:opacity-70"
+          >
+            <FileTextIcon color={mutedForeground} size={26} />
+          </Pressable>
         </View>
+
+        {/* Manual Paste Text Shortcut */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Switch to pasted text reviewer"
+          onPress={() => {
+            router.replace(
+              setId === undefined || setId.length === 0
+                ? '/scan-review?mode=paste'
+                : `/scan-review?mode=paste&setId=${encodeURIComponent(setId)}`,
+            )
+          }}
+          className="items-center pt-1"
+        >
+          <Text className="text-xs font-semibold text-primary">Or paste text notes manually →</Text>
+        </Pressable>
       </View>
     </View>
   )

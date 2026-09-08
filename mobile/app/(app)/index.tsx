@@ -12,8 +12,8 @@ import {
 import { onlineManager } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import type { DashboardResponse, RecentSet } from '@saulado/shared'
-import sauladoLogo from '../../assets/saulado.png'
 import welcomeAvatar from '../../assets/welcome-avatar.png'
+import { SauladoIcon } from '../../components/saulado-logo'
 import { Button, TextLink } from '../../components/button'
 import { Card, CardFigure, CardLabel } from '../../components/card'
 import {
@@ -760,7 +760,7 @@ export default function DashboardScreen(): ReactElement {
         {/* Student Portal Top Bar */}
         <View className="flex-row items-center justify-between">
           <View className="flex-row items-center gap-2">
-            <Image source={sauladoLogo} style={{ width: 26, height: 26 }} resizeMode="contain" />
+            <SauladoIcon size={26} />
             <Text className="text-base font-bold tracking-tight text-foreground">Saulado</Text>
           </View>
           <View className="flex-row items-center gap-2">

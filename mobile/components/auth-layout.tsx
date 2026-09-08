@@ -1,9 +1,9 @@
 import type { ReactElement, ReactNode } from 'react'
-import { KeyboardAvoidingView, Platform, Text, View, Image, Pressable } from 'react-native'
+import { KeyboardAvoidingView, Platform, Text, View, Pressable } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import Animated, { FadeIn } from 'react-native-reanimated'
-import sauladoLogo from '../assets/saulado.png'
+import { SauladoLogo } from './saulado-logo'
 
 interface AuthLayoutProps {
   title: string
@@ -41,7 +41,7 @@ export function AuthLayout({
               paddingBottom: 16,
             }}
           >
-            <Image source={sauladoLogo} className="w-20 h-20 mb-1" resizeMode="contain" />
+            <SauladoLogo size={80} animation="pulse-aura" />
             <Text accessibilityRole="header" className="text-2xl font-bold text-white text-center">
               {title}
             </Text>

@@ -1,9 +1,17 @@
-import type { ReactElement } from 'react'
+import { useSyncExternalStore, type ReactElement } from 'react'
 import { TouchableOpacity, View } from 'react-native'
+import { useRouter, type Tabs } from 'expo-router'
+import { onlineManager } from '@tanstack/react-query'
 import { useTokenColor } from '../stores/theme'
-import { ChartIcon, HomeIcon, LayersIcon, ScanIcon, UserIcon, type IconProps } from './icons'
-
-import type { Tabs } from 'expo-router'
+import {
+  ChartIcon,
+  FileTextIcon,
+  HomeIcon,
+  LayersIcon,
+  ScanIcon,
+  UserIcon,
+  type IconProps,
+} from './icons'
 
 export type BottomTabBarProps = Parameters<
   NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>
@@ -38,8 +46,14 @@ const DESTINATIONS: Destination[] = [
 ]
 
 export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactElement | null {
+  const router = useRouter()
   const accent = useTokenColor('--accent')
   const onAccent = useTokenColor('--accent-foreground')
+
+  const isOnline = useSyncExternalStore(
+    (onStoreChange) => onlineManager.subscribe(onStoreChange),
+    () => onlineManager.isOnline(),
+  )
 
   const active = state.routes[state.index]?.name ?? ''
 
@@ -74,15 +88,25 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
       }}
     >
       {/* 
-        1. SOLO FLOATING SCAN BUTTON (LEFT SIDE)
+        1. SOLO FLOATING BUTTON (LEFT SIDE)
+        Online: Scan icon -> opens Camera / Document Scanner (/scan).
+        Offline: FileText icon -> opens Pasted Text Card Creator (/scan-review?mode=paste).
         Styled in theme's accent color (clay/orange). 56x56 circular container.
       */}
       <TouchableOpacity
         accessibilityRole="button"
-        accessibilityLabel="Scan a page with the camera"
-        accessibilityState={{ selected: active === 'scan' }}
+        accessibilityLabel={
+          isOnline
+            ? 'Scan a page with the camera or import documents'
+            : 'Create cards from pasted text'
+        }
+        accessibilityState={{ selected: isOnline ? active === 'scan' : active === 'scan-review' }}
         onPress={() => {
-          go('scan')
+          if (isOnline) {
+            go('scan')
+          } else {
+            router.push('/scan-review?mode=paste')
+          }
         }}
         style={{
           backgroundColor: accent,
@@ -98,7 +122,11 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
         }}
         className="active:opacity-85 rounded-full"
       >
-        <ScanIcon color={onAccent} size={24} />
+        {isOnline ? (
+          <ScanIcon color={onAccent} size={24} />
+        ) : (
+          <FileTextIcon color={onAccent} size={24} />
+        )}
       </TouchableOpacity>
 
       {/* Spacer */}

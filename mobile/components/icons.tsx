@@ -510,3 +510,5 @@ export function FolderPlusIcon(props: IconProps): ReactElement {
     </Icon>
   )
 }
+
+export { SauladoLogo, SauladoIcon, type SauladoLogoProps } from './saulado-logo'

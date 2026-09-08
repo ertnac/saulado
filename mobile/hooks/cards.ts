@@ -912,34 +912,39 @@ export function useCard(id: string | undefined) {
 
 // ── Card mutations ──────────────────────────────────────────────────────────
 
+export async function createCardOfflineAware(
+  setId: string,
+  body: CreateCardRequest,
+): Promise<CardResponse> {
+  const userId = await resolveUserId()
+  const isTemp = setId.startsWith('temp-set-')
+  if ((isTemp || !onlineManager.isOnline()) && userId) {
+    const card = await offlineData.createCard(userId, setId, body)
+    return { card }
+  }
+
+  try {
+    const res = await api.createCard(setId, body)
+    if (userId && res.card) {
+      void offlineData.mirrorCardToSQLite(userId, setId, res.card)
+    }
+    return res
+  } catch (error) {
+    if (userId && isNetworkError(error)) {
+      const card = await offlineData.createCard(userId, setId, body)
+      return { card }
+    }
+    throw error
+  }
+}
+
 export function useCreateCard(
   setId: string,
 ): UseMutationResult<CardResponse, Error, CreateCardRequest> {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: async (body: CreateCardRequest) => {
-      const userId = await resolveUserId()
-      const isTemp = setId.startsWith('temp-set-')
-      if ((isTemp || !onlineManager.isOnline()) && userId) {
-        const card = await offlineData.createCard(userId, setId, body)
-        return { card }
-      }
-
-      try {
-        const res = await api.createCard(setId, body)
-        if (userId && res.card) {
-          void offlineData.mirrorCardToSQLite(userId, setId, res.card)
-        }
-        return res
-      } catch (error) {
-        if (userId && isNetworkError(error)) {
-          const card = await offlineData.createCard(userId, setId, body)
-          return { card }
-        }
-        throw error
-      }
-    },
+    mutationFn: (body: CreateCardRequest) => createCardOfflineAware(setId, body),
     onSuccess: (data) => {
       client.setQueryData<CardResponse>(cardKeys.detail(data.card.id), data)
 

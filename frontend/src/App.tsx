@@ -19,6 +19,7 @@ import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { ProgressPage } from '@/features/dashboard/ProgressPage'
 import { SearchPage } from '@/features/search/SearchPage'
 import { StudySessionPage } from '@/features/study/StudySessionPage'
+import { LogoPreviewPage } from '@/features/preview/LogoPreviewPage'
 import { createQueryClient } from '@/lib/query-client'
 import { useAuthStore } from '@/stores/auth'
 
@@ -69,6 +70,8 @@ export function App(): ReactElement {
                 {/* ── Public Static Landing Pages ── */}
                 <Route path="/welcome" element={<LandingPage />} />
                 <Route path="/landing" element={<LandingPage />} />
+                <Route path="/logo-preview" element={<LogoPreviewPage />} />
+                <Route path="/logo-test" element={<LogoPreviewPage />} />
 
                 {/* ── Root Route: Dashboard if logged in, LandingPage if logged out ── */}
                 <Route

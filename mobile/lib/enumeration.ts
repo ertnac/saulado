@@ -23,9 +23,15 @@ export function splitSentences(text: string): string[] {
 /**
  * Strips leading bullet markers, dashes, asterisks, or existing numbers/letters
  * e.g. "1. ", "1) ", "- ", "• ", "* ", "a) "
+ * Repeats in a loop to ensure any duplicated numbers/markers are completely removed.
  */
 export function stripBulletMarker(line: string): string {
-  return line.replace(/^([0-9]+[.)]|\([0-9a-zA-Z]+\)|[a-zA-Z][.)]|[-*•+–—])\s*/, '').trim()
+  let cleaned = line.trim()
+  const markerRegex = /^([0-9]+[.)]|\([0-9a-zA-Z]+\)|[a-zA-Z][.)]|[-*•+–—])\s*/
+  while (markerRegex.test(cleaned)) {
+    cleaned = cleaned.replace(markerRegex, '').trim()
+  }
+  return cleaned
 }
 
 /**
@@ -58,6 +64,26 @@ export interface ParsedEnumeration {
 }
 
 /**
+ * Checks if a question text block is formatted as an enumeration.
+ * Returns true if it has multiple lines and at least one subsequent line begins
+ * with a list marker (e.g. "1. ", "1) ", "- ", "• ", "* ").
+ */
+export function isEnumeratedQuestion(text: string): boolean {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+
+  if (lines.length < 2) {
+    return false
+  }
+
+  const itemLines = lines.slice(1)
+  const markerRegex = /^([0-9]+[.)]|\([0-9a-zA-Z]+\)|[a-zA-Z][.)]|[-*•+–—])\s+/
+  return itemLines.some((line) => markerRegex.test(line))
+}
+
+/**
  * Parses raw or pasted text into a structured enumeration of title and items.
  */
 export function parseEnumeration(rawText: string): ParsedEnumeration {
@@ -73,8 +99,21 @@ export function parseEnumeration(rawText: string): ParsedEnumeration {
     .filter((l) => l.length > 0)
 
   if (rawLines.length > 1) {
+    // If the first line itself starts with a bullet/number marker, all lines are items
+    const firstLineIsMarker = /^([0-9]+[.)]|\([0-9a-zA-Z]+\)|[a-zA-Z][.)]|[-*•+–—])\s+/.test(
+      rawLines[0] as string,
+    )
+
+    if (firstLineIsMarker) {
+      const items = rawLines.map((line) => stripBulletMarker(line)).filter((l) => l.length > 0)
+      return { title: '', items: items.length > 0 ? items : ['', '', ''] }
+    }
+
     const rawTitle = cleanTitleText(rawLines[0] as string)
-    const items = rawLines.slice(1).map((line) => stripBulletMarker(line))
+    const items = rawLines
+      .slice(1)
+      .map((line) => stripBulletMarker(line))
+      .filter((l) => l.length > 0)
     return { title: rawTitle, items: items.length > 0 ? items : ['', '', ''] }
   }
 
@@ -94,6 +133,11 @@ export function parseEnumeration(rawText: string): ParsedEnumeration {
     if (bodyPart.includes(';')) {
       segments = bodyPart
         .split(/\s*;\s*/)
+        .map((s) => s.trim().replace(/[;.!?]$/, ''))
+        .filter((s) => s.length > 0)
+    } else if (bodyPart.includes(',')) {
+      segments = bodyPart
+        .split(/\s*,\s*/)
         .map((s) => s.trim().replace(/[;.!?]$/, ''))
         .filter((s) => s.length > 0)
     } else {
@@ -121,6 +165,18 @@ export function parseEnumeration(rawText: string): ParsedEnumeration {
         titlePart = text
         segments = []
       }
+    } else if (text.includes(',')) {
+      const commaSegments = text
+        .split(/\s*,\s*/)
+        .map((s) => s.trim().replace(/[;.!?]$/, ''))
+        .filter((s) => s.length > 0)
+      if (commaSegments.length > 1) {
+        titlePart = ''
+        segments = commaSegments
+      } else {
+        titlePart = text
+        segments = []
+      }
     } else {
       titlePart = text
       segments = []
@@ -128,7 +184,7 @@ export function parseEnumeration(rawText: string): ParsedEnumeration {
   }
 
   const cleanTitle = cleanTitleText(titlePart)
-  const items = segments.map((seg) => stripBulletMarker(seg))
+  const items = segments.map((seg) => stripBulletMarker(seg)).filter((s) => s.length > 0)
 
   return {
     title: cleanTitle,
@@ -149,10 +205,16 @@ export interface CompiledEnumeration {
  * Compiles structured title and items into a clean paragraph and computes
  * exact code point offsets for auto-highlighting each item as a question blank.
  *
- * NOTE: The word "Title:" is removed from the resulting paragraph.
- * Only the actual title text (followed by ':') is output, and the title is NOT blanked.
+ * NOTE: When includeNumberPrefix is false (the default for reviewer cards),
+ * numbers like "1. ", "2. ", "3. " are NOT added to the paragraph to avoid
+ * duplicate numbers with the highlight ordinal badges ([1], [2], [3]).
  */
-export function compileEnumeration(title: string, items: string[]): CompiledEnumeration {
+export function compileEnumeration(
+  title: string,
+  items: string[],
+  options?: { includeNumberPrefix?: boolean },
+): CompiledEnumeration {
+  const includePrefix = options?.includeNumberPrefix ?? false
   const formattedTitle = formatTitle(title)
   const validItems = items.map((it) => stripBulletMarker(it)).filter((it) => it.trim().length > 0)
 
@@ -166,7 +228,7 @@ export function compileEnumeration(title: string, items: string[]): CompiledEnum
   let runningOffset = formattedTitle ? codePointLength(formattedTitle) + 1 : 0
 
   validItems.forEach((itemText, index) => {
-    const prefix = `${String(index + 1)}. `
+    const prefix = includePrefix ? `${String(index + 1)}. ` : ''
     const prefixLen = codePointLength(prefix)
     const itemLen = codePointLength(itemText)
 
@@ -194,13 +256,13 @@ export function compileEnumeration(title: string, items: string[]): CompiledEnum
 
 /**
  * Transforms plain or pasted text into a structured enumeration string.
- * Strips any literal "Title:" word if present in the source text.
+ * Automatically removes leading 1., 2., 3. or bullets from items to avoid duplications.
  */
-export function formatAsEnumeration(rawText: string): string {
+export function formatAsEnumeration(
+  rawText: string,
+  options?: { includeNumberPrefix?: boolean },
+): string {
   const parsed = parseEnumeration(rawText)
-  const compiled = compileEnumeration(parsed.title, parsed.items)
-  if (!compiled.paragraph) {
-    return '1. \n2. \n3. '
-  }
+  const compiled = compileEnumeration(parsed.title, parsed.items, options)
   return compiled.paragraph
 }

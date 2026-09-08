@@ -5,7 +5,6 @@ import {
   ScrollView,
   Text,
   View,
-  Image,
   Pressable,
   useWindowDimensions,
   type LayoutChangeEvent,
@@ -16,7 +15,9 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withDelay,
   Easing,
+  runOnJS,
 } from 'react-native-reanimated'
 import { PASSWORD_MIN_LENGTH, checkPassword } from '@saulado/shared'
 import { GoogleSignin, statusCodes, isErrorWithCode } from '../lib/google-signin'
@@ -26,7 +27,7 @@ import { useFormErrors } from '../hooks/useFormErrors'
 import { useAuthStore } from '../stores/auth'
 import { MailIcon, LockIcon, EyeIcon, EyeOffIcon, GoogleIcon } from './icons'
 import { useTokenColor } from '../stores/theme'
-import sauladoLogo from '../assets/saulado.png'
+import { SauladoLogo, type SauladoLogoAnimation } from './saulado-logo'
 
 interface AuthSlidingScreenProps {
   initialTab?: 'login' | 'register'
@@ -34,7 +35,7 @@ interface AuthSlidingScreenProps {
 
 export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenProps): ReactElement {
   const insets = useSafeAreaInsets()
-  const { width: windowWidth } = useWindowDimensions()
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const iconColor = useTokenColor('--foreground')
 
   const login = useAuthStore((s) => s.login)
@@ -64,6 +65,31 @@ export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenPro
   const [regSubmitting, setRegSubmitting] = useState(false)
   const regErrors = useFormErrors()
 
+  // Intro entrance animation states (Star Gyro at center -> slowly glides up -> Pulse Aura + reveal forms)
+  const [logoAnimation, setLogoAnimation] = useState<SauladoLogoAnimation>('star-gyro')
+  const introProgress = useSharedValue(0)
+  const headerPaddingTop = Math.max(insets.top + 16, 36)
+  const logoTravelDistance = Math.max(0, windowHeight / 2 - (headerPaddingTop + 60))
+
+  useEffect(() => {
+    // Start centered with Star Gyro animation, then after brief delay smoothly glide upwards
+    introProgress.value = withDelay(
+      500,
+      withTiming(
+        1,
+        {
+          duration: 900,
+          easing: Easing.bezier(0.16, 1, 0.3, 1),
+        },
+        (finished) => {
+          if (finished) {
+            runOnJS(setLogoAnimation)('pulse-aura')
+          }
+        },
+      ),
+    )
+  }, [])
+
   // Animation values
   const slideProgress = useSharedValue(initialTab === 'login' ? 0 : 1)
 
@@ -86,6 +112,39 @@ export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenPro
       easing: Easing.bezier(0.25, 0.1, 0.25, 1),
     })
   }
+
+  // Animated styles for upward glide intro
+  const animatedLogoStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        {
+          translateY: (1 - introProgress.value) * logoTravelDistance,
+        },
+      ],
+    }
+  })
+
+  const animatedHeroTextStyle = useAnimatedStyle(() => {
+    return {
+      opacity: introProgress.value,
+      transform: [
+        {
+          translateY: (1 - introProgress.value) * 18,
+        },
+      ],
+    }
+  })
+
+  const animatedFormContainerStyle = useAnimatedStyle(() => {
+    return {
+      opacity: introProgress.value,
+      transform: [
+        {
+          translateY: (1 - introProgress.value) * 50,
+        },
+      ],
+    }
+  })
 
   // Animated style for sliding form pages
   const formSliderStyle = useAnimatedStyle(() => {
@@ -187,10 +246,7 @@ export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenPro
   const isLogin = activeTab === 'login'
 
   return (
-    <View className="flex-1 bg-background dark:bg-[#031a14]">
-      {/* Hero Header Background */}
-      <View className="absolute top-0 left-0 right-0 h-[40%] bg-[#052e24] dark:bg-transparent" />
-
+    <View className="flex-1 bg-[#052e24] dark:bg-[#031a14]">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         className="flex-1"
@@ -202,22 +258,34 @@ export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenPro
           }}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Hero Header Area with Large Transparent Logo & Fixed Text */}
+          {/* Hero Header Area with Large Saulado Logo & Animated Text */}
           <View
-            className="w-full items-center justify-center px-6"
-            style={{ paddingTop: Math.max(insets.top + 16, 36), minHeight: 280 }}
+            className="w-full items-center justify-center px-6 z-20"
+            style={{ paddingTop: headerPaddingTop, minHeight: 270 }}
           >
-            <Image source={sauladoLogo} className="w-32 h-32 mb-2" resizeMode="contain" />
-            <Text accessibilityRole="header" className="text-3xl font-bold text-white text-center">
-              Saulado
-            </Text>
-            <Text className="mt-1.5 text-sm text-white/80 text-center max-w-[290px]">
-              Learn in context. Remember for life.
-            </Text>
+            <Animated.View
+              style={[animatedLogoStyle, { alignItems: 'center', justifyContent: 'center' }]}
+            >
+              <SauladoLogo size={120} animation={logoAnimation} />
+            </Animated.View>
+            <Animated.View style={[animatedHeroTextStyle, { alignItems: 'center', width: '100%' }]}>
+              <Text
+                accessibilityRole="header"
+                className="text-3xl font-bold text-white text-center mt-2"
+              >
+                Saulado
+              </Text>
+              <Text className="mt-1.5 text-sm text-white/80 text-center max-w-[290px]">
+                Learn in context. Remember for life.
+              </Text>
+            </Animated.View>
           </View>
 
           {/* Bottom Sheet Container */}
-          <View className="flex-1 bg-background rounded-t-[32px] px-6 pt-6 shadow-sm">
+          <Animated.View
+            style={[animatedFormContainerStyle]}
+            className="flex-1 bg-background rounded-t-[32px] px-6 pt-6 shadow-sm z-10"
+          >
             <View
               className="mx-auto w-full max-w-md"
               onLayout={(e: LayoutChangeEvent) => {
@@ -535,7 +603,7 @@ export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenPro
                 </Animated.View>
               </View>
             </View>
-          </View>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

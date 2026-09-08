@@ -1,5 +1,14 @@
 import { type ReactElement } from 'react'
 import { cn } from '@/lib/utils'
+import { SauladoIcon } from './saulado-logo'
+export {
+  SauladoLogo,
+  SauladoIcon,
+  SauladoLoader,
+  type SauladoLogoProps,
+  type SauladoLoaderProps,
+  type StarAnimation,
+} from './saulado-logo'
 
 /**
  * The brand marks: logo, avatar, and the sprite-sheet animation.
@@ -23,23 +32,7 @@ interface LogoProps {
 export function Logo({ withWordmark = false, className }: LogoProps): ReactElement {
   return (
     <span className={cn('flex items-center gap-2', className)}>
-      {/*
-        `alt=""` and not "Saulado logo": when the wordmark is beside it the mark
-        is decorative and naming it makes a screen reader say the brand twice.
-        Without the wordmark the accessible name comes from the link that wraps
-        this, which is where it belongs.
-      */}
-      <img
-        src="/saulado.png"
-        alt=""
-        width={32}
-        height={32}
-        // `decoding="async"` and no lazy loading: this is above the fold on every
-        // route, so deferring it would just delay the header.
-        decoding="async"
-        className="h-8 w-8 shrink-0 select-none object-contain"
-        draggable={false}
-      />
+      <SauladoIcon size={32} className="h-8 w-8 shrink-0 select-none" />
       {withWordmark && <span className="font-semibold tracking-tight">Saulado</span>}
     </span>
   )

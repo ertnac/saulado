@@ -1,6 +1,7 @@
 import TextRecognition, { type TextBlock } from '../lib/text-recognition'
 import { manipulateAsync, SaveFormat, type ActionCrop } from 'expo-image-manipulator'
-import { enhanceOcrText, normalizeParagraph } from '@saulado/shared'
+import { File } from 'expo-file-system'
+import { enhanceOcrText, extractTextFromPdfStream, normalizeParagraph } from '@saulado/shared'
 
 export interface CropRegion {
   originX: number
@@ -197,4 +198,52 @@ export async function recognizeWithLayout(
     imageWidth: processed.width,
     imageHeight: processed.height,
   }
+}
+
+/**
+ * Processes a chosen document file (PDF, text, or image) and extracts structured notes.
+ */
+export async function processDocumentFile(
+  uri: string,
+  mimeType?: string,
+  fileName?: string,
+): Promise<string> {
+  const lowerName = (fileName || uri).toLowerCase()
+  const lowerMime = (mimeType || '').toLowerCase()
+
+  // 1. If it is an image file
+  if (
+    lowerMime.startsWith('image/') ||
+    lowerName.endsWith('.jpg') ||
+    lowerName.endsWith('.jpeg') ||
+    lowerName.endsWith('.png') ||
+    lowerName.endsWith('.webp')
+  ) {
+    return await recognize(uri)
+  }
+
+  // 2. If it is a PDF file
+  if (lowerMime === 'application/pdf' || lowerName.endsWith('.pdf')) {
+    const fileObj = new File(uri)
+    try {
+      const bytes = await fileObj.bytes()
+      const extracted = extractTextFromPdfStream(bytes)
+      if (extracted.trim().length > 0) {
+        return extracted
+      }
+    } catch {
+      // If bytes() fails, try reading as text
+      const rawText = await fileObj.text()
+      const extracted = extractTextFromPdfStream(rawText)
+      if (extracted.trim().length > 0) {
+        return extracted
+      }
+    }
+    throw new Error('Could not extract readable text from this PDF document.')
+  }
+
+  // 3. Plaintext, Markdown, or other text documents
+  const fileObj = new File(uri)
+  const content = await fileObj.text()
+  return enhanceOcrText(content)
 }
