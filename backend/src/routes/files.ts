@@ -162,7 +162,7 @@ filesRouter.post(
         fileSize: buffer.length,
         fileUrl,
         storageKey,
-        data: dataBuffer as unknown as Uint8Array<ArrayBuffer> | null,
+        data: dataBuffer ? Uint8Array.from(dataBuffer) : null,
       },
       select: {
         id: true,
