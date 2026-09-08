@@ -160,7 +160,7 @@ describe('Offline Sets SQLite Engine', () => {
     expect(set).toBeNull()
   })
 
-  it('includes non-downloaded mirrored sets in offline set index with isDownloaded false', async () => {
+  it('excludes non-downloaded mirrored sets from offline set index', async () => {
     await mirrorSetToSQLite('test-user', {
       id: 'mirrored-1',
       title: 'Mirrored Set',
@@ -175,8 +175,6 @@ describe('Offline Sets SQLite Engine', () => {
     })
 
     const index = await getOfflineSetIndex()
-    expect(index.sets['mirrored-1']).toBeDefined()
-    expect(index.sets['mirrored-1']?.metadata?.title).toBe('Mirrored Set')
-    expect(index.sets['mirrored-1']?.isDownloaded).toBe(false)
+    expect(index.sets['mirrored-1']).toBeUndefined()
   })
 })

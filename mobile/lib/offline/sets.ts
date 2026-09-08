@@ -52,7 +52,7 @@ export async function getOfflineSetIndex(): Promise<OfflineSetIndex> {
   const db = await getDatabase()
   const { sql, params } = buildUserFilter(userId)
   const rows = await db.getAllAsync<SQLiteStudySet>(
-    `SELECT * FROM study_sets WHERE ${sql} AND is_deleted = 0 ORDER BY updated_at DESC`,
+    `SELECT * FROM study_sets WHERE ${sql} AND is_deleted = 0 AND (is_downloaded = 1 OR sync_status LIKE 'pending_%' OR id LIKE 'temp-set-%') ORDER BY updated_at DESC`,
     params,
   )
   const result: OfflineSetIndex = { sets: {} }

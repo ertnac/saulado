@@ -157,24 +157,31 @@ export async function getSet(userId: string, setId: string): Promise<StudySet | 
   return mapSQLiteRowToStudySet(row)
 }
 
-export async function getSets(userId: string, parentId?: string | null): Promise<StudySet[]> {
+export async function getSets(
+  userId: string,
+  parentId?: string | null,
+  options?: { downloadedOnly?: boolean },
+): Promise<StudySet[]> {
   const db = await getDatabase()
   const { sql, params } = buildUserFilter(userId)
+  const downloadedFilter = options?.downloadedOnly
+    ? " AND (is_downloaded = 1 OR sync_status LIKE 'pending_%' OR id LIKE 'temp-set-%')"
+    : ''
   let rows: SQLiteStudySet[]
 
   if (parentId === undefined) {
     rows = await db.getAllAsync<SQLiteStudySet>(
-      `SELECT * FROM study_sets WHERE ${sql} AND is_deleted = 0 ORDER BY updated_at DESC`,
+      `SELECT * FROM study_sets WHERE ${sql} AND is_deleted = 0${downloadedFilter} ORDER BY updated_at DESC`,
       params,
     )
   } else if (parentId === null) {
     rows = await db.getAllAsync<SQLiteStudySet>(
-      `SELECT * FROM study_sets WHERE ${sql} AND parent_id IS NULL AND is_deleted = 0 ORDER BY updated_at DESC`,
+      `SELECT * FROM study_sets WHERE ${sql} AND parent_id IS NULL AND is_deleted = 0${downloadedFilter} ORDER BY updated_at DESC`,
       params,
     )
   } else {
     rows = await db.getAllAsync<SQLiteStudySet>(
-      `SELECT * FROM study_sets WHERE ${sql} AND parent_id = ? AND is_deleted = 0 ORDER BY updated_at DESC`,
+      `SELECT * FROM study_sets WHERE ${sql} AND parent_id = ? AND is_deleted = 0${downloadedFilter} ORDER BY updated_at DESC`,
       [...params, parentId],
     )
   }

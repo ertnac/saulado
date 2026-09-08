@@ -467,6 +467,11 @@ export function SetList({
   const offlineSets = Object.values(offlineStore.sets)
     .filter(
       (entry) =>
+        Boolean(
+          entry.isDownloaded ||
+          entry.syncStatus?.startsWith('pending_') ||
+          entry.setId.startsWith('temp-set-'),
+        ) &&
         entry.metadata &&
         (parent === null ? !entry.metadata.parentId : entry.metadata.parentId === parent),
     )
@@ -474,10 +479,12 @@ export function SetList({
 
   const setsFromQuery = flattenPages(sets.data)
   const itemsMap = new Map<string, StudySet>()
-  for (const s of setsFromQuery) {
-    const canonicalId = resolveEntityId(s.id)
-    if (!itemsMap.has(canonicalId)) {
-      itemsMap.set(canonicalId, s.id === canonicalId ? s : { ...s, id: canonicalId })
+  if (!isOffline) {
+    for (const s of setsFromQuery) {
+      const canonicalId = resolveEntityId(s.id)
+      if (!itemsMap.has(canonicalId)) {
+        itemsMap.set(canonicalId, s.id === canonicalId ? s : { ...s, id: canonicalId })
+      }
     }
   }
   for (const os of offlineSets) {
@@ -486,7 +493,14 @@ export function SetList({
       itemsMap.set(canonicalId, os)
     }
   }
-  const items = Array.from(itemsMap.values())
+  // When offline, strictly exclude any non-downloaded / non-pending sets
+  const items = isOffline
+    ? Array.from(itemsMap.values()).filter((s) => {
+        if (s.id.startsWith('temp-set-')) return true
+        const entry = offlineStore.sets[s.id]
+        return Boolean(entry?.isDownloaded || entry?.syncStatus?.startsWith('pending_'))
+      })
+    : Array.from(itemsMap.values())
 
   const submit = (): void => {
     if (trimmed.length === 0 || create.isPending) return

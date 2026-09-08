@@ -188,6 +188,11 @@ export default function SetsScreen(): ReactElement {
     .filter(
       (entry) =>
         entry.status === 'available' &&
+        Boolean(
+          entry.isDownloaded ||
+          entry.syncStatus?.startsWith('pending_') ||
+          entry.setId.startsWith('temp-set-'),
+        ) &&
         entry.metadata &&
         !entry.metadata.parentId &&
         !entry.metadata.archivedAt,
@@ -195,7 +200,7 @@ export default function SetsScreen(): ReactElement {
     .map((entry) => entry.metadata!)
 
   const setsFromQuery = flattenPages(setsQuery.data)
-  const rootSets = setsFromQuery.length > 0 ? setsFromQuery : isOffline ? offlineSets : []
+  const rootSets = isOffline ? offlineSets : setsFromQuery.length > 0 ? setsFromQuery : offlineSets
 
   const totalSubjects = rootSets.length
   const totalCards = rootSets.reduce((sum, s) => sum + s.subtreeCardCount, 0)

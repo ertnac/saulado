@@ -588,7 +588,15 @@ export default function DashboardScreen(): ReactElement {
   const offlineStore = useOfflineSetsStore()
 
   const offlineSets = Object.values(offlineStore.sets)
-    .filter((s) => s.status === 'available' && s.metadata && !s.metadata.archivedAt)
+    .filter(
+      (s) =>
+        s.status === 'available' &&
+        Boolean(
+          s.isDownloaded || s.syncStatus?.startsWith('pending_') || s.setId.startsWith('temp-set-'),
+        ) &&
+        s.metadata &&
+        !s.metadata.archivedAt,
+    )
     .map((s) => s.metadata!)
 
   const totalOfflineCards = offlineSets.reduce((sum, s) => sum + s.cardCount, 0)

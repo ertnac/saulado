@@ -130,41 +130,29 @@ function shiftCardCount(client: QueryClient, setId: string, delta: number): void
 export function useSets(options: { archived?: boolean; parent?: string | null } = {}) {
   const archived = options.archived ?? false
   const parent = options.parent ?? null
-  const client = useQueryClient()
 
   return useInfiniteQuery({
     queryKey: setKeys.list({ archived, parent }),
     queryFn: async ({ pageParam }) => {
       const userId = await resolveUserId()
       if (!onlineManager.isOnline() && userId) {
-        const offlineSets = await offlineData.getSets(userId, parent)
+        // When offline, ONLY return downloaded sets or sets created locally
+        const offlineSets = await offlineData.getSets(userId, parent, { downloadedOnly: true })
         const setsMap = new Map<string, StudySet>()
 
         for (const s of offlineSets) {
           if (s?.id) setsMap.set(s.id, s)
         }
 
-        const cached = client.getQueryData<InfiniteData<SetsResponse>>(
-          setKeys.list({ archived, parent }),
-        )
-        if (cached?.pages) {
-          for (const page of cached.pages) {
-            if (page?.items) {
-              for (const s of page.items) {
-                if (s?.id && !setsMap.has(s.id)) {
-                  setsMap.set(s.id, s)
-                  void offlineData.mirrorSetToSQLite(userId, s)
-                }
-              }
-            }
-          }
-        }
-
         const offlineStoreSets = useOfflineSetsStore.getState().sets
         if (offlineStoreSets) {
           for (const entry of Object.values(offlineStoreSets)) {
-            const s = entry.metadata
-            if (s && !setsMap.has(s.id)) {
+            const isAvailableOffline =
+              entry.isDownloaded ||
+              entry.syncStatus?.startsWith('pending_') ||
+              entry.setId.startsWith('temp-set-')
+            if (isAvailableOffline && entry.metadata && !setsMap.has(entry.metadata.id)) {
+              const s = entry.metadata
               if (parent === null ? !s.parentId : s.parentId === parent) {
                 setsMap.set(s.id, s)
               }
@@ -206,7 +194,7 @@ export function useSets(options: { archived?: boolean; parent?: string | null } 
         return res
       } catch (error) {
         if (userId && isNetworkError(error)) {
-          const offlineSets = await offlineData.getSets(userId, parent)
+          const offlineSets = await offlineData.getSets(userId, parent, { downloadedOnly: true })
           return {
             items: offlineSets,
             nextCursor: null,
@@ -227,41 +215,48 @@ export function useAllSets(options: { archived?: boolean } = {}) {
   return useQuery({
     queryKey: [...setKeys.all, 'all-sets', { archived }],
     queryFn: async () => {
+      const isOnline = onlineManager.isOnline()
       const setsMap = new Map<string, StudySet>()
 
-      // 1. Gather sets from React Query cache (instant, zero network)
-      try {
-        const cachedLists = client.getQueriesData<InfiniteData<SetsResponse>>({
-          queryKey: setKeys.lists(),
-        })
-        for (const [_key, data] of cachedLists) {
-          if (data?.pages) {
-            for (const page of data.pages) {
-              if (page?.items) {
-                for (const s of page.items) {
-                  if (s?.id) setsMap.set(s.id, s)
+      // 1. If online, gather sets from React Query cache (instant, zero network)
+      if (isOnline) {
+        try {
+          const cachedLists = client.getQueriesData<InfiniteData<SetsResponse>>({
+            queryKey: setKeys.lists(),
+          })
+          for (const [_key, data] of cachedLists) {
+            if (data?.pages) {
+              for (const page of data.pages) {
+                if (page?.items) {
+                  for (const s of page.items) {
+                    if (s?.id) setsMap.set(s.id, s)
+                  }
                 }
               }
             }
           }
-        }
 
-        const cachedDetails = client.getQueriesData<SetResponse>({
-          queryKey: setKeys.details(),
-        })
-        for (const [_key, data] of cachedDetails) {
-          if (data?.set?.id) setsMap.set(data.set.id, data.set)
+          const cachedDetails = client.getQueriesData<SetResponse>({
+            queryKey: setKeys.details(),
+          })
+          for (const [_key, data] of cachedDetails) {
+            if (data?.set?.id) setsMap.set(data.set.id, data.set)
+          }
+        } catch {
+          // Cache read fallback
         }
-      } catch {
-        // Cache read fallback
       }
 
-      // 2. Gather sets from offline sets store
+      // 2. Gather sets from offline sets store (only downloaded or temp/pending when offline)
       try {
         const offlineSets = useOfflineSetsStore.getState().sets
         if (offlineSets) {
           for (const entry of Object.values(offlineSets)) {
-            if (entry?.metadata?.id) {
+            const isAvailableOffline =
+              entry.isDownloaded ||
+              entry.syncStatus?.startsWith('pending_') ||
+              entry.setId.startsWith('temp-set-')
+            if ((isOnline || isAvailableOffline) && entry?.metadata?.id) {
               setsMap.set(entry.metadata.id, entry.metadata)
             }
           }
@@ -274,12 +269,16 @@ export function useAllSets(options: { archived?: boolean } = {}) {
       const userId = await resolveUserId()
       if (userId) {
         try {
-          const localSets = await offlineData.getSets(userId, undefined)
+          const localSets = await offlineData.getSets(userId, undefined, {
+            downloadedOnly: !isOnline,
+          })
           for (const s of localSets) {
             if (s?.id) setsMap.set(s.id, s)
           }
           if (userId !== 'local-user' && setsMap.size === 0) {
-            const guestSets = await offlineData.getSets('local-user', undefined)
+            const guestSets = await offlineData.getSets('local-user', undefined, {
+              downloadedOnly: !isOnline,
+            })
             for (const s of guestSets) {
               if (s?.id) setsMap.set(s.id, s)
             }

@@ -96,7 +96,13 @@ export function QuickLearnSheet({
   const offlineRootSets: StudySet[] = Object.values(offlineStore.sets)
     .filter(
       (s) =>
-        s.status === 'available' && s.metadata && !s.metadata.parentId && !s.metadata.archivedAt,
+        s.status === 'available' &&
+        Boolean(
+          s.isDownloaded || s.syncStatus?.startsWith('pending_') || s.setId.startsWith('temp-set-'),
+        ) &&
+        s.metadata &&
+        !s.metadata.parentId &&
+        !s.metadata.archivedAt,
     )
     .map((s) => s.metadata!)
 
@@ -105,6 +111,11 @@ export function QuickLearnSheet({
         .filter(
           (s) =>
             s.status === 'available' &&
+            Boolean(
+              s.isDownloaded ||
+              s.syncStatus?.startsWith('pending_') ||
+              s.setId.startsWith('temp-set-'),
+            ) &&
             s.metadata &&
             s.metadata.parentId === parent.id &&
             !s.metadata.archivedAt,
@@ -115,8 +126,16 @@ export function QuickLearnSheet({
   const rootFromQuery = flattenPages(rootSets.data)
   const childFromQuery = flattenPages(childSets.data)
 
-  const rootItems = rootFromQuery.length > 0 ? rootFromQuery : isOffline ? offlineRootSets : []
-  const childItems = childFromQuery.length > 0 ? childFromQuery : isOffline ? offlineChildSets : []
+  const rootItems = isOffline
+    ? offlineRootSets
+    : rootFromQuery.length > 0
+      ? rootFromQuery
+      : offlineRootSets
+  const childItems = isOffline
+    ? offlineChildSets
+    : childFromQuery.length > 0
+      ? childFromQuery
+      : offlineChildSets
 
   // ── React Native standard Animated ──────────────────────────────────────
   const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current
