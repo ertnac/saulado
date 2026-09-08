@@ -1,6 +1,13 @@
 import { Redirect, useRouter, usePathname, Tabs } from 'expo-router'
-import type { ReactElement } from 'react'
-import { Pressable, View } from 'react-native'
+import { useState, useEffect, type ReactElement } from 'react'
+import { Pressable, StyleSheet, View } from 'react-native'
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing,
+  runOnJS,
+} from 'react-native-reanimated'
 import { ChevronLeftIcon, SettingsIcon } from '../../components/icons'
 import { TabBar } from '../../components/tab-bar'
 import { ThemeToggle } from '../../components/theme-toggle'
@@ -77,18 +84,56 @@ export default function AppLayout(): ReactElement {
   const foreground = useTokenColor('--foreground')
   const background = useTokenColor('--background')
 
-  /**
-   * `restoring` is its own branch and not folded into `anonymous`. Treating "we
-   * have not asked yet" as "signed out" sends a user holding a valid keychain
-   * token to the login form on every cold start.
-   */
-  if (status === 'restoring') {
-    return (
-      <View className="flex-1 items-center justify-center bg-[#052e24] dark:bg-[#031a14]">
-        <SauladoLogo size={120} animation="star-gyro" />
-      </View>
-    )
-  }
+  // Intro transition states
+  const [showIntro, setShowIntro] = useState(true)
+  const introProgress = useSharedValue(0)
+
+  useEffect(() => {
+    // When the session is authenticated, smoothly transition from star gyro into the dashboard
+    if (status === 'authenticated') {
+      const timer = setTimeout(() => {
+        introProgress.value = withTiming(
+          1,
+          {
+            duration: 650,
+            easing: Easing.bezier(0.16, 1, 0.3, 1),
+          },
+          (finished) => {
+            if (finished) {
+              runOnJS(setShowIntro)(false)
+            }
+          },
+        )
+      }, 700)
+
+      return () => clearTimeout(timer)
+    }
+  }, [status, introProgress])
+
+  // Animated styles for overlay fade & logo outward bloom/dissolve
+  const introOverlayStyle = useAnimatedStyle(() => {
+    return {
+      opacity: 1 - introProgress.value,
+    }
+  })
+
+  const logoAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: 1 - introProgress.value,
+      transform: [
+        { scale: 1 + introProgress.value * 0.18 },
+        { translateY: -introProgress.value * 32 },
+      ],
+    }
+  })
+
+  const dashboardAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      flex: 1,
+      opacity: 0.5 + introProgress.value * 0.5,
+      transform: [{ translateY: (1 - introProgress.value) * 20 }],
+    }
+  })
 
   /**
    * `from` carries the destination through the login round-trip. Expo Router has
@@ -101,65 +146,83 @@ export default function AppLayout(): ReactElement {
   }
 
   return (
-    <Tabs
-      tabBar={(props) => <TabBar {...props} />}
-      screenOptions={{
-        /*
-          The navigator's own header, rather than a ported `AppShell`. It is what
-          gives the theme toggle somewhere to live on every screen behind the
-          guard — which Phase 2 has to deliver — without a chrome component that
-          the phases filling these screens would only rewrite. The web header's
-          other controls come with the screens that own them: search with
-          `/search`, the account menu with `/account`.
+    <View style={{ flex: 1, backgroundColor: background }}>
+      <Animated.View style={dashboardAnimatedStyle}>
+        <Tabs
+          tabBar={(props) => <TabBar {...props} />}
+          screenOptions={{
+            /*
+              The navigator's own header, rather than a ported `AppShell`. It is what
+              gives the theme toggle somewhere to live on every screen behind the
+              guard — which Phase 2 has to deliver — without a chrome component that
+              the phases filling these screens would only rewrite. The web header's
+              other controls come with the screens that own them: search with
+              `/search`, the account menu with `/account`.
 
-          Painted `--background`, not `--surface`. A header in the surface colour
-          over a page in the background colour is a bar with an edge, and the two
-          stacked titles it produced — "Dashboard" above "Welcome, …" — read as
-          two headers rather than one screen. Flush with the page, it reads as the
-          top of the content, which is what every current phone OS does with it.
-        */
-        headerStyle: { backgroundColor: background },
-        headerTintColor: foreground,
-        headerShadowVisible: false,
-        headerRight: () => (
-          <View className="flex-row items-center pr-1">
-            <SettingsButton />
-            <ThemeToggle />
-          </View>
-        ),
-      }}
-    >
-      {SCREENS.map(({ name, title }) => {
-        const options = {
-          title,
-          ...(name === 'study'
-            ? {
-                headerShown: false,
-              }
-            : name === 'scan' || name === 'scan-review' || name === 'sets/[setId]'
-              ? {
-                  headerLeft: () => (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Go back"
-                      onPress={() => {
-                        if (router.canGoBack()) {
-                          router.back()
-                        } else {
-                          router.replace('/')
-                        }
-                      }}
-                      className="h-11 w-11 items-center justify-center rounded-md ml-2 active:opacity-60"
-                    >
-                      <ChevronLeftIcon color={foreground} size={24} />
-                    </Pressable>
-                  ),
-                }
-              : {}),
-        }
+              Painted `--background`, not `--surface`. A header in the surface colour
+              over a page in the background colour is a bar with an edge, and the two
+              stacked titles it produced — "Dashboard" above "Welcome, …" — read as
+              two headers rather than one screen. Flush with the page, it reads as the
+              top of the content, which is what every current phone OS does with it.
+            */
+            headerStyle: { backgroundColor: background },
+            headerTintColor: foreground,
+            headerShadowVisible: false,
+            headerRight: () => (
+              <View className="flex-row items-center pr-1">
+                <SettingsButton />
+                <ThemeToggle />
+              </View>
+            ),
+          }}
+        >
+          {SCREENS.map(({ name, title }) => {
+            const options = {
+              title,
+              ...(name === 'study'
+                ? {
+                    headerShown: false,
+                  }
+                : name === 'scan' || name === 'scan-review' || name === 'sets/[setId]'
+                  ? {
+                      headerLeft: () => (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Go back"
+                          onPress={() => {
+                            if (router.canGoBack()) {
+                              router.back()
+                            } else {
+                              router.replace('/')
+                            }
+                          }}
+                          className="h-11 w-11 items-center justify-center rounded-md ml-2 active:opacity-60"
+                        >
+                          <ChevronLeftIcon color={foreground} size={24} />
+                        </Pressable>
+                      ),
+                    }
+                  : {}),
+            }
 
-        return <Tabs.Screen key={name} name={name} options={options} />
-      })}
-    </Tabs>
+            return <Tabs.Screen key={name} name={name} options={options} />
+          })}
+        </Tabs>
+      </Animated.View>
+
+      {showIntro && (
+        <Animated.View
+          style={[StyleSheet.absoluteFill, introOverlayStyle, { zIndex: 9999 }]}
+          className="items-center justify-center bg-[#052e24] dark:bg-[#031a14]"
+          pointerEvents={status === 'authenticated' ? 'none' : 'auto'}
+        >
+          <Animated.View
+            style={[logoAnimatedStyle, { alignItems: 'center', justifyContent: 'center' }]}
+          >
+            <SauladoLogo size={120} animation="star-gyro" />
+          </Animated.View>
+        </Animated.View>
+      )}
+    </View>
   )
 }
