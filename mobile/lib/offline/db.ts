@@ -1,16 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import * as SQLite from 'expo-sqlite'
+import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite'
 import type { OfflineSetPayload } from './types'
 
-let dbInstance: SQLite.SQLiteDatabase | null = null
+export type { SQLiteDatabase }
+
+let dbInstance: SQLiteDatabase | null = null
 
 /**
  * Returns a shared, initialized SQLite database instance.
  */
-export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
+export async function getDatabase(): Promise<SQLiteDatabase> {
   if (dbInstance) return dbInstance
 
-  const db = await SQLite.openDatabaseAsync('saulado-offline.db')
+  const db = await openDatabaseAsync('saulado-offline.db')
   await initDatabase(db)
   dbInstance = db
   return dbInstance
@@ -20,7 +22,7 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
  * Creates required tables, sets WAL journal mode, enables foreign keys,
  * and builds multi-column indexes for fast user-scoped queries.
  */
-export async function initDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
+export async function initDatabase(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;

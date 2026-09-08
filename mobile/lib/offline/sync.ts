@@ -5,7 +5,7 @@ import { queryClient } from '../query-client'
 import { onAuthLogout, useAuthStore } from '../../stores/auth'
 import { useSyncStore } from '../../stores/sync'
 import { useOfflineSetsStore } from '../../stores/offline-sets'
-import { getDatabase } from './db'
+import { getDatabase, type SQLiteDatabase } from './db'
 import { compactQueue } from './compaction'
 import { recordIdMapping, resolveEntityId } from './id-remap'
 import { loadOfflineState, updateOfflineState } from './state'
@@ -251,7 +251,7 @@ export class SyncEngine {
   }
 
   private async processMutation(mutation: OfflineMutation) {
-    const db = await getDatabase()
+    const db: SQLiteDatabase = await getDatabase()
     const now = new Date().toISOString()
     const mutationType = mutation.type ?? 'submit_answer'
 
