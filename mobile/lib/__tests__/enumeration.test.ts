@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   cleanTitleText,
   compileEnumeration,
+  extractEnumerationTerm,
   formatAsEnumeration,
   formatTitle,
   isEnumeratedQuestion,
@@ -10,6 +11,57 @@ import {
 } from '../enumeration'
 
 describe('enumeration module', () => {
+  describe('extractEnumerationTerm', () => {
+    it('strips colons and definition sentences', () => {
+      expect(
+        extractEnumerationTerm(
+          "Organizational Function: Protects the organization's core capability to function smoothly.",
+        ),
+      ).toBe('Organizational Function')
+    })
+
+    it('strips :- and : - with spaces and definition sentences', () => {
+      expect(extractEnumerationTerm('Client Side :- Runs on user browser or mobile device.')).toBe(
+        'Client Side',
+      )
+      expect(
+        extractEnumerationTerm('Server Side : - Handles business logic and database access.'),
+      ).toBe('Server Side')
+    })
+
+    it('strips spaced dashes ( - , – , — ) and definitions', () => {
+      expect(extractEnumerationTerm('Database Layer - Stores relational and object data.')).toBe(
+        'Database Layer',
+      )
+      expect(extractEnumerationTerm('Cache Layer – Accelerates repeated data retrieval.')).toBe(
+        'Cache Layer',
+      )
+      expect(
+        extractEnumerationTerm('Queue Worker — Processes background asynchronous tasks.'),
+      ).toBe('Queue Worker')
+    })
+
+    it('preserves connected/hyphenated words without spaces (e.g. in-between, end-to-end, cost-effective)', () => {
+      expect(
+        extractEnumerationTerm('In-between nodes: Relays packets between network segments.'),
+      ).toBe('In-between nodes')
+      expect(
+        extractEnumerationTerm('End-to-End Encryption - Encrypts data from origin to destination.'),
+      ).toBe('End-to-End Encryption')
+      expect(
+        extractEnumerationTerm('Cost-Effective Safeguards : - Controls that fit within budget.'),
+      ).toBe('Cost-Effective Safeguards')
+      expect(extractEnumerationTerm('State-of-the-Art Architecture')).toBe(
+        'State-of-the-Art Architecture',
+      )
+    })
+
+    it('preserves plain items without definitions', () => {
+      expect(extractEnumerationTerm('Red')).toBe('Red')
+      expect(extractEnumerationTerm('1. Blue')).toBe('Blue')
+    })
+  })
+
   describe('cleanTitleText and formatTitle', () => {
     it('removes literal Title: or Topic: words', () => {
       expect(cleanTitleText('Title: Three Primary Colors')).toBe('Three Primary Colors')
@@ -109,7 +161,7 @@ Gas`)
       }
     })
 
-    it("handles user's four critical roles example: removes 1., 2., 3., 4. to avoid duplications and auto-highlights all notes", () => {
+    it("handles user's four critical roles example: excludes colons and definitions from blanks and paragraph", () => {
       const input = `Four Critical Roles of Security Measures
 1. Organizational Function: Protects the organization's core capability to function smoothly without operational disruption.
 2. Safe Application Deployment: Enables the safe operation and deployment of software applications across IT systems.
@@ -118,23 +170,30 @@ Gas`)
 
       const parsed = parseEnumeration(input)
       expect(parsed.title).toBe('Four Critical Roles of Security Measures')
-      expect(parsed.items).toHaveLength(4)
-      expect(parsed.items[0]).toBe(
-        "Organizational Function: Protects the organization's core capability to function smoothly without operational disruption.",
-      )
+      expect(parsed.items).toEqual([
+        'Organizational Function',
+        'Safe Application Deployment',
+        'Data Protection',
+        'Technology Safeguards',
+      ])
 
       const compiled = compileEnumeration(parsed.title, parsed.items, {
         includeNumberPrefix: false,
       })
       expect(compiled.paragraph).toBe(
         `Four Critical Roles of Security Measures:
-Organizational Function: Protects the organization's core capability to function smoothly without operational disruption.
-Safe Application Deployment: Enables the safe operation and deployment of software applications across IT systems.
-Data Protection: Safeguards the integrity and confidentiality of data collected and processed.
-Technology Safeguards: Safeguards the underlying hardware, network, and cloud technology infrastructure.`,
+Organizational Function
+Safe Application Deployment
+Data Protection
+Technology Safeguards`,
       )
 
       expect(compiled.blanks).toHaveLength(4)
+      expect(compiled.blanks[0]?.answerText).toBe('Organizational Function')
+      expect(compiled.blanks[1]?.answerText).toBe('Safe Application Deployment')
+      expect(compiled.blanks[2]?.answerText).toBe('Data Protection')
+      expect(compiled.blanks[3]?.answerText).toBe('Technology Safeguards')
+
       for (const blank of compiled.blanks) {
         expect(sliceCodePoints(compiled.paragraph, blank.startOffset, blank.endOffset)).toBe(
           blank.answerText,

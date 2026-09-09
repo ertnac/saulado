@@ -57,7 +57,12 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
 
   const active = state.routes[state.index]?.name ?? ''
 
-  if (active === 'study' || active === 'scan' || active === 'scan-review') {
+  if (
+    active === 'study' ||
+    active === 'scan' ||
+    active === 'scan-review' ||
+    active === 'files/bag-studio'
+  ) {
     return null
   }
 

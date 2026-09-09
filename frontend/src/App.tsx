@@ -22,6 +22,7 @@ import { FileViewerPage } from '@/features/files/FileViewerPage'
 import { SearchPage } from '@/features/search/SearchPage'
 import { StudySessionPage } from '@/features/study/StudySessionPage'
 import { LogoPreviewPage } from '@/features/preview/LogoPreviewPage'
+import { LogoAnimationLabPage } from '@/features/preview/LogoAnimationLabPage'
 import { createQueryClient } from '@/lib/query-client'
 import { useAuthStore } from '@/stores/auth'
 
@@ -74,6 +75,8 @@ export function App(): ReactElement {
                 <Route path="/landing" element={<LandingPage />} />
                 <Route path="/logo-preview" element={<LogoPreviewPage />} />
                 <Route path="/logo-test" element={<LogoPreviewPage />} />
+                <Route path="/logo-lab" element={<LogoAnimationLabPage />} />
+                <Route path="/logo-animation-lab" element={<LogoAnimationLabPage />} />
 
                 {/* ── Root Route: Dashboard if logged in, LandingPage if logged out ── */}
                 <Route

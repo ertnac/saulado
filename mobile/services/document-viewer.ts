@@ -16,10 +16,14 @@ export function generateReaderHtml({
   title,
   bodyHtml,
   isDark,
+  enableSnippetSelection = false,
+  zoomScale = 0.85,
 }: {
   title: string
   bodyHtml: string
   isDark: boolean
+  enableSnippetSelection?: boolean
+  zoomScale?: number
 }): string {
   const bg = isDark ? '#031a14' : '#ffffff'
   const text = isDark ? '#e6f0ed' : '#1a2e28'
@@ -27,20 +31,60 @@ export function generateReaderHtml({
   const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'
   const accentColor = '#22c55e'
 
+  const selectionScript = enableSnippetSelection
+    ? `
+  <script>
+    (function() {
+      let lastSelection = '';
+      function checkSelection() {
+        try {
+          const sel = window.getSelection();
+          const selectedText = sel ? sel.toString().trim() : '';
+          if (selectedText !== lastSelection) {
+            lastSelection = selectedText;
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'TEXT_SELECTION',
+                text: selectedText
+              }));
+            }
+          }
+        } catch (e) {
+          console.warn('selection check error:', e);
+        }
+      }
+      document.addEventListener('selectionchange', checkSelection);
+      document.addEventListener('touchend', function() {
+        setTimeout(checkSelection, 150);
+      });
+      document.addEventListener('mouseup', function() {
+        setTimeout(checkSelection, 150);
+      });
+    })();
+  </script>
+`
+    : ''
+
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes" />
+  <meta name="viewport" content="width=device-width, initial-scale=${zoomScale}, minimum-scale=0.5, maximum-scale=3.0, user-scalable=yes" />
   <title>${title}</title>
+  <script>
+    window.setDocumentZoom = function(scale) {
+      document.body.style.zoom = scale;
+    };
+  </script>
   <style>
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 24px 20px 80px 20px;
+      padding: 16px 14px 160px 14px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      font-size: 16px;
-      line-height: 1.7;
+      font-size: 14px;
+      line-height: 1.6;
+      zoom: ${zoomScale};
       color: ${text};
       background-color: ${bg};
       word-wrap: break-word;
@@ -49,17 +93,17 @@ export function generateReaderHtml({
       color: ${isDark ? '#ffffff' : '#052e24'};
       font-weight: 700;
       line-height: 1.3;
-      margin-top: 1.4em;
-      margin-bottom: 0.5em;
+      margin-top: 1.2em;
+      margin-bottom: 0.4em;
     }
-    h1 { font-size: 1.6em; border-bottom: 1px solid ${borderColor}; padding-bottom: 8px; }
-    h2 { font-size: 1.35em; }
-    h3 { font-size: 1.15em; }
-    p { margin-top: 0; margin-bottom: 1em; }
+    h1 { font-size: 1.5em; border-bottom: 1px solid ${borderColor}; padding-bottom: 6px; }
+    h2 { font-size: 1.25em; }
+    h3 { font-size: 1.1em; }
+    p { margin-top: 0; margin-bottom: 0.85em; }
     a { color: ${accentColor}; text-decoration: none; }
     blockquote {
-      margin: 1.2em 0;
-      padding: 10px 16px;
+      margin: 1em 0;
+      padding: 8px 14px;
       background: ${cardBg};
       border-left: 4px solid ${accentColor};
       border-radius: 4px;
@@ -67,12 +111,12 @@ export function generateReaderHtml({
     table {
       width: 100%;
       border-collapse: collapse;
-      margin: 1.2em 0;
-      font-size: 14px;
+      margin: 1em 0;
+      font-size: 13px;
     }
     th, td {
       border: 1px solid ${borderColor};
-      padding: 8px 12px;
+      padding: 6px 10px;
       text-align: left;
     }
     th {
@@ -80,31 +124,32 @@ export function generateReaderHtml({
       font-weight: 600;
     }
     ul, ol {
-      padding-left: 24px;
-      margin-bottom: 1em;
+      padding-left: 20px;
+      margin-bottom: 0.85em;
     }
-    li { margin-bottom: 0.4em; }
+    li { margin-bottom: 0.3em; }
     img {
       max-width: 100%;
       height: auto;
       border-radius: 8px;
-      margin: 12px 0;
+      margin: 10px 0;
     }
     pre, code {
       font-family: Menlo, Monaco, Consolas, monospace;
       background: ${cardBg};
       border-radius: 4px;
-      padding: 2px 6px;
+      padding: 2px 5px;
       font-size: 0.9em;
     }
     pre {
-      padding: 12px;
+      padding: 10px;
       overflow-x: auto;
     }
   </style>
 </head>
 <body>
   ${bodyHtml}
+  ${selectionScript}
 </body>
 </html>`
 }
@@ -340,6 +385,7 @@ export async function loadDocumentContent(
       title: file.name,
       bodyHtml: result.value || '<p><em>(Empty document)</em></p>',
       isDark,
+      enableSnippetSelection: true,
     })
 
     return {
@@ -380,6 +426,7 @@ export async function loadDocumentContent(
       title: file.name,
       bodyHtml: readerBody,
       isDark,
+      enableSnippetSelection: false, // PDFs are excluded from snippet bagging
     })
 
     // Generate visual canvas viewer HTML with offline pdf.js
@@ -431,6 +478,7 @@ export async function loadDocumentContent(
     title: file.name,
     bodyHtml: bodyHtml || '<p><em>(Could not extract readable text from legacy .doc)</em></p>',
     isDark,
+    enableSnippetSelection: true,
   })
 
   return {

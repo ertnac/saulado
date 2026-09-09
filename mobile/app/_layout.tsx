@@ -50,11 +50,6 @@ function useSessionRestore(): void {
 export default function RootLayout(): ReactElement {
   useSessionRestore()
 
-  useEffect(() => {
-    // Hide splash screen once the initial React component hierarchy is mounted
-    void SplashScreen.hideAsync()
-  }, [])
-
   const { isDark } = useTheme()
   const background = useTokenColor('--background')
 

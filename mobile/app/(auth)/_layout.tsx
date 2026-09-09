@@ -20,7 +20,7 @@ import { useAuthStore } from '../../stores/auth'
 export default function AuthLayout(): ReactElement {
   const status = useAuthStore((s) => s.status)
 
-  if (status === 'authenticated') return <Redirect href="/" />
+  if (status === 'authenticated' || status === 'offline-authenticated') return <Redirect href="/" />
 
   return <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
 }

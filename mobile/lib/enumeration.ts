@@ -35,6 +35,41 @@ export function stripBulletMarker(line: string): string {
 }
 
 /**
+ * Definition delimiter regex:
+ * 1. Colons optionally followed by dashes and spaces (e.g. ":", ":-", " : - ", " : ", " :- ")
+ * 2. Hyphen/en-dash/em-dash with whitespace on BOTH sides (e.g. " - ", " – ", " — ")
+ *    NOTE: Hyphenated words without spaces on both sides (e.g. "in-between", "end-to-end", "cost-effective")
+ *    will NOT match and are preserved intact.
+ * 3. Dash followed by colon (e.g. " -: ")
+ */
+export const DEFINITION_DELIMITER_REGEX = /(?:\s*:\s*[-–—]?\s*|\s+[-–—]\s+|\s*[-–—]:\s*)/
+
+/**
+ * Extracts only the enumerated term from a line, excluding any trailing definition
+ * delimiters (such as ":", ":-", " - ") and any explanation sentence/words following them.
+ * Connected words with hyphens (e.g. "in-between", "state-of-the-art") remain un-split.
+ */
+export function extractEnumerationTerm(raw: string): string {
+  const cleaned = stripBulletMarker(raw).trim()
+  if (!cleaned) return ''
+
+  const match = DEFINITION_DELIMITER_REGEX.exec(cleaned)
+  if (match && match.index > 0) {
+    const term = cleaned.slice(0, match.index).trim()
+    if (term.length > 0) {
+      return term.replace(/[,;:]+$/, '').trim()
+    }
+  }
+
+  return cleaned.replace(/[,;:]+$/, '').trim()
+}
+
+/**
+ * Alias for extractEnumerationTerm for backward and semantic compatibility.
+ */
+export const cleanEnumerationItem = extractEnumerationTerm
+
+/**
  * Strips any literal "Title:", "Topic:", "Subject:" label so only the user's
  * actual title text is kept.
  */
@@ -105,14 +140,14 @@ export function parseEnumeration(rawText: string): ParsedEnumeration {
     )
 
     if (firstLineIsMarker) {
-      const items = rawLines.map((line) => stripBulletMarker(line)).filter((l) => l.length > 0)
+      const items = rawLines.map((line) => cleanEnumerationItem(line)).filter((l) => l.length > 0)
       return { title: '', items: items.length > 0 ? items : ['', '', ''] }
     }
 
     const rawTitle = cleanTitleText(rawLines[0] as string)
     const items = rawLines
       .slice(1)
-      .map((line) => stripBulletMarker(line))
+      .map((line) => cleanEnumerationItem(line))
       .filter((l) => l.length > 0)
     return { title: rawTitle, items: items.length > 0 ? items : ['', '', ''] }
   }
@@ -184,7 +219,7 @@ export function parseEnumeration(rawText: string): ParsedEnumeration {
   }
 
   const cleanTitle = cleanTitleText(titlePart)
-  const items = segments.map((seg) => stripBulletMarker(seg)).filter((s) => s.length > 0)
+  const items = segments.map((seg) => cleanEnumerationItem(seg)).filter((s) => s.length > 0)
 
   return {
     title: cleanTitle,
@@ -216,7 +251,9 @@ export function compileEnumeration(
 ): CompiledEnumeration {
   const includePrefix = options?.includeNumberPrefix ?? false
   const formattedTitle = formatTitle(title)
-  const validItems = items.map((it) => stripBulletMarker(it)).filter((it) => it.trim().length > 0)
+  const validItems = items
+    .map((it) => cleanEnumerationItem(it))
+    .filter((it) => it.trim().length > 0)
 
   const lines: string[] = []
   if (formattedTitle) {

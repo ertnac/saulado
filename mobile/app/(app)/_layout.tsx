@@ -43,6 +43,7 @@ const SCREENS: { name: string; title: string }[] = [
   { name: 'sets/index', title: 'Sets' },
   { name: 'files/index', title: 'File Repository' },
   { name: 'files/[fileId]', title: 'Document Viewer' },
+  { name: 'files/bag-studio', title: 'Card Creation Studio' },
   { name: 'scan', title: 'Scan a page' },
   { name: 'sets/[setId]', title: 'Set' },
   { name: 'study', title: 'Study' },
@@ -91,12 +92,12 @@ export default function AppLayout(): ReactElement {
 
   useEffect(() => {
     // When the session is authenticated, smoothly transition from star gyro into the dashboard
-    if (status === 'authenticated') {
+    if (status === 'authenticated' || status === 'offline-authenticated') {
       const timer = setTimeout(() => {
         introProgress.value = withTiming(
           1,
           {
-            duration: 650,
+            duration: 1300,
             easing: Easing.bezier(0.16, 1, 0.3, 1),
           },
           (finished) => {
@@ -105,7 +106,7 @@ export default function AppLayout(): ReactElement {
             }
           },
         )
-      }, 700)
+      }, 1200)
 
       return () => clearTimeout(timer)
     }
@@ -187,7 +188,8 @@ export default function AppLayout(): ReactElement {
                 : name === 'scan' ||
                     name === 'scan-review' ||
                     name === 'sets/[setId]' ||
-                    name === 'files/[fileId]'
+                    name === 'files/[fileId]' ||
+                    name === 'files/bag-studio'
                   ? {
                       headerLeft: () => (
                         <Pressable
@@ -218,7 +220,9 @@ export default function AppLayout(): ReactElement {
         <Animated.View
           style={[StyleSheet.absoluteFill, introOverlayStyle, { zIndex: 9999 }]}
           className="items-center justify-center bg-[#052e24] dark:bg-[#031a14]"
-          pointerEvents={status === 'authenticated' ? 'none' : 'auto'}
+          pointerEvents={
+            status === 'authenticated' || status === 'offline-authenticated' ? 'none' : 'auto'
+          }
         >
           <Animated.View
             style={[logoAnimatedStyle, { alignItems: 'center', justifyContent: 'center' }]}

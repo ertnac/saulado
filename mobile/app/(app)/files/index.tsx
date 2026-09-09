@@ -16,7 +16,15 @@ import * as Sharing from 'expo-sharing'
 import type { CloudFileSummary } from '@saulado/shared'
 import { Button } from '../../../components/button'
 import { Card } from '../../../components/card'
-import { DocumentIcon, FolderIcon, SearchIcon, CloseIcon } from '../../../components/icons'
+import {
+  DocumentIcon,
+  FolderIcon,
+  SearchIcon,
+  CloseIcon,
+  ShoppingBagIcon,
+} from '../../../components/icons'
+import { SnippetBagModal } from '../../../components/snippet-bag-modal'
+import { useSnippetBagStore } from '../../../stores/snippet-bag'
 import type { RepositoryFile, RepositoryFileType } from '../../../lib/offline/types'
 import {
   deleteCloudFile,
@@ -42,6 +50,9 @@ export default function FileRepositoryScreen(): ReactElement {
 
   const primary = useTokenColor('--primary')
   const mutedForeground = useTokenColor('--muted-foreground')
+
+  const snippets = useSnippetBagStore((s) => s.snippets)
+  const [isBagModalOpen, setIsBagModalOpen] = useState(false)
 
   // Scopes: Device Files (100% offline on phone) vs Cloud Files (from web app / account)
   const [tabScope, setTabScope] = useState<'device' | 'cloud'>('device')
@@ -271,15 +282,26 @@ export default function FileRepositoryScreen(): ReactElement {
                 : 'Documents stored in your cloud account from web app.'}
             </Text>
           </View>
-          {tabScope === 'device' && (
-            <Button
-              label={importing ? 'Importing…' : '+ Import'}
-              onPress={() => {
-                void handleImport()
-              }}
-              disabled={importing}
-            />
-          )}
+          <View className="flex-row items-center gap-2">
+            <Pressable
+              onPress={() => setIsBagModalOpen(true)}
+              className="flex-row items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 active:opacity-75"
+              accessibilityLabel="Open Study Bag"
+            >
+              <ShoppingBagIcon color={primary} size={16} />
+              <Text className="text-xs font-bold text-primary">Bag ({snippets.length})</Text>
+            </Pressable>
+
+            {tabScope === 'device' && (
+              <Button
+                label={importing ? 'Importing…' : '+ Import'}
+                onPress={() => {
+                  void handleImport()
+                }}
+                disabled={importing}
+              />
+            )}
+          </View>
         </View>
 
         {/* Scope Switcher: Device Files vs Cloud Files */}
@@ -461,6 +483,19 @@ export default function FileRepositoryScreen(): ReactElement {
 
                     {/* Bottom Card Actions */}
                     <View className="flex-row items-center justify-end gap-2 pt-2 border-t border-border/50">
+                      {file.fileType !== 'pdf' && (
+                        <Pressable
+                          onPress={(e) => {
+                            e.stopPropagation()
+                            router.push(`/files/${file.id}`)
+                          }}
+                          className="px-2.5 py-1 rounded-md bg-primary/15 active:opacity-70 flex-row items-center gap-1 mr-auto"
+                        >
+                          <ShoppingBagIcon color={primary} size={13} />
+                          <Text className="text-xs text-primary font-semibold">Bag Snippets</Text>
+                        </Pressable>
+                      )}
+
                       <Pressable
                         onPress={(e) => {
                           e.stopPropagation()
@@ -637,6 +672,27 @@ export default function FileRepositoryScreen(): ReactElement {
           </View>
         </View>
       </Modal>
+
+      {/* Floating Bag FAB (Bottom Right, Safely Above Bottom Nav Tab) */}
+      {snippets.length > 0 && (
+        <Pressable
+          onPress={() => setIsBagModalOpen(true)}
+          style={{
+            bottom: Math.max(insets.bottom, 16) + 72,
+            right: 20,
+            zIndex: 9999,
+            elevation: 10,
+          }}
+          className="absolute h-13 px-4 rounded-full bg-primary flex-row items-center gap-2 shadow-xl active:opacity-85"
+          accessibilityLabel="Open Bag Modal"
+        >
+          <ShoppingBagIcon color="#ffffff" size={20} />
+          <Text className="text-sm font-bold text-primary-foreground">Bag ({snippets.length})</Text>
+        </Pressable>
+      )}
+
+      {/* Snippet Bag Modal */}
+      <SnippetBagModal visible={isBagModalOpen} onClose={() => setIsBagModalOpen(false)} />
     </View>
   )
 }

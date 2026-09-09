@@ -39,10 +39,18 @@ export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenPro
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const iconColor = useTokenColor('--foreground')
 
+  const status = useAuthStore((s) => s.status)
   const login = useAuthStore((s) => s.login)
   const register = useAuthStore((s) => s.register)
   const googleLogin = useAuthStore((s) => s.googleLogin)
   const { from, notice } = useLocalSearchParams<{ from?: string; notice?: string }>()
+
+  // If already authenticated, redirect straight to dashboard
+  useEffect(() => {
+    if (status === 'authenticated' || status === 'offline-authenticated') {
+      router.replace(from !== undefined && from !== '' ? { pathname: from } : '/')
+    }
+  }, [status, from])
 
   const [activeTab, setActiveTab] = useState<'login' | 'register'>(initialTab)
   const [containerWidth, setContainerWidth] = useState(windowWidth - 48)
@@ -66,23 +74,61 @@ export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenPro
   const [regSubmitting, setRegSubmitting] = useState(false)
   const regErrors = useFormErrors()
 
-  // Intro entrance animation states (Star Gyro at center -> slowly glides up -> Pulse Aura + reveal forms)
+  // Goodnotes Splash entrance animation states:
+  // 1. Logo appears centered at 120pt matching native splash size (scale: 1, opacity: 1).
+  // 2. Logo slides to the left (translateX: 0 -> -60) as "Saulado" smoothly appears on its right.
+  // 3. Smooth slow-motion glide upwards into the header position while bottom sheet rises and inputs reveal.
   const [logoAnimation, setLogoAnimation] = useState<SauladoLogoAnimation>('star-gyro')
-  const introProgress = useSharedValue(0)
+  const splashOpacity = useSharedValue(1)
+  const lockupSlideX = useSharedValue(0)
+  const wordmarkOpacity = useSharedValue(0)
+  const wordmarkTranslateX = useSharedValue(16)
+  const glideProgress = useSharedValue(0)
+
   const headerPaddingTop = Math.max(insets.top + 16, 36)
-  const logoTravelDistance = Math.max(0, windowHeight / 2 - (headerPaddingTop + 60))
+  // The Android native splash centers `splashscreen_logo.png` exactly at the physical center of the screen (windowHeight / 2).
+  // The header lockup sits at headerPaddingTop + 60 (center of 120pt container).
+  // Therefore, the exact travel distance from the native splash height to the header height is:
+  const splashCenterY = windowHeight / 2
+  const headerCenterY = headerPaddingTop + 60
+  const logoTravelDistance = Math.max(0, splashCenterY - headerCenterY)
 
   useEffect(() => {
-    // Hide native splash screen as soon as AuthSlidingScreen has mounted and started star-gyro
+    // Hide native splash screen as soon as AuthSlidingScreen mounts
     void SplashScreen.hideAsync()
 
-    // Start centered with Star Gyro animation, then after brief delay smoothly glide upwards
-    introProgress.value = withDelay(
+    // Phase 1 (t=500ms): Logo slides smoothly to the left, Saulado name fades & slides in from right
+    lockupSlideX.value = withDelay(
       500,
+      withTiming(-60, {
+        duration: 1100,
+        easing: Easing.bezier(0.16, 1, 0.3, 1),
+      }),
+    )
+
+    wordmarkOpacity.value = withDelay(
+      650,
+      withTiming(1, {
+        duration: 900,
+        easing: Easing.out(Easing.quad),
+      }),
+    )
+
+    wordmarkTranslateX.value = withDelay(
+      500,
+      withTiming(0, {
+        duration: 1100,
+        easing: Easing.bezier(0.16, 1, 0.3, 1),
+      }),
+    )
+
+    // Phase 2 (t=3000ms): Smooth, slow-motion upward glide into header position, revealing login forms
+    glideProgress.value = withDelay(
+      3000,
       withTiming(
         1,
         {
-          duration: 900,
+          duration: 1600,
           easing: Easing.bezier(0.16, 1, 0.3, 1),
         },
         (finished) => {
@@ -91,6 +137,24 @@ export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenPro
           }
         },
       ),
+    )
+
+    // During upward glide, smoothly center the logo back into header position (translateX: -60 -> 0)
+    lockupSlideX.value = withDelay(
+      3000,
+      withTiming(0, {
+        duration: 1600,
+        easing: Easing.bezier(0.16, 1, 0.3, 1),
+      }),
+    )
+
+    // Splash wordmark fades out gracefully as the centered header title & tagline fade in
+    wordmarkOpacity.value = withDelay(
+      3000,
+      withTiming(0, {
+        duration: 700,
+        easing: Easing.inOut(Easing.quad),
+      }),
     )
   }, [])
 
@@ -112,28 +176,49 @@ export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenPro
     setLocalPasswordError(null)
     setLocalConfirmPasswordError(null)
     slideProgress.value = withTiming(tab === 'login' ? 0 : 1, {
-      duration: 320,
+      duration: 400,
       easing: Easing.bezier(0.25, 0.1, 0.25, 1),
     })
   }
 
-  // Animated styles for upward glide intro
-  const animatedLogoStyle = useAnimatedStyle(() => {
+  // Animated styles for Goodnotes splash & upward glide intro
+  const animatedLockupStyle = useAnimatedStyle(() => {
     return {
       transform: [
         {
-          translateY: (1 - introProgress.value) * logoTravelDistance,
+          translateY: (1 - glideProgress.value) * logoTravelDistance,
         },
+      ],
+    }
+  })
+
+  const animatedLogoStyle = useAnimatedStyle(() => {
+    return {
+      opacity: splashOpacity.value,
+      transform: [
+        { translateX: lockupSlideX.value },
+        // Slight scale adjustment from splash (120pt) to header (108pt)
+        { scale: 1 - glideProgress.value * 0.1 },
+      ],
+    }
+  })
+
+  const animatedSplashWordmarkStyle = useAnimatedStyle(() => {
+    return {
+      opacity: wordmarkOpacity.value,
+      transform: [
+        // Wordmark tracks lockup slide and has subtle entrance slide
+        { translateX: lockupSlideX.value + wordmarkTranslateX.value },
       ],
     }
   })
 
   const animatedHeroTextStyle = useAnimatedStyle(() => {
     return {
-      opacity: introProgress.value,
+      opacity: glideProgress.value,
       transform: [
         {
-          translateY: (1 - introProgress.value) * 18,
+          translateY: (1 - glideProgress.value) * 20,
         },
       ],
     }
@@ -141,10 +226,10 @@ export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenPro
 
   const animatedFormContainerStyle = useAnimatedStyle(() => {
     return {
-      opacity: introProgress.value,
+      opacity: glideProgress.value,
       transform: [
         {
-          translateY: (1 - introProgress.value) * 50,
+          translateY: (1 - glideProgress.value) * 80,
         },
       ],
     }
@@ -256,22 +341,68 @@ export function AuthSlidingScreen({ initialTab = 'login' }: AuthSlidingScreenPro
         className="flex-1"
       >
         <ScrollView
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
+          bounces={false}
+          overScrollMode="never"
           contentContainerStyle={{
             flexGrow: 1,
             paddingBottom: insets.bottom + 24,
           }}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Hero Header Area with Large Saulado Logo & Animated Text */}
+          {/* Hero Header Area with Saulado Logo & Animated Text */}
           <View
             className="w-full items-center justify-center px-6 z-20"
             style={{ paddingTop: headerPaddingTop, minHeight: 270 }}
           >
             <Animated.View
-              style={[animatedLogoStyle, { alignItems: 'center', justifyContent: 'center' }]}
+              style={[
+                animatedLockupStyle,
+                {
+                  width: 120,
+                  height: 120,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                },
+              ]}
             >
-              <SauladoLogo size={120} animation={logoAnimation} />
+              {/* Logo Mark (starts at size 120 exactly matching native splash screen) */}
+              <Animated.View
+                style={[
+                  animatedLogoStyle,
+                  {
+                    width: 120,
+                    height: 120,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  },
+                ]}
+              >
+                <SauladoLogo size={120} animation={logoAnimation} />
+              </Animated.View>
+
+              {/* Splash Wordmark "Saulado" (positioned on the right side of the sliding logo) */}
+              <Animated.View
+                style={[
+                  animatedSplashWordmarkStyle,
+                  {
+                    position: 'absolute',
+                    left: 128,
+                    top: 0,
+                    bottom: 0,
+                    justifyContent: 'center',
+                  },
+                ]}
+                pointerEvents="none"
+              >
+                <Text numberOfLines={1} className="text-3xl font-black text-white tracking-tight">
+                  Saulado
+                </Text>
+              </Animated.View>
             </Animated.View>
+
+            {/* Header Title & Tagline (reveals once lockup glides up to header position) */}
             <Animated.View style={[animatedHeroTextStyle, { alignItems: 'center', width: '100%' }]}>
               <Text
                 accessibilityRole="header"
