@@ -146,4 +146,45 @@ describe('Offline Study Generation Phase 5.5', () => {
     expect(card.blankAnswers).toBeUndefined()
     expect(card.blankOptions).toEqual([])
   })
+
+  it('Test G — Supports shuffled, sequential, and spaced repetition modalities offline', () => {
+    const cards: StudyCard[] = Array.from({ length: 15 }, (_, i) => ({
+      id: `c_${i}`,
+      studySetId: 's1',
+      paragraph: `Card number ${i} with {{term${i}}}`,
+      answers: [
+        {
+          id: `a_${i}`,
+          ordinal: 0,
+          answerText: `term${i}`,
+          startOffset: 15,
+          endOffset: 25,
+          altAnswers: [],
+        },
+      ],
+      tags: [],
+      createdAt: `2026-08-${String(i + 1).padStart(2, '0')}`,
+      updatedAt: `2026-08-${String(i + 1).padStart(2, '0')}`,
+    }))
+
+    // Sequential mode preserves initial order
+    const seqSession = generateOfflineSession('s1', 'sequential', cards)
+    expect(seqSession.mode).toBe('sequential')
+    expect(seqSession.queue.map((c) => c.cardId)).toEqual(cards.map((c) => c.id))
+
+    // Spaced mode offline
+    const spacedSession = generateOfflineSession('s1', 'spaced', cards)
+    expect(spacedSession.mode).toBe('spaced')
+    expect(spacedSession.queue).toHaveLength(15)
+
+    // Shuffled mode randomizes question order
+    const shuffledSession = generateOfflineSession('s1', 'shuffled', cards)
+    expect(shuffledSession.mode).toBe('shuffled')
+    expect(shuffledSession.queue).toHaveLength(15)
+    // The shuffled queue should contain all cards but not identical to sequential order
+    const shuffledIds = shuffledSession.queue.map((c) => c.cardId)
+    expect(new Set(shuffledIds)).toEqual(new Set(cards.map((c) => c.id)))
+    // With 15 cards, probability of random permutation matching exact order is 1/15! (~0)
+    expect(shuffledIds).not.toEqual(cards.map((c) => c.id))
+  })
 })

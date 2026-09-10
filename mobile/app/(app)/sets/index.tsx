@@ -390,7 +390,7 @@ export default function SetsScreen(): ReactElement {
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Study ${prioritySet.title}`}
-                        onPress={() => router.push(`/study?set=${prioritySet.id}&mode=spaced`)}
+                        onPress={() => router.push(`/study?set=${prioritySet.id}`)}
                         className="items-center justify-center rounded-full bg-white px-5 py-2.5 active:opacity-90 shadow-sm"
                       >
                         <Text className="text-sm font-bold text-primary">Study Now</Text>

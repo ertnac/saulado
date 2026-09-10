@@ -10,6 +10,7 @@ interface ModePickerProps {
   pending: boolean
   dueCount?: number
   totalCount?: number
+  isOffline?: boolean
 }
 
 export function ModePicker({
@@ -19,10 +20,11 @@ export function ModePicker({
   pending,
   dueCount,
   totalCount,
+  isOffline = false,
 }: ModePickerProps): ReactElement {
   const isEmpty = totalCount === 0
   const hasDueCards = dueCount === undefined || dueCount > 0
-  const isSpacedDisabled = selected === 'spaced' && !hasDueCards
+  const isSpacedDisabled = !isOffline && selected === 'spaced' && !hasDueCards
 
   const modes: {
     id: StartableMode
@@ -35,11 +37,13 @@ export function ModePicker({
     {
       id: 'spaced',
       title: 'Spaced Repetition',
-      description: hasDueCards
-        ? `Reviews only the ${dueCount !== undefined ? `${dueCount} ` : ''}cards that are due, optimized for long-term retention.`
-        : 'All cards reviewed for today! New reviews will unlock tomorrow.',
-      badge: hasDueCards ? 'Recommended' : '0 Due Today',
-      badgeType: hasDueCards ? 'recommended' : 'warning',
+      description: isOffline
+        ? 'Practice downloaded cards offline. Reviews are recorded locally and sync automatically when reconnected.'
+        : hasDueCards
+          ? `Reviews only the ${dueCount !== undefined ? `${dueCount} ` : ''}cards that are due, optimized for long-term retention.`
+          : 'All cards reviewed for today! New reviews will unlock tomorrow.',
+      badge: isOffline ? 'Offline Sync' : hasDueCards ? 'Recommended' : '0 Due Today',
+      badgeType: isOffline ? 'recommended' : hasDueCards ? 'recommended' : 'warning',
       icon: '🧠',
     },
     {
@@ -47,8 +51,13 @@ export function ModePicker({
       title: 'Sequential Drill',
       description:
         'Study every card in the set, walking through them in the order they were created.',
-      badge: !hasDueCards ? 'Ready to Drill' : totalCount ? `${totalCount} cards` : undefined,
-      badgeType: !hasDueCards ? 'recommended' : 'neutral',
+      badge:
+        !hasDueCards && !isOffline
+          ? 'Ready to Drill'
+          : totalCount
+            ? `${totalCount} cards`
+            : undefined,
+      badgeType: !hasDueCards && !isOffline ? 'recommended' : 'neutral',
       icon: '📖',
     },
     {
@@ -69,7 +78,9 @@ export function ModePicker({
           Study Session Settings
         </Text>
         <Text className="text-sm text-muted-foreground text-center px-4">
-          Pick a method to drill your cards. Only spaced repetition updates daily goals.
+          {isOffline
+            ? 'Pick a learning modality to drill your cards offline. Progress will sync when reconnected.'
+            : 'Pick a method to drill your cards. Only spaced repetition updates daily goals.'}
         </Text>
       </View>
 

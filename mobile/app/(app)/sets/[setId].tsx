@@ -429,7 +429,7 @@ export default function SetDetailScreen(): ReactElement {
               size="lg"
               disabled={items.length === 0}
               onPress={() => {
-                router.push(`/study?set=${setId}&mode=spaced`)
+                router.push(`/study?set=${setId}`)
               }}
             />
           </View>

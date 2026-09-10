@@ -632,9 +632,9 @@ export default function DashboardScreen(): ReactElement {
   function study(setId?: string): void {
     const firstOfflineSet = offlineSets[0]
     if (setId) {
-      router.push({ pathname: '/study', params: { set: setId, mode: 'spaced' } })
+      router.push({ pathname: '/study', params: { set: setId } })
     } else if (isOffline && firstOfflineSet) {
-      router.push({ pathname: '/study', params: { set: firstOfflineSet.id, mode: 'spaced' } })
+      router.push({ pathname: '/study', params: { set: firstOfflineSet.id } })
     } else {
       router.push('/study')
     }
@@ -691,7 +691,7 @@ export default function DashboardScreen(): ReactElement {
             label={`Study ${featuredSet.title}`}
             size="lg"
             className="mt-5"
-            onPress={() => router.push(`/study?set=${featuredSet.id}&mode=spaced`)}
+            onPress={() => router.push(`/study?set=${featuredSet.id}`)}
           />
         </Card>
       )
@@ -861,7 +861,7 @@ export default function DashboardScreen(): ReactElement {
               onPress={() => {
                 const firstOfflineSet = offlineSets[0]
                 if (firstOfflineSet) {
-                  router.push(`/study?set=${firstOfflineSet.id}&mode=spaced`)
+                  router.push(`/study?set=${firstOfflineSet.id}`)
                 } else {
                   router.push('/sets')
                 }
@@ -905,11 +905,7 @@ export default function DashboardScreen(): ReactElement {
               router.push(`/sets/${id}`)
             }}
             onStudySet={(id) => {
-              if (isOffline) {
-                router.push(`/study?set=${id}&mode=spaced`)
-              } else {
-                study(id)
-              }
+              study(id)
             }}
             onAll={() => {
               router.push('/sets')

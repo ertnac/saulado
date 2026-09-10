@@ -66,6 +66,8 @@ export interface StudySessionController {
   evaluateLocally: (values: Record<number, string>, revealed: boolean) => AnswerResponse | null
   /** Advances past the graded card. Returns `true` when the session is spent. */
   advance: () => boolean
+  /** Randomly shuffles the remaining cards in queue */
+  reshuffleRemaining: () => void
   reset: () => void
 }
 
@@ -191,6 +193,24 @@ export function useStudySession(): StudySessionController {
     setValues((current: Record<number, string>) => ({ ...current, [ordinal]: value }))
   }, [])
 
+  const reshuffleRemaining = useCallback(() => {
+    const currentQueue = queueRef.current
+    if (currentQueue.length <= 1) return
+
+    // Keep the current card in place and shuffle the remaining cards
+    const [head, ...tail] = currentQueue
+    if (!head) return
+
+    for (let i = tail.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const temp = tail[i] as SessionCard
+      tail[i] = tail[j] as SessionCard
+      tail[j] = temp
+    }
+
+    setQueueBoth([head, ...tail])
+  }, [setQueueBoth])
+
   const reset = useCallback(() => {
     setQueueBoth([])
     setValues({})
@@ -212,6 +232,7 @@ export function useStudySession(): StudySessionController {
     syncProgress,
     evaluateLocally,
     advance,
+    reshuffleRemaining,
     reset,
   }
 }

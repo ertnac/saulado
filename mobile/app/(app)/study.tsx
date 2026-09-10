@@ -23,6 +23,7 @@ import {
   ListIcon,
   CardsIcon,
   ChevronLeftIcon,
+  ShuffleIcon,
 } from '../../components/icons'
 import { forgetSession, readResumableSession, rememberSession } from '../../lib/study-resume'
 import { completeSession, getSession, startSession, submitAnswer } from '../../services/study'
@@ -251,6 +252,7 @@ export default function StudyScreen(): ReactElement {
         const localSession = generateOfflineSession(studySetId!, activeMode, offlineSet.cards)
         setIsOfflineSession(true)
         setSessionId(localSession.id)
+        setMode(activeMode)
         void rememberSession(localSession.id)
         session.load(localSession)
         setPicking(false)
@@ -280,6 +282,7 @@ export default function StudyScreen(): ReactElement {
       console.log('[study.tsx] startSession succeeded! Session:', data.session)
       setIsOfflineSession(false)
       setSessionId(data.session.id)
+      setMode(activeMode)
       void rememberSession(data.session.id)
       session.load(data.session)
       setPicking(false)
@@ -607,6 +610,7 @@ export default function StudyScreen(): ReactElement {
         pending={starting}
         dueCount={dueCardsCount}
         totalCount={totalCardsCount}
+        isOffline={isOffline}
       />,
     )
   }
@@ -803,27 +807,52 @@ export default function StudyScreen(): ReactElement {
           </View>
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Switch answering mode"
-          disabled={session.answer !== null}
-          className={`rounded-full bg-surface border border-border/80 px-3 py-1.5 flex-row items-center gap-1.5 shadow-xs active:bg-surface-muted ${
-            session.answer !== null ? 'opacity-40' : 'opacity-100'
-          }`}
-          onPress={() => {
-            if (session.answer !== null) return
-            setAnsweringType((prev) =>
-              prev === 'identification'
-                ? 'multiple-choice'
-                : prev === 'multiple-choice'
-                  ? 'flashcard'
-                  : 'identification',
-            )
-          }}
-        >
-          {modeInfo.icon}
-          <Text className="text-xs font-semibold text-foreground">{modeInfo.label}</Text>
-        </Pressable>
+        <View className="flex-row items-center gap-1.5">
+          {session.remaining > 1 && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                mode === 'shuffled'
+                  ? 'Reshuffle remaining questions'
+                  : 'Shuffle remaining questions'
+              }
+              disabled={session.answer !== null}
+              className={`rounded-full bg-surface border border-border/80 px-2.5 py-1.5 flex-row items-center gap-1 shadow-xs active:bg-surface-muted ${
+                session.answer !== null ? 'opacity-40' : 'opacity-100'
+              }`}
+              onPress={() => {
+                session.reshuffleRemaining()
+              }}
+            >
+              <ShuffleIcon color={mode === 'shuffled' ? primaryColor : mutedColor} size={13} />
+              {mode === 'shuffled' && (
+                <Text className="text-[11px] font-medium text-foreground">Reshuffle</Text>
+              )}
+            </Pressable>
+          )}
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Switch answering mode"
+            disabled={session.answer !== null}
+            className={`rounded-full bg-surface border border-border/80 px-3 py-1.5 flex-row items-center gap-1.5 shadow-xs active:bg-surface-muted ${
+              session.answer !== null ? 'opacity-40' : 'opacity-100'
+            }`}
+            onPress={() => {
+              if (session.answer !== null) return
+              setAnsweringType((prev) =>
+                prev === 'identification'
+                  ? 'multiple-choice'
+                  : prev === 'multiple-choice'
+                    ? 'flashcard'
+                    : 'identification',
+              )
+            }}
+          >
+            {modeInfo.icon}
+            <Text className="text-xs font-semibold text-foreground">{modeInfo.label}</Text>
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
