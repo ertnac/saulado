@@ -1,18 +1,8 @@
-import { useState, type ReactElement, useEffect, useRef, useSyncExternalStore } from 'react'
-import {
-  Animated,
-  Easing,
-  Image,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native'
+import { useState, type ReactElement, useEffect, useSyncExternalStore } from 'react'
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 import { onlineManager } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import type { DashboardResponse, RecentSet } from '@saulado/shared'
-import welcomeAvatar from '../../assets/welcome-avatar.png'
 import { SauladoIcon } from '../../components/saulado-logo'
 import { Button, TextLink } from '../../components/button'
 import { Card, CardFigure, CardLabel } from '../../components/card'
@@ -43,67 +33,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuthStore } from '../../stores/auth'
 import { useOfflineSetsStore } from '../../stores/offline-sets'
 import { useTokenColor } from '../../stores/theme'
-
-/**
- * The mascot waving at the user. Runs a smooth oscillating rotation that mimics
- * a hand wave — three cycles then rests, so it greets without looping forever.
- */
-function WavingAvatar(): ReactElement {
-  const wave = useRef(new Animated.Value(0)).current
-
-  useEffect(() => {
-    // 3 full wave cycles (left → right → left) then stop.
-    Animated.sequence([
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(wave, {
-            toValue: 1,
-            duration: 200,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(wave, {
-            toValue: -1,
-            duration: 200,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(wave, {
-            toValue: 0,
-            duration: 200,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ]),
-        { iterations: 3 },
-      ),
-    ]).start()
-  }, [wave])
-
-  const rotate = wave.interpolate({
-    inputRange: [-1, 0, 1],
-    outputRange: ['-18deg', '0deg', '18deg'],
-  })
-
-  return (
-    <Animated.View
-      style={{
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        overflow: 'hidden',
-        transform: [{ rotate }],
-      }}
-    >
-      <Image
-        source={welcomeAvatar}
-        style={{ width: 80, height: 80 }}
-        resizeMode="cover"
-        accessibilityLabel="Saulado mascot waving hello"
-      />
-    </Animated.View>
-  )
-}
 
 /**
  * Returns a warm, time-aware greeting string and icon.
@@ -615,7 +544,6 @@ export default function DashboardScreen(): ReactElement {
 
   const settings = useAuthStore((s) => s.settings)
   const nickname = settings?.nickname ?? ''
-  const profileImage = settings?.profileImage ?? null
 
   const data = dashboard.data
 
@@ -786,34 +714,22 @@ export default function DashboardScreen(): ReactElement {
           </View>
         </View>
 
-        {/* Student Profile & Welcoming Banner */}
-        <View className="flex-row items-center gap-4 rounded-3xl border border-border bg-surface p-4">
-          {profileImage ? (
-            <Image
-              source={{ uri: profileImage }}
-              style={{ width: 72, height: 72, borderRadius: 36 }}
-              className="border border-border"
-            />
-          ) : (
-            <WavingAvatar />
-          )}
-
-          <View className="flex-1">
-            <Text className="text-xl font-bold tracking-tight text-foreground">
-              {greeting.text} {greeting.emoji}
-            </Text>
-            <Text className="text-xs text-muted-foreground mt-1 leading-relaxed">
-              {isOffline
-                ? `${totalOfflineCards} downloaded ${totalOfflineCards === 1 ? 'card' : 'cards'} across ${offlineSets.length} ${offlineSets.length === 1 ? 'set' : 'sets'} available offline.`
-                : data && data.totalDue > 0
-                  ? `${String(data.totalDue)} ${data.totalDue === 1 ? 'card' : 'cards'} ready for review today.`
-                  : data && data.newCards > 0
-                    ? `${String(data.newCards)} new ${data.newCards === 1 ? 'card' : 'cards'} waiting to be learned.`
-                    : data?.hasStudied
-                      ? 'All scheduled reviews completed for today.'
-                      : 'Recall in context, not from a bare flashcard.'}
-            </Text>
-          </View>
+        {/* Student Welcoming Banner */}
+        <View className="rounded-3xl border border-border bg-surface p-5">
+          <Text className="text-xl font-bold tracking-tight text-foreground">
+            {greeting.text} {greeting.emoji}
+          </Text>
+          <Text className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+            {isOffline
+              ? `${totalOfflineCards} downloaded ${totalOfflineCards === 1 ? 'card' : 'cards'} across ${offlineSets.length} ${offlineSets.length === 1 ? 'set' : 'sets'} available offline.`
+              : data && data.totalDue > 0
+                ? `${String(data.totalDue)} ${data.totalDue === 1 ? 'card' : 'cards'} ready for review today.`
+                : data && data.newCards > 0
+                  ? `${String(data.newCards)} new ${data.newCards === 1 ? 'card' : 'cards'} waiting to be learned.`
+                  : data?.hasStudied
+                    ? 'All scheduled reviews completed for today.'
+                    : 'Recall in context, not from a bare flashcard.'}
+          </Text>
         </View>
 
         {/* Glance Metric Chips (Student Portal Badges) */}
