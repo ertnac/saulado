@@ -26,7 +26,7 @@ import { useAuthStore } from '../stores/auth'
 import { useOfflineSetsStore } from '../stores/offline-sets'
 import { loadAuthCache } from '../services/auth-cache'
 
-async function resolveUserId(): Promise<string> {
+export async function resolveUserId(): Promise<string> {
   const storeUser = useAuthStore.getState().user
   if (storeUser?.id) return storeUser.id
   const cached = await loadAuthCache()
@@ -135,9 +135,17 @@ export function useSets(options: { archived?: boolean; parent?: string | null } 
     queryKey: setKeys.list({ archived, parent }),
     queryFn: async ({ pageParam }) => {
       const userId = await resolveUserId()
-      if (!onlineManager.isOnline() && userId) {
-        // When offline, ONLY return downloaded sets or sets created locally
-        const offlineSets = await offlineData.getSets(userId, parent, { downloadedOnly: true })
+      const isOnline = onlineManager.isOnline()
+      if (!isOnline && userId) {
+        // When offline, return downloaded sets or sets created locally; fallback to non-downloaded SQLite if needed
+        let offlineSets = await offlineData.getSets(userId, parent, { downloadedOnly: true })
+        if (offlineSets.length === 0 && userId !== 'local-user') {
+          offlineSets = await offlineData.getSets('local-user', parent, { downloadedOnly: true })
+        }
+        if (offlineSets.length === 0) {
+          offlineSets = await offlineData.getSets(userId, parent, { downloadedOnly: false })
+        }
+
         const setsMap = new Map<string, StudySet>()
 
         for (const s of offlineSets) {
@@ -193,11 +201,19 @@ export function useSets(options: { archived?: boolean; parent?: string | null } 
         }
         return res
       } catch (error) {
-        if (userId && isNetworkError(error)) {
-          const offlineSets = await offlineData.getSets(userId, parent, { downloadedOnly: true })
-          return {
-            items: offlineSets,
-            nextCursor: null,
+        if (userId) {
+          let offlineSets = await offlineData.getSets(userId, parent, { downloadedOnly: true })
+          if (offlineSets.length === 0 && userId !== 'local-user') {
+            offlineSets = await offlineData.getSets('local-user', parent, { downloadedOnly: true })
+          }
+          if (offlineSets.length === 0) {
+            offlineSets = await offlineData.getSets(userId, parent, { downloadedOnly: false })
+          }
+          if (offlineSets.length > 0) {
+            return {
+              items: offlineSets,
+              nextCursor: null,
+            }
           }
         }
         throw error
@@ -723,7 +739,10 @@ export function useCards(setId: string | undefined, tags: readonly string[] = []
       const userId = await resolveUserId()
       const isTemp = setId?.startsWith('temp-set-')
       if ((isTemp || !onlineManager.isOnline()) && userId && setId) {
-        const offlineCards = await offlineData.getCards(userId, setId)
+        let offlineCards = await offlineData.getCards(userId, setId)
+        if (offlineCards.length === 0 && userId !== 'local-user') {
+          offlineCards = await offlineData.getCards('local-user', setId)
+        }
         if (offlineCards.length > 0) {
           const summaries: StudyCardSummary[] = offlineCards.map((c) => ({
             id: c.id,
@@ -785,7 +804,10 @@ export function useCards(setId: string | undefined, tags: readonly string[] = []
               updatedAt: c.updatedAt,
             })
           }
-          const localCards = await offlineData.getCards(userId, setId)
+          let localCards = await offlineData.getCards(userId, setId)
+          if (localCards.length === 0 && userId !== 'local-user') {
+            localCards = await offlineData.getCards('local-user', setId)
+          }
           const unsyncedCards: StudyCardSummary[] = localCards
             .filter(
               (lc) => lc.id.startsWith('temp-card-') || !res.items.some((c) => c.id === lc.id),
@@ -808,8 +830,11 @@ export function useCards(setId: string | undefined, tags: readonly string[] = []
         }
         return res
       } catch (error) {
-        if (userId && setId && isNetworkError(error)) {
-          const offlineCards = await offlineData.getCards(userId, setId)
+        if (userId && setId) {
+          let offlineCards = await offlineData.getCards(userId, setId)
+          if (offlineCards.length === 0 && userId !== 'local-user') {
+            offlineCards = await offlineData.getCards('local-user', setId)
+          }
           if (offlineCards.length > 0) {
             const summaries: StudyCardSummary[] = offlineCards.map((c) => ({
               id: c.id,

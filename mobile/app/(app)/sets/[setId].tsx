@@ -39,9 +39,11 @@ import { SetList } from '../../../components/set-list'
 import { useOfflineSetsStore } from '../../../stores/offline-sets'
 import { downloadSet, removeOfflineSet } from '../../../lib/offline/sets'
 import { onEntityRemapped, resolveEntityId } from '../../../lib/offline/id-remap'
+import * as offlineData from '../../../lib/offline/data-source'
 import { onlineManager } from '@tanstack/react-query'
 import {
   flattenPages,
+  resolveUserId,
   useArchiveSet,
   useCards,
   useDeleteCard,
@@ -172,12 +174,55 @@ export default function SetDetailScreen(): ReactElement {
   const archiveSet = useArchiveSet()
   const renameSet = useRenameSet()
 
+  const [localFallbackCards, setLocalFallbackCards] = useState<StudyCardSummary[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadFallbackCards() {
+      if (!setId) return
+      try {
+        const userId = await resolveUserId()
+        let cards = await offlineData.getCards(userId, setId)
+        if (cards.length === 0 && userId !== 'local-user') {
+          cards = await offlineData.getCards('local-user', setId)
+        }
+        if (!cancelled && cards.length > 0) {
+          setLocalFallbackCards(
+            cards.map((c) => ({
+              id: c.id,
+              studySetId: c.studySetId,
+              paragraph: c.paragraph,
+              tags: c.tags,
+              createdAt: c.createdAt,
+              updatedAt: c.updatedAt,
+              answerCount: c.answers?.length ?? 0,
+            })),
+          )
+        }
+      } catch {
+        // Fallback error ignored
+      }
+    }
+    void loadFallbackCards()
+    return () => {
+      cancelled = true
+    }
+  }, [setId, cards.data])
+
   const rawItems = flattenPages(cards.data)
   const cardsMap = new Map<string, StudyCardSummary>()
   for (const c of rawItems) {
     const canonicalId = resolveEntityId(c.id)
     if (!cardsMap.has(canonicalId)) {
       cardsMap.set(canonicalId, c.id === canonicalId ? c : { ...c, id: canonicalId })
+    }
+  }
+  if (cardsMap.size === 0 && localFallbackCards.length > 0) {
+    for (const c of localFallbackCards) {
+      const canonicalId = resolveEntityId(c.id)
+      if (!cardsMap.has(canonicalId)) {
+        cardsMap.set(canonicalId, c.id === canonicalId ? c : { ...c, id: canonicalId })
+      }
     }
   }
   const items = Array.from(cardsMap.values())

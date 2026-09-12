@@ -31,7 +31,7 @@ import {
 import { useTokenColor } from '../../../stores/theme'
 import { Card } from '../../../components/card'
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue'
-import { flattenPages, useSets, useTags } from '../../../hooks/cards'
+import { flattenPages, useAllSets, useSets, useTags } from '../../../hooks/cards'
 import { useDueCounts } from '../../../hooks/study'
 import { isSearchable, useSearch } from '../../../hooks/search'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -183,6 +183,7 @@ export default function SetsScreen(): ReactElement {
 
   // Live sets and due counts
   const setsQuery = useSets({ parent: null, archived: false })
+  const allSetsQuery = useAllSets({ archived: false })
   const dueCounts = useDueCounts()
   const offlineSets = Object.values(offlineStore.sets)
     .filter(
@@ -200,7 +201,30 @@ export default function SetsScreen(): ReactElement {
     .map((entry) => entry.metadata!)
 
   const setsFromQuery = flattenPages(setsQuery.data)
-  const rootSets = isOffline ? offlineSets : setsFromQuery.length > 0 ? setsFromQuery : offlineSets
+  let rootSets = isOffline ? offlineSets : setsFromQuery.length > 0 ? setsFromQuery : offlineSets
+
+  // Fallback: If no sets found at root (e.g. non-null parentId or pending sync), check all available sets
+  if (rootSets.length === 0) {
+    if (allSetsQuery.data && allSetsQuery.data.length > 0) {
+      rootSets = allSetsQuery.data
+    } else {
+      const anyOfflineSets = Object.values(offlineStore.sets)
+        .filter(
+          (entry) =>
+            entry.metadata &&
+            !entry.metadata.archivedAt &&
+            Boolean(
+              entry.isDownloaded ||
+              entry.syncStatus?.startsWith('pending_') ||
+              entry.setId.startsWith('temp-set-'),
+            ),
+        )
+        .map((entry) => entry.metadata!)
+      if (anyOfflineSets.length > 0) {
+        rootSets = anyOfflineSets
+      }
+    }
+  }
 
   const totalSubjects = rootSets.length
   const totalCards = rootSets.reduce((sum, s) => sum + s.subtreeCardCount, 0)

@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router'
 import { SET_TITLE_MAX_LENGTH, type StudySet } from '@saulado/shared'
 import {
   flattenPages,
+  useAllSets,
   useArchiveSet,
   useCreateSet,
   useDeleteSet,
@@ -451,6 +452,7 @@ export function SetList({
   const [title, setTitle] = useState('')
   const [error, setError] = useState<string | null>(null)
   const sets = useSets({ parent })
+  const allSetsQuery = useAllSets()
   const create = useCreateSet()
 
   const isOnline = useSyncExternalStore(
@@ -493,6 +495,28 @@ export function SetList({
       itemsMap.set(canonicalId, os)
     }
   }
+
+  // Fallback: If at the root (parent === null) and itemsMap is empty,
+  // check allSetsQuery and all available offlineStore sets so sets are never lost
+  if (parent === null && itemsMap.size === 0) {
+    if (allSetsQuery.data && allSetsQuery.data.length > 0) {
+      for (const s of allSetsQuery.data) {
+        const canonicalId = resolveEntityId(s.id)
+        if (!itemsMap.has(canonicalId)) {
+          itemsMap.set(canonicalId, s.id === canonicalId ? s : { ...s, id: canonicalId })
+        }
+      }
+    }
+    for (const entry of Object.values(offlineStore.sets)) {
+      if (entry.metadata) {
+        const canonicalId = resolveEntityId(entry.metadata.id)
+        if (!itemsMap.has(canonicalId) && !itemsMap.has(entry.metadata.id)) {
+          itemsMap.set(canonicalId, entry.metadata)
+        }
+      }
+    }
+  }
+
   // When offline, strictly exclude any non-downloaded / non-pending sets
   const items = isOffline
     ? Array.from(itemsMap.values()).filter((s) => {
