@@ -6,12 +6,14 @@ import {
   BookOpenIcon,
   CheckIcon,
   ChevronRightIcon,
+  DownloadIcon,
   EyeIcon,
   EyeOffIcon,
   FileTextIcon,
   FlameIcon,
   LockIcon,
   MailIcon,
+  SmartphoneIcon,
   SparklesIcon,
   XIcon,
 } from '@/components/ui/icons'
@@ -225,20 +227,30 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
             </span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-muted-foreground">
-            <a href="#how-it-works" className="hover:text-foreground transition-colors">
-              How it Works
-            </a>
-            <a href="#study-modes" className="hover:text-foreground transition-colors">
-              Study Modes
-            </a>
-            <a href="#sandbox" className="hover:text-foreground transition-colors">
-              Interactive Sandbox
-            </a>
-            <a href="#features" className="hover:text-foreground transition-colors">
-              Features
-            </a>
-          </nav>
+          <div className="flex items-center gap-3 sm:gap-6">
+            <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-muted-foreground">
+              <a href="#how-it-works" className="hover:text-foreground transition-colors">
+                How it Works
+              </a>
+              <a href="#study-modes" className="hover:text-foreground transition-colors">
+                Study Modes
+              </a>
+              <a href="#sandbox" className="hover:text-foreground transition-colors">
+                Interactive Sandbox
+              </a>
+              <a href="#features" className="hover:text-foreground transition-colors">
+                Features
+              </a>
+            </nav>
+
+            <Link
+              to="/nfc"
+              className="flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full bg-primary text-primary-foreground text-xs sm:text-sm font-bold shadow-xs hover:opacity-90 active:scale-95 transition-all"
+            >
+              <DownloadIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span>Get Mobile App</span>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -1017,6 +1029,30 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
                 Physiology with 1-click bundle import.
               </p>
             </div>
+
+            {/* Tile 4: Offline Android App Banner (Spans Full Width on Desktop) */}
+            <div className="clay-card p-6 sm:p-8 space-y-4 md:col-span-3 bg-gradient-to-r from-primary/10 via-surface to-accent/10 border border-primary/20 flex flex-col sm:flex-row items-center justify-between gap-6">
+              <div className="space-y-2 text-center sm:text-left flex-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/20 text-primary text-xs font-bold">
+                  <SmartphoneIcon className="h-3.5 w-3.5" />
+                  <span>Android Mobile App · Standalone APK</span>
+                </div>
+                <h4 className="text-xl sm:text-2xl font-bold text-foreground">
+                  Study 100% Offline with our Mobile PDF Reader
+                </h4>
+                <p className="text-sm text-muted-foreground max-w-xl">
+                  Highlight lecture slides directly on your phone, queue study snippets into your
+                  Bag, and review flashcards without an internet connection.
+                </p>
+              </div>
+              <Link
+                to="/nfc"
+                className="clay-btn-primary px-6 py-3 text-sm font-bold inline-flex items-center gap-2 text-white shadow-md hover:scale-105 shrink-0"
+              >
+                <DownloadIcon className="h-4 w-4" />
+                <span>Download Android APK</span>
+              </Link>
+            </div>
           </div>
         </div>
       </section>
@@ -1060,6 +1096,9 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
             <span>© 2026 Saulado. Built for active recall.</span>
           </div>
           <div className="flex items-center gap-6">
+            <Link to="/nfc" className="hover:text-foreground transition-colors">
+              Android App (APK)
+            </Link>
             <button
               type="button"
               onClick={() => {

@@ -12,6 +12,7 @@ import { SettingsPage } from '@/features/account/SettingsPage'
 import { AdminDashboardPage } from '@/features/admin/AdminDashboardPage'
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
 import { LandingPage } from '@/features/landing/LandingPage'
+import { NfcLandingPage } from '@/features/nfc/NfcLandingPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 import { SetDetailPage } from '@/features/cards/SetDetailPage'
 import { SetsPage } from '@/features/cards/SetsPage'
@@ -70,9 +71,12 @@ export function App(): ReactElement {
           <SessionRestorer>
             <>
               <Routes>
-                {/* ── Public Static Landing Pages ── */}
+                {/* ── Public Static Landing Pages & NFC Route ── */}
                 <Route path="/welcome" element={<LandingPage />} />
                 <Route path="/landing" element={<LandingPage />} />
+                <Route path="/nfc" element={<NfcLandingPage />} />
+                <Route path="/download" element={<NfcLandingPage />} />
+                <Route path="/app" element={<NfcLandingPage />} />
                 <Route path="/logo-preview" element={<LogoPreviewPage />} />
                 <Route path="/logo-test" element={<LogoPreviewPage />} />
                 <Route path="/logo-lab" element={<LogoAnimationLabPage />} />
