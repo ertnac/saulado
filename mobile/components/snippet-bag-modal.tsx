@@ -92,7 +92,7 @@ export function SnippetBagModal({ visible, onClose }: SnippetBagModalProps): Rea
                 </View>
               </View>
               <Text className="text-[11px] text-muted-foreground">
-                Bagged words & paragraphs from Word documents
+                Bagged words & paragraphs from your documents
               </Text>
             </View>
           </View>
@@ -133,11 +133,8 @@ export function SnippetBagModal({ visible, onClose }: SnippetBagModalProps): Rea
                 Your Bag is Empty
               </Text>
               <Text className="text-xs text-muted-foreground text-center leading-5">
-                Open any Word (.docx or .doc) document in the repository, then select words or
-                paragraphs to bag them into your study cart.
-              </Text>
-              <Text className="text-[11px] text-muted-foreground/80 text-center italic mt-1">
-                Note: PDF files are excluded from snippet bagging.
+                Open any PDF or Word document in the repository, then select words or paragraphs to
+                bag them into your study cart.
               </Text>
               <Button
                 label="Back to Documents"
@@ -168,6 +165,13 @@ export function SnippetBagModal({ visible, onClose }: SnippetBagModalProps): Rea
                       >
                         {snippet.fileName}
                       </Text>
+                      {snippet.pageNumber ? (
+                        <View className="rounded px-1.5 py-0.5 bg-primary/10 border border-primary/20">
+                          <Text className="text-[10px] font-bold text-primary">
+                            Page {snippet.pageNumber}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
                     <View className="flex-row items-center gap-2">
                       <View className="rounded px-1.5 py-0.5 bg-surface-muted border border-border/60">

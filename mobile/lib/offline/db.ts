@@ -80,6 +80,19 @@ export async function initDatabase(db: SQLiteDatabase): Promise<void> {
       updated_at TEXT NOT NULL,
       last_viewed_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS file_highlights (
+      id TEXT PRIMARY KEY NOT NULL,
+      file_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      page_number INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      start_offset INTEGER,
+      end_offset INTEGER,
+      color TEXT NOT NULL DEFAULT 'yellow',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (file_id) REFERENCES repository_files(id) ON DELETE CASCADE
+    );
   `)
 
   // Step 2: Run column migrations first before indexes
@@ -112,6 +125,8 @@ export async function initDatabase(db: SQLiteDatabase): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_repo_files_user ON repository_files (user_id, file_type);
     CREATE INDEX IF NOT EXISTS idx_repo_files_updated ON repository_files (user_id, updated_at);
     CREATE INDEX IF NOT EXISTS idx_repo_files_cloud ON repository_files (cloud_file_id);
+
+    CREATE INDEX IF NOT EXISTS idx_highlights_file ON file_highlights (file_id, page_number);
   `)
 }
 

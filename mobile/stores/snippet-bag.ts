@@ -1,24 +1,21 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import type { BaggedSnippet, SnippetSource } from '@saulado/shared'
 
-export interface BaggedSnippet {
-  id: string
-  fileId: string
-  fileName: string
-  fileType: 'docx' | 'doc'
-  text: string
-  sourceParagraphIndex?: number
-  createdAt: string
+export type { BaggedSnippet, SnippetSource }
+
+export type AddBaggedSnippetInput = Omit<BaggedSnippet, 'id' | 'createdAt' | 'source'> & {
+  source?: SnippetSource
 }
 
 interface SnippetBagState {
   snippets: BaggedSnippet[]
-  addSnippet: (snippet: Omit<BaggedSnippet, 'id' | 'createdAt'>) => BaggedSnippet
+  addSnippet: (snippet: AddBaggedSnippetInput) => BaggedSnippet
   removeSnippet: (id: string) => void
   updateSnippetText: (id: string, text: string) => void
   clearBag: () => void
-  hasSnippet: (fileId: string, text: string) => boolean
+  hasSnippet: (fileId: string, text: string, pageNumber?: number) => boolean
 }
 
 function generateSnippetId(): string {
@@ -36,14 +33,20 @@ export const useSnippetBagStore = create<SnippetBagState>()(
       addSnippet: (input) => {
         const trimmed = input.text.trim()
         const existing = get().snippets.find(
-          (s) => s.fileId === input.fileId && s.text.trim() === trimmed,
+          (s) =>
+            s.fileId === input.fileId &&
+            s.text.trim() === trimmed &&
+            (input.pageNumber === undefined || s.pageNumber === input.pageNumber),
         )
         if (existing) {
           return existing
         }
 
+        const source = input.source || input.fileType || 'pdf'
+
         const newSnippet: BaggedSnippet = {
           ...input,
+          source,
           text: trimmed,
           id: generateSnippetId(),
           createdAt: new Date().toISOString(),
@@ -72,9 +75,14 @@ export const useSnippetBagStore = create<SnippetBagState>()(
         set({ snippets: [] })
       },
 
-      hasSnippet: (fileId, text) => {
+      hasSnippet: (fileId, text, pageNumber) => {
         const trimmed = text.trim()
-        return get().snippets.some((s) => s.fileId === fileId && s.text.trim() === trimmed)
+        return get().snippets.some(
+          (s) =>
+            s.fileId === fileId &&
+            s.text.trim() === trimmed &&
+            (pageNumber === undefined || s.pageNumber === pageNumber),
+        )
       },
     }),
     {

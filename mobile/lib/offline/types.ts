@@ -224,3 +224,15 @@ export interface RepositoryFile {
   updatedAt: string
   lastViewedAt?: string | null
 }
+
+export interface SQLiteFileHighlight {
+  id: string
+  file_id: string
+  user_id: string
+  page_number: number
+  text: string
+  start_offset: number | null
+  end_offset: number | null
+  color: string
+  created_at: string
+}

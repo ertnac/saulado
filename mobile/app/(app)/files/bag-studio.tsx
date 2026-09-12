@@ -54,8 +54,8 @@ export default function BagStudioScreen(): ReactElement {
           </View>
           <Text className="text-lg font-bold text-foreground text-center">No Bagged Snippets</Text>
           <Text className="text-xs text-muted-foreground text-center leading-5">
-            Your study bag is empty. Please open a Word (.docx or .doc) document in the file
-            repository and bag words or paragraphs first.
+            Your study bag is empty. Please open a PDF or Word document in the file repository and
+            bag words or paragraphs first.
           </Text>
           <Button
             label="Go to File Repository"
@@ -215,8 +215,9 @@ export default function BagStudioScreen(): ReactElement {
           </View>
           <View className="flex-row items-center gap-1">
             <DocumentIcon color={mutedForeground} size={13} />
-            <Text numberOfLines={1} className="text-xs text-muted-foreground max-w-[160px]">
+            <Text numberOfLines={1} className="text-xs text-muted-foreground max-w-[180px]">
               {currentSnippet.fileName}
+              {currentSnippet.pageNumber ? ` · P. ${currentSnippet.pageNumber}` : ''}
             </Text>
           </View>
         </View>

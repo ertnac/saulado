@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy'
 import mammoth from 'mammoth'
-import { extractTextFromPdfStream } from '@saulado/shared'
+import { extractTextFromPdfStream, type PdfHighlight } from '@saulado/shared'
 import type { RepositoryFile } from '../lib/offline/types'
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
@@ -156,17 +156,24 @@ export function generateReaderHtml({
 
 export function generatePdfViewerHtml({
   pdfBase64,
+  fileId = '',
   title,
   isDark,
+  zoomScale = 1.0,
+  highlights = [],
 }: {
   pdfBase64: string
+  fileId?: string
   title: string
   isDark: boolean
+  zoomScale?: number
+  highlights?: PdfHighlight[]
 }): string {
   const bg = isDark ? '#031a14' : '#f0f4f2'
   const text = isDark ? '#ffffff' : '#052e24'
   const controlBg = isDark ? '#072e24' : '#ffffff'
   const borderColor = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'
+  const safeHighlightsJson = JSON.stringify(highlights || []).replace(/</g, '\\u003c')
 
   return `<!DOCTYPE html>
 <html>
@@ -187,16 +194,23 @@ export function generatePdfViewerHtml({
   </script>
   <style>
     * { box-sizing: border-box; }
-    body {
+    html, body {
       margin: 0;
       padding: 0;
+      width: 100%;
+      min-height: 100%;
       background-color: ${bg};
       color: ${text};
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
       display: flex;
       flex-direction: column;
       align-items: center;
-      min-height: 100vh;
+      overflow-x: auto;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
     #controls {
       position: sticky;
@@ -210,12 +224,13 @@ export function generatePdfViewerHtml({
       justify-content: space-between;
       align-items: center;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      flex-shrink: 0;
     }
     button {
       background: #052e24;
       color: #ffffff;
       border: none;
-      padding: 6px 12px;
+      padding: 6px 14px;
       border-radius: 6px;
       font-size: 14px;
       font-weight: 600;
@@ -231,18 +246,72 @@ export function generatePdfViewerHtml({
     }
     #pdf-container {
       width: 100%;
-      padding: 16px 8px 80px 8px;
+      padding: 14px 8px 140px 8px;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 16px;
+      box-sizing: border-box;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
-    canvas {
-      max-width: 100%;
-      height: auto !important;
+    .page-wrapper {
+      position: relative;
+      margin: 0 auto;
       box-shadow: 0 4px 16px rgba(0,0,0,0.2);
       border-radius: 4px;
       background: #ffffff;
+      display: block;
+      overflow: hidden;
+      max-width: none;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .textLayer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      overflow: hidden;
+      opacity: 1;
+      line-height: 1.0;
+      -webkit-user-select: text;
+      user-select: text;
+      touch-action: pan-y;
+      pointer-events: auto;
+    }
+    .textLayer span {
+      color: transparent;
+      position: absolute;
+      white-space: pre;
+      cursor: text;
+      transform-origin: 0% 0%;
+    }
+    .textLayer ::selection {
+      background: rgba(34, 197, 94, 0.35);
+    }
+    .textLayer ::-moz-selection {
+      background: rgba(34, 197, 94, 0.35);
+    }
+    .pdf-highlight {
+      background-color: rgba(250, 204, 21, 0.45) !important;
+      border-radius: 2px;
+    }
+    .pdf-highlight-yellow {
+      background-color: rgba(250, 204, 21, 0.45) !important;
+    }
+    .pdf-highlight-emerald {
+      background-color: rgba(16, 185, 129, 0.4) !important;
+    }
+    .pdf-highlight-green {
+      background-color: rgba(34, 197, 94, 0.4) !important;
+    }
+    .pdf-highlight-rose {
+      background-color: rgba(244, 63, 94, 0.35) !important;
     }
     #loading {
       padding: 40px 20px;
@@ -261,7 +330,10 @@ export function generatePdfViewerHtml({
 
   <div id="loading">Loading document pages…</div>
   <div id="pdf-container">
-    <canvas id="pdf-canvas"></canvas>
+    <div id="canvas-wrapper" class="page-wrapper" style="display: none;">
+      <canvas id="pdf-canvas"></canvas>
+      <div id="text-layer" class="textLayer"></div>
+    </div>
   </div>
 
   <script>
@@ -285,32 +357,143 @@ export function generatePdfViewerHtml({
     let pageNum = 1;
     let pageRendering = false;
     let pageNumPending = null;
+    let currentRenderTask = null;
+    let storedHighlights = ${safeHighlightsJson};
+    let currentZoomScale = ${zoomScale};
+
     const canvas = document.getElementById('pdf-canvas');
     const ctx = canvas.getContext('2d');
+    const canvasWrapper = document.getElementById('canvas-wrapper');
+    const textLayerDiv = document.getElementById('text-layer');
+
+    function getAvailableWidth() {
+      const container = document.getElementById('pdf-container');
+      const clientW = container ? container.clientWidth : 0;
+      const winW = window.innerWidth || document.documentElement.clientWidth || 0;
+      const raw = clientW > 60 ? clientW : (winW > 60 ? winW : 360);
+      return Math.max(raw - 16, 260);
+    }
+
+    function applyHighlightsForPage(num) {
+      const pageHighlights = storedHighlights.filter(function(h) {
+        return h.pageNumber === num;
+      });
+      if (!pageHighlights || pageHighlights.length === 0) return;
+
+      const spans = textLayerDiv.querySelectorAll('span');
+      if (!spans || spans.length === 0) return;
+
+      pageHighlights.forEach(function(hl) {
+        const targetText = (hl.text || '').trim();
+        if (!targetText) return;
+        const colorClass = 'pdf-highlight-' + (hl.color || 'yellow');
+
+        spans.forEach(function(span) {
+          const spanText = (span.textContent || '').trim();
+          if (spanText.length > 0 && (targetText.includes(spanText) || spanText.includes(targetText))) {
+            span.classList.add('pdf-highlight');
+            span.classList.add(colorClass);
+          }
+        });
+      });
+    }
 
     function renderPage(num) {
       pageRendering = true;
+      if (currentRenderTask) {
+        try { currentRenderTask.cancel(); } catch (e) {}
+        currentRenderTask = null;
+      }
+
+      textLayerDiv.innerHTML = '';
+
       pdfDoc.getPage(num).then(function(page) {
-        const viewport = page.getViewport({ scale: 1.5 });
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+        const unscaledViewport = page.getViewport({ scale: 1.0 });
+        const availableWidth = getAvailableWidth();
+        const fitScale = availableWidth / unscaledViewport.width;
+        const displayScale = fitScale * currentZoomScale;
+
+        // Display dimensions in CSS pixels (100% fit to container width at zoomScale=1.0)
+        const cssViewport = page.getViewport({ scale: displayScale });
+        const cssW = Math.floor(cssViewport.width);
+        const cssH = Math.floor(cssViewport.height);
+
+        // High-DPI canvas rendering for crisp text on mobile screens
+        const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+        const renderViewport = page.getViewport({ scale: displayScale * dpr });
+
+        canvas.width = Math.floor(renderViewport.width);
+        canvas.height = Math.floor(renderViewport.height);
+        canvas.style.width = cssW + 'px';
+        canvas.style.height = cssH + 'px';
+
+        canvasWrapper.style.width = cssW + 'px';
+        canvasWrapper.style.height = cssH + 'px';
+        canvasWrapper.style.display = 'block';
+
+        const pdfContainer = document.getElementById('pdf-container');
+        if (pdfContainer) {
+          pdfContainer.style.alignItems = currentZoomScale > 1.0 ? 'flex-start' : 'center';
+        }
 
         const renderContext = {
           canvasContext: ctx,
-          viewport: viewport
+          viewport: renderViewport
         };
-        const renderTask = page.render(renderContext);
+        currentRenderTask = page.render(renderContext);
 
-        renderTask.promise.then(function() {
+        currentRenderTask.promise.then(function() {
           pageRendering = false;
+          currentRenderTask = null;
+
+          // Render Text Layer in CSS coordinates (1:1 with canvas)
+          page.getTextContent().then(function(textContent) {
+            if (!textContent.items || textContent.items.length === 0) {
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'PDF_SCANNED_PAGE',
+                  pageNumber: num
+                }));
+              }
+              return;
+            }
+
+            let runningOffset = 0;
+            textContent.items.forEach(function(item) {
+              if (!item || !item.str) return;
+              const tx = pdfjsLib.Util.transform(cssViewport.transform, item.transform);
+              const fontHeight = Math.hypot(tx[2], tx[3]) || 12;
+
+              const span = document.createElement('span');
+              span.textContent = item.str;
+              span.style.left = tx[4] + 'px';
+              span.style.top = (tx[5] - fontHeight) + 'px';
+              span.style.fontSize = fontHeight + 'px';
+              span.style.fontFamily = item.fontName || 'sans-serif';
+              span.dataset.startOffset = runningOffset;
+              runningOffset += item.str.length;
+              span.dataset.endOffset = runningOffset;
+              textLayerDiv.appendChild(span);
+            });
+
+            applyHighlightsForPage(num);
+          }).catch(function(err) {
+            console.warn('Text content error:', err);
+          });
+
           if (pageNumPending !== null) {
             renderPage(pageNumPending);
             pageNumPending = null;
           }
+        }).catch(function(err) {
+          pageRendering = false;
+          if (err && err.name !== 'RenderingCancelledException') {
+            console.warn('Page render error:', err);
+          }
         });
       }).catch(function(err) {
         pageRendering = false;
-        console.warn('Page render error:', err);
+        console.warn('Page get error:', err);
       });
 
       document.getElementById('current-page').textContent = num;
@@ -337,6 +520,105 @@ export function generatePdfViewerHtml({
       pageNum++;
       queueRenderPage(pageNum);
     }
+
+    let resizeTimer = null;
+    window.addEventListener('resize', function() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function() {
+        if (!pageRendering) {
+          queueRenderPage(pageNum);
+        }
+      }, 150);
+    });
+
+    window.setDocumentZoom = function(scale) {
+      currentZoomScale = scale;
+      queueRenderPage(pageNum);
+    };
+
+    window.clearPdfSelection = function() {
+      try {
+        const sel = window.getSelection();
+        if (sel) {
+          sel.removeAllRanges();
+        }
+        lastSelectedText = '';
+      } catch (e) {}
+    };
+
+    window.addPdfHighlight = function(highlight) {
+      if (!highlight) return;
+      storedHighlights.push(highlight);
+      if (highlight.pageNumber === pageNum) {
+        applyHighlightsForPage(pageNum);
+      }
+    };
+
+    // Selection detection
+    let lastSelectedText = '';
+    function checkSelection() {
+      try {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed) {
+          if (lastSelectedText !== '') {
+            lastSelectedText = '';
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'PDF_SELECTION_CLEARED'
+              }));
+            }
+          }
+          return;
+        }
+
+        const text = sel.toString().trim();
+        if (!text || text === lastSelectedText) return;
+        lastSelectedText = text;
+
+        let startOffset = undefined;
+        let endOffset = undefined;
+        try {
+          const range = sel.getRangeAt(0);
+          const startSpan = range.startContainer.nodeType === 3
+            ? range.startContainer.parentElement
+            : range.startContainer;
+          const endSpan = range.endContainer.nodeType === 3
+            ? range.endContainer.parentElement
+            : range.endContainer;
+
+          if (startSpan && startSpan.dataset && startSpan.dataset.startOffset) {
+            startOffset = parseInt(startSpan.dataset.startOffset, 10) + range.startOffset;
+          }
+          if (endSpan && endSpan.dataset && endSpan.dataset.startOffset) {
+            endOffset = parseInt(endSpan.dataset.startOffset, 10) + range.endOffset;
+          }
+        } catch (re) {}
+
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'PDF_TEXT_SELECTION',
+            fileId: "${fileId}",
+            pageNumber: pageNum,
+            text: text,
+            startOffset: startOffset,
+            endOffset: endOffset,
+            source: 'pdf'
+          }));
+        }
+      } catch (e) {
+        console.warn('Selection check error:', e);
+      }
+    }
+
+    document.addEventListener('selectionchange', function() {
+      setTimeout(checkSelection, 80);
+    });
+    document.addEventListener('touchend', function() {
+      setTimeout(checkSelection, 150);
+    });
+    document.addEventListener('mouseup', function() {
+      setTimeout(checkSelection, 150);
+    });
 
     if (typeof pdfjsLib === 'undefined') {
       document.getElementById('loading').innerHTML =
@@ -370,6 +652,7 @@ export interface DocumentContentResult {
 export async function loadDocumentContent(
   file: RepositoryFile,
   isDark = false,
+  highlights: PdfHighlight[] = [],
 ): Promise<DocumentContentResult> {
   const base64 = await FileSystem.readAsStringAsync(file.fileUri, {
     encoding: FileSystem.EncodingType.Base64,
@@ -426,14 +709,16 @@ export async function loadDocumentContent(
       title: file.name,
       bodyHtml: readerBody,
       isDark,
-      enableSnippetSelection: false, // PDFs are excluded from snippet bagging
+      enableSnippetSelection: true,
     })
 
     // Generate visual canvas viewer HTML with offline pdf.js
     const viewerHtml = generatePdfViewerHtml({
       pdfBase64: base64,
+      fileId: file.id,
       title: file.name,
       isDark,
+      highlights,
     })
 
     return {
