@@ -1,9 +1,10 @@
-import { useState, type ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   View,
@@ -14,9 +15,9 @@ import type { AnswerInput, DraftAnswer } from '@saulado/shared'
 import { Button } from '../../../components/button'
 import { Card } from '../../../components/card'
 import { HighlightEditor } from '../../../components/highlight-editor'
-import { DocumentIcon, ShoppingBagIcon, SparklesIcon } from '../../../components/icons'
+import { DocumentIcon, FolderIcon, ShoppingBagIcon, SparklesIcon } from '../../../components/icons'
 import { SetList } from '../../../components/set-list'
-import { cardKeys, createCardOfflineAware, setKeys } from '../../../hooks/cards'
+import { cardKeys, createCardOfflineAware, setKeys, useAllSets } from '../../../hooks/cards'
 import { studyKeys } from '../../../hooks/study'
 import { useCardDraft } from '../../../hooks/useCardDraft'
 import { useSnippetBagStore, type BaggedSnippet } from '../../../stores/snippet-bag'
@@ -40,9 +41,36 @@ export default function BagStudioScreen(): ReactElement {
   const mutedForeground = useTokenColor('--muted-foreground')
 
   const [targetSetId, setTargetSetId] = useState<string | null>(initialSetId ?? null)
+  const [isPickingSet, setIsPickingSet] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [cards, setCards] = useState<PreparedCard[]>([])
   const [isSaving, setIsSaving] = useState(false)
+
+  const { data: allSets } = useAllSets()
+  const activeSet = allSets?.find((s) => s.id === targetSetId)
+
+  // Clean helper to reset studio state
+  const resetStudioState = (): void => {
+    setTargetSetId(null)
+    setIsPickingSet(false)
+    setCurrentIndex(0)
+    setCards([])
+    setIsSaving(false)
+  }
+
+  // If bag becomes empty, reset studio state
+  useEffect(() => {
+    if (snippets.length === 0) {
+      resetStudioState()
+    }
+  }, [snippets.length])
+
+  // Sync initialSetId if provided via search params
+  useEffect(() => {
+    if (initialSetId) {
+      setTargetSetId(initialSetId)
+    }
+  }, [initialSetId])
 
   // Empty bag state
   if (snippets.length === 0) {
@@ -67,8 +95,8 @@ export default function BagStudioScreen(): ReactElement {
     )
   }
 
-  // Stage 1: Choose destination set
-  if (!targetSetId) {
+  // Stage 1: Choose destination set (shown if no set picked yet, or user taps "Change")
+  if (!targetSetId || isPickingSet) {
     return (
       <View className="flex-1 bg-background">
         <View className="flex-row items-center justify-between border-b border-border bg-surface px-4 py-3.5">
@@ -79,15 +107,20 @@ export default function BagStudioScreen(): ReactElement {
               {snippets.length === 1 ? 'item' : 'items'}
             </Text>
           </View>
-          <Button label="Cancel" variant="ghost" size="md" onPress={() => router.back()} />
+          {targetSetId ? (
+            <Button label="Done" variant="ghost" size="md" onPress={() => setIsPickingSet(false)} />
+          ) : (
+            <Button label="Cancel" variant="ghost" size="md" onPress={() => router.back()} />
+          )}
         </View>
 
-        <ScrollView contentContainerClassName="p-4 pb-12">
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="p-4 pb-12">
           <SetList
             parent={null}
             emptyText="You have no study sets yet. Create one above to get started."
             onPick={(set) => {
               setTargetSetId(set.id)
+              setIsPickingSet(false)
             }}
           />
         </ScrollView>
@@ -97,6 +130,11 @@ export default function BagStudioScreen(): ReactElement {
 
   // Commit and persist all cards offline and sync
   const finalizeAndSave = async (finalCards: PreparedCard[]): Promise<void> => {
+    if (!targetSetId) {
+      setIsPickingSet(true)
+      return
+    }
+
     if (finalCards.length === 0) {
       Alert.alert(
         'No Cards Created',
@@ -107,6 +145,8 @@ export default function BagStudioScreen(): ReactElement {
     }
 
     setIsSaving(true)
+    const savedSetId = targetSetId
+
     try {
       for (const card of finalCards) {
         const answerInputs: AnswerInput[] = card.answers.map((a) => ({
@@ -115,7 +155,7 @@ export default function BagStudioScreen(): ReactElement {
           ...(a.altAnswers && a.altAnswers.length > 0 ? { altAnswers: a.altAnswers } : {}),
         }))
 
-        await createCardOfflineAware(targetSetId, {
+        await createCardOfflineAware(savedSetId, {
           paragraph: card.paragraph,
           answers: answerInputs,
         })
@@ -125,11 +165,14 @@ export default function BagStudioScreen(): ReactElement {
       }
 
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: cardKeys.list(targetSetId) }),
-        queryClient.invalidateQueries({ queryKey: setKeys.detail(targetSetId) }),
+        queryClient.invalidateQueries({ queryKey: cardKeys.list(savedSetId) }),
+        queryClient.invalidateQueries({ queryKey: setKeys.detail(savedSetId) }),
         queryClient.invalidateQueries({ queryKey: setKeys.all }),
         queryClient.invalidateQueries({ queryKey: studyKeys.all }),
       ])
+
+      // Cleanly reset studio state so next run never gets stuck
+      resetStudioState()
 
       Alert.alert(
         'Cards Created! 🎉',
@@ -137,23 +180,25 @@ export default function BagStudioScreen(): ReactElement {
         [
           {
             text: 'View Set',
-            onPress: () => router.replace(`/sets/${targetSetId}`),
+            onPress: () => router.replace(`/sets/${savedSetId}`),
           },
         ],
       )
     } catch (err) {
       console.warn('[bag-studio] save cards error:', err)
-      setIsSaving(false)
       Alert.alert('Save Failed', 'Could not save cards to your set. Please try again.')
+    } finally {
+      setIsSaving(false)
     }
   }
 
-  const currentSnippet = snippets[currentIndex]
+  const safeIndex = Math.min(currentIndex, Math.max(0, snippets.length - 1))
+  const currentSnippet = snippets[safeIndex]
   if (!currentSnippet) {
     return <View className="flex-1 bg-background" />
   }
 
-  const isLast = currentIndex === snippets.length - 1
+  const isLast = safeIndex === snippets.length - 1
 
   const handleNextOrFinish = (paragraph: string, answers: DraftAnswer[]): void => {
     const nextCards = [
@@ -181,7 +226,7 @@ export default function BagStudioScreen(): ReactElement {
   }
 
   const handlePrevious = (): void => {
-    if (currentIndex > 0) {
+    if (safeIndex > 0) {
       setCurrentIndex((prev) => prev - 1)
     }
   }
@@ -210,7 +255,7 @@ export default function BagStudioScreen(): ReactElement {
               <SparklesIcon color={primary} size={16} />
             </View>
             <Text className="text-sm font-bold text-foreground">
-              Card {currentIndex + 1} of {snippets.length}
+              Card {safeIndex + 1} of {snippets.length}
             </Text>
           </View>
           <View className="flex-row items-center gap-1">
@@ -226,16 +271,33 @@ export default function BagStudioScreen(): ReactElement {
         <View className="h-1.5 w-full rounded-full bg-surface-muted overflow-hidden">
           <View
             className="h-full rounded-full bg-primary"
-            style={{ width: `${((currentIndex + 1) / snippets.length) * 100}%` }}
+            style={{ width: `${((safeIndex + 1) / snippets.length) * 100}%` }}
           />
         </View>
+      </View>
+
+      {/* Target Set Selector Strip */}
+      <View className="px-4 py-2 bg-surface-muted/60 border-b border-border flex-row items-center justify-between">
+        <View className="flex-row items-center gap-1.5 flex-1 mr-2">
+          <FolderIcon color={primary} size={14} />
+          <Text className="text-xs text-muted-foreground">Target Set:</Text>
+          <Text numberOfLines={1} className="text-xs font-bold text-foreground flex-1">
+            {activeSet?.title || 'Selected Set'}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => setIsPickingSet(true)}
+          className="px-2.5 py-1 rounded-md bg-surface border border-border active:opacity-75"
+        >
+          <Text className="text-xs font-semibold text-primary">Change</Text>
+        </Pressable>
       </View>
 
       {/* Card Wizard Step */}
       <BagWizardStep
         key={currentSnippet.id}
         snippet={currentSnippet}
-        isFirst={currentIndex === 0}
+        isFirst={safeIndex === 0}
         isLast={isLast}
         existingAnswers={cards.find((c) => c.snippetId === currentSnippet.id)?.answers}
         onSaveAndAdvance={handleNextOrFinish}
@@ -300,7 +362,11 @@ function BagWizardStep({
 
   return (
     <View className="flex-1 justify-between">
-      <ScrollView className="flex-1 p-4" contentContainerClassName="pb-6">
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        className="flex-1 p-4"
+        contentContainerClassName="pb-6"
+      >
         <View className="mb-3">
           <Text className="text-xs text-muted-foreground leading-4">
             💡 <Text className="font-semibold text-foreground">Tip:</Text> Tap words in highlight

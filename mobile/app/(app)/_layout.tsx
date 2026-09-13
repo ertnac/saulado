@@ -181,6 +181,11 @@ export default function AppLayout(): ReactElement {
           {SCREENS.map(({ name, title }) => {
             const options = {
               title,
+              ...(name === 'files/bag-studio' || name === 'scan-review'
+                ? {
+                    unmountOnBlur: true,
+                  }
+                : {}),
               ...(name === 'study'
                 ? {
                     headerShown: false,
