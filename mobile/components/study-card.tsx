@@ -1,124 +1,12 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
-import { Text, useWindowDimensions, View, type TextInput } from 'react-native'
-import type { BlankResult, SessionCard, Segment, AnsweringType } from '@saulado/shared'
-
-import { BlankSlot, SLOT_FONT, SLOT_FONT_SIZE, SLOT_HEIGHT } from './blank-slot'
+import { Text, TextInput, TouchableOpacity, View } from 'react-native'
+import type { BlankResult, SessionCard, AnsweringType } from '@saulado/shared'
 import { MultipleChoiceGrid } from './multiple-choice-grid'
+import { VolumeIcon } from './icons'
+import { useTheme } from '../stores/theme'
 
-/**
- * The card under review: the paragraph with its blanks as inputs.
- *
- * The paragraph is rendered from `segments`, which is all the server sends — the
- * text *around* the answers. There is no client-side blanking step, and no
- * `answers` array to accidentally render, which makes "the answer is not on
- * screen before submission" a property of the wire format rather than a rule this
- * component has to remember to follow.
- *
- * ## Why this is a flex row and not a `<Text>`
- *
- * The web nests the inputs inside a `<p>`, so they flow with the prose for free.
- * React Native no longer documents views nested inside `<Text>`, so the paragraph
- * is a `flex-row flex-wrap` container of word tokens with the blanks as siblings.
- * Wrapping happens at token boundaries, which is what a line break is anyway, and
- * `alignItems: 'center'` applies per wrapped line — that is what reproduces the
- * web's `align-middle`.
- *
- * The alternative — a list of inputs under the paragraph — breaks the whole
- * premise of contextual recall by divorcing the blank from its sentence, so it was
- * never a candidate.
- *
- * ## Why the paragraph waits for a measurement
- *
- * `BlankSlot` reserves its box from `answerLength`, and the web multiplies by the
- * `ch` unit. There is no `ch` here, so one character of the slot's own monospace
- * face is measured off-screen and multiplied. Nothing renders until that number
- * exists: rendering at a guessed width and correcting it afterwards is the exact
- * layout shift saulado-ux §1.2 forbids, just moved earlier in the card's life.
- */
-
-export const PARAGRAPH_FONT_SIZE = 17
-
-/** Every wrapped line is one slot tall, so a line with a blank is no taller. */
-export const LINE_HEIGHT = SLOT_HEIGHT
-
-/** Enough characters that rounding in the measurement averages out. */
-const SAMPLE = '0000000000'
-
-export type Token =
-  | { kind: 'word'; text: string }
-  | { kind: 'break'; height: number }
-  | { kind: 'blank'; ordinal: number; answerLength: number }
-
-/**
- * Segments to a flat list of things that can sit in a wrapping row.
- *
- * A run of whitespace with no newline becomes a single trailing space on the word
- * before it, so punctuation after a blank stays flush against it. A run
- * containing newlines becomes a full-width zero-height item, which cannot share a
- * line with anything and therefore forces a wrap; each *additional* newline adds
- * a line-height-tall one, which is how a paragraph gap survives.
- *
- * ponytail: runs of two or more spaces collapse to one, where the web's
- * `whitespace-pre-wrap` preserved them. Preserving them needs a per-space
- * measurement of the prose face; do it if a card ever depends on aligned columns.
- */
-export function tokenize(segments: Segment[]): Token[] {
-  const tokens: Token[] = []
-
-  const space = (): void => {
-    const last = tokens[tokens.length - 1]
-    if (last?.kind === 'word') last.text += ' '
-    else tokens.push({ kind: 'word', text: ' ' })
-  }
-
-  for (const segment of segments) {
-    if (segment.kind === 'blank') {
-      tokens.push({
-        kind: 'blank',
-        ordinal: segment.ordinal,
-        answerLength: segment.answerLength,
-      })
-      continue
-    }
-
-    for (const piece of segment.text.split(/(\s+)/)) {
-      if (piece === '') continue
-      if (!/\s/.test(piece)) {
-        tokens.push({ kind: 'word', text: piece })
-        continue
-      }
-      const newlines = (piece.match(/\r\n|\r|\n/g) ?? []).length
-      if (newlines === 0) {
-        space()
-        continue
-      }
-      tokens.push({ kind: 'break', height: 0 })
-      for (let extra = 1; extra < newlines; extra += 1) {
-        tokens.push({ kind: 'break', height: LINE_HEIGHT })
-      }
-    }
-  }
-
-  return tokens
-}
-
-export function Badge({
-  text,
-  className = '',
-  textClassName = '',
-}: {
-  text: string
-  className?: string
-  textClassName?: string
-}): ReactElement {
-  return (
-    <View
-      className={`rounded-full px-2.5 py-0.5 border border-transparent items-center justify-center ${className}`}
-    >
-      <Text className={`text-xs font-semibold ${textClassName}`}>{text}</Text>
-    </View>
-  )
-}
+export const PARAGRAPH_FONT_SIZE = 18
+export const LINE_HEIGHT = 28
 
 interface StudyCardProps {
   card: SessionCard
@@ -140,17 +28,16 @@ export function StudyCard({
   onChange,
   onSubmit,
 }: StudyCardProps): ReactElement {
-  const { fontScale } = useWindowDimensions()
-  const [charWidth, setCharWidth] = useState(0)
+  const { isDark } = useTheme()
   const [focusedOrdinal, setFocusedOrdinal] = useState(0)
-  const blanks = useRef<Record<number, TextInput | null>>({})
+  const inputRef = useRef<TextInput | null>(null)
 
   useEffect(() => {
     if (!results) {
-      blanks.current[0]?.focus()
+      inputRef.current?.focus()
       setFocusedOrdinal(0)
     }
-  }, [card.cardId, results, charWidth])
+  }, [card.cardId, results])
 
   const handleSelectChoice = (option: string) => {
     if (disabled || !!results) return
@@ -164,129 +51,228 @@ export function StudyCard({
     } else {
       const nextOrdinal = focusedOrdinal + 1
       setFocusedOrdinal(nextOrdinal)
-      blanks.current[nextOrdinal]?.focus()
     }
   }
 
   const byOrdinal = new Map(results?.map((result) => [result.ordinal, result]))
-  const meta = card.isNew || card.isLeech || card.tags.length > 0
+
+  // Category Tag & Concept Badge
+  const categoryTag = card.tags?.[0] ? card.tags[0].toUpperCase() : 'CLINICAL INDICATION & EFFECT'
+  const conceptTag = card.tags?.[1] || 'High Yield Concept'
+
+  // Build readable prompt text from segments
+  const promptText = card.segments
+    .map((s) => (s.kind === 'text' ? s.text : '________'))
+    .join('')
+    .trim()
+
+  const activeResult = byOrdinal.get(focusedOrdinal)
 
   return (
-    <View className="rounded-3xl border border-border/80 bg-surface p-6 shadow-sm">
-      <Text
-        key={fontScale}
+    <View style={{ gap: 16, width: '100%' }}>
+      {/* ── 1. Question / Concept Card (Matching Images 1 & 2) ── */}
+      <View
         style={{
-          position: 'absolute',
-          opacity: 0,
-          fontFamily: SLOT_FONT,
-          fontSize: SLOT_FONT_SIZE,
-        }}
-        onLayout={(event) => {
-          setCharWidth(event.nativeEvent.layout.width / SAMPLE.length)
+          borderRadius: 24,
+          borderWidth: 1,
+          borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#EEF2EE',
+          backgroundColor: isDark ? '#111A17' : '#FFFFFF',
+          padding: 22,
+          gap: 14,
+          shadowColor: '#000000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: isDark ? 0.2 : 0.04,
+          shadowRadius: 12,
+          elevation: 3,
         }}
       >
-        {SAMPLE}
-      </Text>
+        {/* Top Header: Tag & Audio Icon */}
+        <View
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <Text
+            style={{
+              fontSize: 11,
+              fontWeight: '700',
+              letterSpacing: 0.8,
+              textTransform: 'uppercase',
+              color: isDark ? '#A6C2B5' : '#317054',
+            }}
+          >
+            {categoryTag}
+          </Text>
 
-      {meta && (
-        <View className="mb-4 flex-row flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-3">
-          <View className="flex-row flex-wrap items-center gap-1.5">
-            {card.isNew && (
-              <Badge
-                text="✨ New"
-                className="bg-primary/15 border-primary/30"
-                textClassName="text-primary"
-              />
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Audio pronunciation"
+            hitSlop={8}
+            activeOpacity={0.7}
+          >
+            <VolumeIcon color={isDark ? '#889591' : '#4C5854'} size={18} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Prompt Question Text */}
+        <Text
+          style={{
+            fontSize: 19,
+            fontWeight: '700',
+            letterSpacing: -0.3,
+            lineHeight: 28,
+            color: isDark ? '#FFFFFF' : '#111A17',
+          }}
+        >
+          {promptText}
+        </Text>
+
+        {/* Concept Pill Badge */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+          <View
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 5,
+              borderRadius: 999,
+              backgroundColor: isDark ? 'rgba(49, 112, 84, 0.25)' : '#E8F3EE',
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: '700',
+                color: isDark ? '#A6C2B5' : '#052E24',
+              }}
+            >
+              {conceptTag}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* ── 2A. Identification Input Section (Matching Image 1) ── */}
+      {answeringType === 'identification' && (
+        <View style={{ gap: 8, marginTop: 4 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 2,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: '600',
+                color: isDark ? '#889591' : '#4C5854',
+              }}
+            >
+              {card.blankCount > 1
+                ? `Enter Answer for Blank ${focusedOrdinal + 1} of ${card.blankCount}`
+                : 'Enter Drug Classification / Answer'}
+            </Text>
+
+            {card.blankCount > 1 && (
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {Array.from({ length: card.blankCount }).map((_, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    onPress={() => setFocusedOrdinal(idx)}
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 11,
+                      backgroundColor:
+                        focusedOrdinal === idx
+                          ? '#317054'
+                          : isDark
+                            ? 'rgba(255,255,255,0.08)'
+                            : '#EEF2EE',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '700',
+                        color: focusedOrdinal === idx ? '#FFFFFF' : isDark ? '#889591' : '#4C5854',
+                      }}
+                    >
+                      {idx + 1}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             )}
-            {card.isLeech && (
-              <Badge
-                text="⚠️ Review"
-                className="bg-warning/15 border-warning/30"
-                textClassName="text-warning"
-              />
-            )}
-            {card.tags.map((tag) => (
-              <Badge
-                key={tag}
-                text={`#${tag}`}
-                className="bg-surface-muted border-border/80"
-                textClassName="text-foreground/80"
-              />
-            ))}
           </View>
 
-          {card.blankCount > 1 && (
-            <Text className="text-xs font-semibold text-muted-foreground">
-              {card.blankCount} blanks
-            </Text>
-          )}
+          {/* Input Box with green border */}
+          <View
+            style={{
+              height: 56,
+              borderRadius: 18,
+              borderWidth: 1.5,
+              borderColor: activeResult
+                ? activeResult.correct
+                  ? '#317054'
+                  : '#EF4444'
+                : '#317054',
+              backgroundColor: isDark ? '#111A17' : '#FFFFFF',
+              paddingHorizontal: 18,
+              justifyContent: 'center',
+              shadowColor: '#000000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: isDark ? 0.2 : 0.03,
+              shadowRadius: 6,
+              elevation: 2,
+            }}
+          >
+            <TextInput
+              ref={inputRef}
+              value={values[focusedOrdinal] ?? ''}
+              onChangeText={(val) => onChange(focusedOrdinal, val)}
+              placeholder="Type your answer here..."
+              placeholderTextColor={isDark ? '#4C5854' : '#889591'}
+              editable={!disabled && !results}
+              returnKeyType={focusedOrdinal === card.blankCount - 1 ? 'done' : 'next'}
+              onSubmitEditing={() => {
+                if (focusedOrdinal === card.blankCount - 1) {
+                  onSubmit()
+                } else {
+                  setFocusedOrdinal((prev) => prev + 1)
+                }
+              }}
+              style={{
+                fontSize: 16,
+                fontWeight: '600',
+                color: isDark ? '#FFFFFF' : '#111A17',
+              }}
+            />
+          </View>
         </View>
       )}
 
-      {charWidth > 0 && (
-        <View
-          accessibilityLabel="The paragraph you are recalling"
-          className="flex-row flex-wrap items-center leading-loose py-1"
-        >
-          {tokenize(card.segments).map((token, index) => {
-            if (token.kind === 'break') {
-              return (
-                <View key={`n${String(index)}`} style={{ width: '100%', height: token.height }} />
-              )
-            }
-
-            if (token.kind === 'word') {
-              return (
-                <Text
-                  key={`t${String(index)}`}
-                  style={{ fontSize: PARAGRAPH_FONT_SIZE, lineHeight: LINE_HEIGHT }}
-                  className="text-foreground"
-                >
-                  {token.text}
-                </Text>
-              )
-            }
-
-            const isLastBlank = token.ordinal === card.blankCount - 1
-
-            return (
-              <BlankSlot
-                key={`b${String(token.ordinal)}`}
-                ref={(node) => {
-                  blanks.current[token.ordinal] = node
-                }}
-                ordinal={token.ordinal}
-                blankCount={card.blankCount}
-                answerLength={token.answerLength}
-                charWidth={charWidth}
-                value={values[token.ordinal] ?? ''}
-                result={byOrdinal.get(token.ordinal) ?? null}
-                disabled={disabled}
-                isLastBlank={isLastBlank}
-                answeringType={answeringType}
-                onFocus={() => setFocusedOrdinal(token.ordinal)}
-                onChange={(value) => {
-                  onChange(token.ordinal, value)
-                }}
-                onSubmit={() => {
-                  if (isLastBlank) onSubmit()
-                  else blanks.current[token.ordinal + 1]?.focus()
-                }}
-              />
-            )
-          })}
-        </View>
-      )}
-
+      {/* ── 2B. Multiple Choice Options Section (Matching Image 2) ── */}
       {answeringType === 'multiple-choice' && card.blankOptions && (
-        <View className="mt-4 border-t border-border/40 pt-4">
+        <View style={{ gap: 6 }}>
           {card.blankCount > 1 && (
-            <View className="mb-1 flex-row items-center justify-between">
-              <Text className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Options for Blank {focusedOrdinal + 1}
-              </Text>
-              <Text className="text-xs text-primary font-medium">
-                {focusedOrdinal + 1} of {card.blankCount}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: 4,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: '700',
+                  textTransform: 'uppercase',
+                  color: isDark ? '#889591' : '#4C5854',
+                }}
+              >
+                Options for Blank {focusedOrdinal + 1} of {card.blankCount}
               </Text>
             </View>
           )}

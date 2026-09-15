@@ -1,15 +1,15 @@
 import { useSyncExternalStore, type ReactElement } from 'react'
-import { TouchableOpacity, View } from 'react-native'
+import { Text, TouchableOpacity, View } from 'react-native'
 import { useRouter, type Tabs } from 'expo-router'
 import { onlineManager } from '@tanstack/react-query'
-import { useTokenColor } from '../stores/theme'
+import { useTheme } from '../stores/theme'
 import {
   FileTextIcon,
   FolderIcon,
   HomeIcon,
   LayersIcon,
-  ScanIcon,
-  UserIcon,
+  ScanQRIcon,
+  TrendingUpIcon,
   type IconProps,
 } from './icons'
 
@@ -18,37 +18,38 @@ export type BottomTabBarProps = Parameters<
 >[0]
 
 /**
- * Redesigned Floating Bottom Tab Bar.
+ * Redesigned Floating Bottom Navigation Pill Bar.
  *
- * Implements a solo floating Scan button on the left, and a dark teal/forest green
- * pill-shaped floating bar on the right containing the other tab destinations:
- * - Home (HomeIcon)
- * - Sets (LayersIcon)
- * - Files (FolderIcon)
- * - Account (UserIcon)
+ * Implements the unified 5-tab layout matching Image 5:
+ * - Home (HomeIcon + Label)
+ * - Sets (LayersIcon + Label)
+ * - Scan (Center elevated circular Hero button with ScanQRIcon)
+ * - Progress (TrendingUpIcon + Label)
+ * - Files (FolderIcon + Label)
  *
- * Icons only inside the pill (no text labels, matching the premium reference layout).
- * Active tab shows a clean white dot directly underneath its icon.
+ * Active tabs display a rich Deep Forest (#052E24) capsule pill with white icon & label.
+ * Inactive tabs render muted sage/slate tones with consistent 1.5px stroke outline icons.
  */
 
 interface Destination {
-  /** The route name in `app/(app)/`, which is what `navigate` takes. */
   name: string
   label: string
   icon: (props: IconProps) => ReactElement
 }
 
-const DESTINATIONS: Destination[] = [
+const LEFT_DESTINATIONS: Destination[] = [
   { name: 'index', label: 'Home', icon: HomeIcon },
   { name: 'sets/index', label: 'Sets', icon: LayersIcon },
+]
+
+const RIGHT_DESTINATIONS: Destination[] = [
+  { name: 'progress', label: 'Progress', icon: TrendingUpIcon },
   { name: 'files/index', label: 'Files', icon: FolderIcon },
-  { name: 'account', label: 'Account', icon: UserIcon },
 ]
 
 export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactElement | null {
   const router = useRouter()
-  const accent = useTokenColor('--accent')
-  const onAccent = useTokenColor('--accent-foreground')
+  const { isDark } = useTheme()
 
   const isOnline = useSyncExternalStore(
     (onStoreChange) => onlineManager.subscribe(onStoreChange),
@@ -57,6 +58,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
 
   const active = state.routes[state.index]?.name ?? ''
 
+  // Hide tab bar during immersion/study/camera flows
   if (
     active === 'study' ||
     active === 'scan' ||
@@ -70,15 +72,60 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
     navigation.navigate(name)
   }
 
-  // Active check helper that handles sub-routes (e.g. nested set or file screens)
   const isTabActive = (tabName: string): boolean => {
+    if (tabName === 'index') {
+      return active === 'index' || active === ''
+    }
     if (tabName === 'sets/index') {
       return active === 'sets/index' || active.startsWith('sets/')
     }
     if (tabName === 'files/index') {
       return active === 'files/index' || active.startsWith('files/')
     }
+    if (tabName === 'progress') {
+      return active === 'progress'
+    }
     return active === tabName
+  }
+
+  const renderTabItem = ({ name, label, icon: Icon }: Destination): ReactElement => {
+    const selected = isTabActive(name)
+    const activeColor = '#ffffff'
+    const inactiveColor = isDark ? '#889591' : '#4C5854'
+
+    return (
+      <TouchableOpacity
+        key={name}
+        accessibilityRole="tab"
+        accessibilityLabel={label}
+        accessibilityState={{ selected }}
+        onPress={() => go(name)}
+        activeOpacity={0.75}
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: 48,
+          marginHorizontal: 2,
+          borderRadius: 24,
+          backgroundColor: selected ? '#052E24' : 'transparent',
+          paddingVertical: 4,
+        }}
+      >
+        <Icon color={selected ? activeColor : inactiveColor} size={20} />
+        <Text
+          numberOfLines={1}
+          style={{
+            fontSize: 11,
+            marginTop: 2,
+            fontWeight: selected ? '600' : '500',
+            color: selected ? activeColor : inactiveColor,
+          }}
+        >
+          {label}
+        </Text>
+      </TouchableOpacity>
+    )
   }
 
   return (
@@ -87,116 +134,84 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
       style={{
         position: 'absolute',
         bottom: Math.max(insets.bottom, 16),
-        left: 16,
-        right: 16,
-        flexDirection: 'row',
+        left: 14,
+        right: 14,
         alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: 'transparent',
+        justifyContent: 'center',
       }}
     >
-      {/* 
-        1. SOLO FLOATING BUTTON (LEFT SIDE)
-        Online: Scan icon -> opens Camera / Document Scanner (/scan).
-        Offline: FileText icon -> opens Pasted Text Card Creator (/scan-review?mode=paste).
-        Styled in theme's accent color (clay/orange). 56x56 circular container.
-      */}
-      <TouchableOpacity
-        accessibilityRole="button"
-        accessibilityLabel={
-          isOnline
-            ? 'Scan a page with the camera or import documents'
-            : 'Create cards from pasted text'
-        }
-        accessibilityState={{ selected: isOnline ? active === 'scan' : active === 'scan-review' }}
-        onPress={() => {
-          if (isOnline) {
-            go('scan')
-          } else {
-            router.push('/scan-review?mode=paste')
-          }
-        }}
-        style={{
-          backgroundColor: accent,
-          width: 56,
-          height: 56,
-          alignItems: 'center',
-          justifyContent: 'center',
-          shadowColor: '#000000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.15,
-          shadowRadius: 10,
-          elevation: 8,
-        }}
-        className="active:opacity-85 rounded-full"
-      >
-        {isOnline ? (
-          <ScanIcon color={onAccent} size={24} />
-        ) : (
-          <FileTextIcon color={onAccent} size={24} />
-        )}
-      </TouchableOpacity>
-
-      {/* Spacer */}
-      <View style={{ width: 12 }} />
-
-      {/* 
-        2. FLOATING DARK TEAL TAB PILL (RIGHT SIDE)
-        Rounded-2xl bar containing Home, Sets, and Progress icons.
-        Has a premium dark green/teal finish with semi-rounded corners.
-      */}
       <View
         style={{
-          flex: 1,
-          height: 56,
           flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'space-around',
+          justifyContent: 'space-between',
+          width: '100%',
+          height: 64,
+          borderRadius: 36,
+          backgroundColor: isDark ? '#111A17' : '#FFFFFF',
           paddingHorizontal: 8,
-          shadowColor: '#000000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.15,
-          shadowRadius: 10,
+          borderWidth: 1,
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+          shadowColor: '#052E24',
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: isDark ? 0.3 : 0.09,
+          shadowRadius: 16,
           elevation: 8,
         }}
-        className="bg-[#052e24] dark:bg-surface dark:border dark:border-border/80 rounded-2xl"
       >
-        {DESTINATIONS.map(({ name, label, icon: Icon }) => {
-          const selected = isTabActive(name)
-          const tint = selected ? '#ffffff' : '#86a39b' // White when active, soft teal-gray when inactive
+        {/* Left Tabs: Home & Sets */}
+        <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center' }}>
+          {LEFT_DESTINATIONS.map(renderTabItem)}
+        </View>
 
-          return (
-            <TouchableOpacity
-              key={name}
-              accessibilityRole="tab"
-              accessibilityLabel={label}
-              accessibilityState={{ selected }}
-              onPress={() => {
-                go(name)
-              }}
-              style={{
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: 48,
-                width: 56,
-              }}
-              className="active:opacity-75"
-            >
-              <Icon color={tint} size={24} />
+        {/* Center Hero Button: Scan / Camera FAB */}
+        <View style={{ alignItems: 'center', justifyContent: 'center', marginHorizontal: 4 }}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={
+              isOnline
+                ? 'Scan a page with the camera or import documents'
+                : 'Create cards from pasted text'
+            }
+            accessibilityState={{
+              selected: isOnline ? active === 'scan' : active === 'scan-review',
+            }}
+            onPress={() => {
+              if (isOnline) {
+                go('scan')
+              } else {
+                router.push('/scan-review?mode=paste')
+              }
+            }}
+            activeOpacity={0.85}
+            style={{
+              width: 54,
+              height: 54,
+              borderRadius: 27,
+              backgroundColor: '#052E24',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 2,
+              borderColor: isDark ? '#111A17' : '#FFFFFF',
+              shadowColor: '#052E24',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.28,
+              shadowRadius: 10,
+              elevation: 9,
+            }}
+          >
+            {isOnline ? (
+              <ScanQRIcon color="#ffffff" size={24} />
+            ) : (
+              <FileTextIcon color="#ffffff" size={24} />
+            )}
+          </TouchableOpacity>
+        </View>
 
-              {/* Dot indicator underneath the active icon */}
-              <View
-                style={{
-                  width: 4,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: selected ? '#ffffff' : 'transparent',
-                  marginTop: 4,
-                }}
-              />
-            </TouchableOpacity>
-          )
-        })}
+        {/* Right Tabs: Progress & Files */}
+        <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center' }}>
+          {RIGHT_DESTINATIONS.map(renderTabItem)}
+        </View>
       </View>
     </View>
   )

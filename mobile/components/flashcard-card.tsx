@@ -1,5 +1,5 @@
 import { type ReactElement, useEffect, useState } from 'react'
-import { Pressable, Text, View, StyleSheet } from 'react-native'
+import { Pressable, Text, View, StyleSheet, TouchableOpacity } from 'react-native'
 import Animated, {
   interpolate,
   useAnimatedStyle,
@@ -7,9 +7,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 import type { SessionCard } from '@saulado/shared'
-import { Badge, LINE_HEIGHT, PARAGRAPH_FONT_SIZE, tokenize } from './study-card'
-import { CheckIcon, CloseIcon, RotateCwIcon } from './icons'
-import { useTokenColor } from '../stores/theme'
+import { CheckIcon, CloseIcon, RotateCwIcon, VolumeIcon } from './icons'
+import { useTheme } from '../stores/theme'
 
 interface FlashcardCardProps {
   card: SessionCard
@@ -20,10 +19,7 @@ interface FlashcardCardProps {
 export function FlashcardCard({ card, disabled, onSubmit }: FlashcardCardProps): ReactElement {
   const flip = useSharedValue(0)
   const [isFlipped, setIsFlipped] = useState(false)
-  const mutedColor = useTokenColor('--muted-foreground')
-  const successColor = useTokenColor('--success')
-  const dangerColor = useTokenColor('--danger')
-  const primaryFg = useTokenColor('--primary-foreground')
+  const { isDark } = useTheme()
 
   useEffect(() => {
     flip.value = 0
@@ -31,9 +27,10 @@ export function FlashcardCard({ card, disabled, onSubmit }: FlashcardCardProps):
   }, [card.cardId, flip])
 
   const handleFlip = () => {
-    if (disabled || isFlipped) return
-    flip.value = withTiming(1, { duration: 420 })
-    setIsFlipped(true)
+    if (disabled) return
+    const nextVal = isFlipped ? 0 : 1
+    flip.value = withTiming(nextVal, { duration: 420 })
+    setIsFlipped(!isFlipped)
   }
 
   const handleRating = (isCorrect: boolean) => {
@@ -71,172 +68,339 @@ export function FlashcardCard({ card, disabled, onSubmit }: FlashcardCardProps):
     }
   })
 
-  const meta = card.isNew || card.isLeech || card.tags.length > 0
-  const tokens = tokenize(card.segments)
+  // Derive term and context
+  const primaryAnswer = card.blankAnswers?.[0] || 'Concept Term'
+  const contextSentence = card.segments
+    .map((s) => (s.kind === 'text' ? s.text : '______'))
+    .join('')
+    .trim()
+
+  const categoryTag = card.tags?.[0] ? card.tags[0].toUpperCase() : 'CONCEPT TERM'
 
   return (
-    <View style={styles.container}>
-      {/* ── FRONT SIDE ── */}
-      <Animated.View
-        style={[styles.face, frontAnimatedStyle]}
-        pointerEvents={isFlipped ? 'none' : 'auto'}
-      >
-        <Pressable
-          className="flex-1 rounded-3xl border border-border/80 bg-surface p-6 shadow-sm justify-between"
-          onPress={handleFlip}
-          disabled={disabled || isFlipped}
+    <View style={{ gap: 20, width: '100%' }}>
+      <View style={styles.container}>
+        {/* ── FRONT SIDE (Matching Image 3) ── */}
+        <Animated.View
+          style={[styles.face, frontAnimatedStyle]}
+          pointerEvents={isFlipped ? 'none' : 'auto'}
         >
-          <View>
-            {meta && (
-              <View className="mb-4 flex-row flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-3">
-                <View className="flex-row flex-wrap items-center gap-1.5">
-                  {card.isNew && (
-                    <Badge
-                      text="✨ New"
-                      className="bg-primary/15 border-primary/30"
-                      textClassName="text-primary"
-                    />
-                  )}
-                  {card.isLeech && (
-                    <Badge
-                      text="⚠️ Review"
-                      className="bg-warning/15 border-warning/30"
-                      textClassName="text-warning"
-                    />
-                  )}
-                  {card.tags.map((tag) => (
-                    <Badge
-                      key={tag}
-                      text={`#${tag}`}
-                      className="bg-surface-muted border-border/80"
-                      textClassName="text-foreground/80"
-                    />
-                  ))}
-                </View>
-                <View className="rounded-full bg-accent/15 px-2.5 py-0.5 border border-accent/30">
-                  <Text className="text-[10px] font-bold text-accent-strong uppercase tracking-wider">
-                    Question
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            <View className="flex-row flex-wrap items-center leading-loose py-2">
-              {tokens.map((token, index) => {
-                if (token.kind === 'break') {
-                  return (
-                    <View
-                      key={`n${String(index)}`}
-                      style={{ width: '100%', height: token.height }}
-                    />
-                  )
-                }
-                if (token.kind === 'word') {
-                  return (
-                    <Text
-                      key={`t${String(index)}`}
-                      style={{ fontSize: PARAGRAPH_FONT_SIZE, lineHeight: LINE_HEIGHT }}
-                      className="text-foreground"
-                    >
-                      {token.text}
-                    </Text>
-                  )
-                }
-                return (
-                  <View
-                    key={`b${String(token.ordinal)}`}
-                    className="mx-1 justify-center rounded-lg bg-surface-muted border border-border/80 px-2.5 py-0.5 shadow-xs"
-                  >
-                    <Text
-                      style={{ fontSize: PARAGRAPH_FONT_SIZE - 1 }}
-                      className="font-mono font-bold text-primary"
-                    >
-                      {'[ ? ]'}
-                    </Text>
-                  </View>
-                )
-              })}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Card Front. Tap to flip."
+            onPress={handleFlip}
+            disabled={disabled}
+            style={{
+              flex: 1,
+              borderRadius: 28,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#EEF2EE',
+              backgroundColor: isDark ? '#111A17' : '#FFFFFF',
+              padding: 24,
+              justifyContent: 'space-between',
+              shadowColor: '#000000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: isDark ? 0.2 : 0.04,
+              shadowRadius: 12,
+              elevation: 3,
+            }}
+          >
+            {/* Header: Category Tag & Audio Icon */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '700',
+                  letterSpacing: 0.8,
+                  textTransform: 'uppercase',
+                  color: isDark ? '#A6C2B5' : '#317054',
+                }}
+              >
+                {categoryTag}
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Audio pronunciation"
+                hitSlop={8}
+                onPress={(e) => {
+                  e.stopPropagation()
+                }}
+              >
+                <VolumeIcon color={isDark ? '#889591' : '#4C5854'} size={18} />
+              </TouchableOpacity>
             </View>
-          </View>
 
-          <View className="mt-8 flex-row items-center justify-center gap-2 border-t border-border/40 pt-4">
-            <RotateCwIcon color={mutedColor} size={15} />
-            <Text className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Tap card to flip
-            </Text>
-          </View>
-        </Pressable>
-      </Animated.View>
+            {/* Center Concept & Subtext */}
+            <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 20 }}>
+              <Text
+                style={{
+                  fontSize: 26,
+                  fontWeight: '800',
+                  letterSpacing: -0.5,
+                  textAlign: 'center',
+                  color: isDark ? '#FFFFFF' : '#052E24',
+                  marginBottom: 8,
+                }}
+              >
+                {primaryAnswer}
+              </Text>
+              {contextSentence.length > 0 && (
+                <Text
+                  numberOfLines={3}
+                  style={{
+                    fontSize: 14,
+                    fontWeight: '500',
+                    textAlign: 'center',
+                    color: isDark ? '#889591' : '#6B9985',
+                    lineHeight: 20,
+                    maxWidth: '90%',
+                  }}
+                >
+                  {contextSentence}
+                </Text>
+              )}
+            </View>
 
-      {/* ── BACK SIDE ── */}
-      <Animated.View
-        style={[styles.face, styles.backFace, backAnimatedStyle]}
-        pointerEvents={isFlipped ? 'auto' : 'none'}
-      >
-        <View className="flex-1 rounded-3xl border border-border/80 bg-surface p-6 shadow-sm justify-between">
-          <View>
-            <View className="mb-4 flex-row items-center justify-between border-b border-border/40 pb-3">
-              <View className="flex-row items-center gap-1.5">
-                <View className="h-6 w-6 rounded-full bg-success/20 items-center justify-center">
-                  <CheckIcon color={successColor} size={13} />
+            {/* Bottom Affordance: TAP CARD TO FLIP */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              }}
+            >
+              <RotateCwIcon color={isDark ? '#A6C2B5' : '#317054'} size={14} />
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '800',
+                  letterSpacing: 0.8,
+                  textTransform: 'uppercase',
+                  color: isDark ? '#A6C2B5' : '#317054',
+                }}
+              >
+                Tap Card to Flip
+              </Text>
+            </View>
+          </Pressable>
+        </Animated.View>
+
+        {/* ── BACK SIDE (Revealed Answer) ── */}
+        <Animated.View
+          style={[styles.face, styles.backFace, backAnimatedStyle]}
+          pointerEvents={isFlipped ? 'auto' : 'none'}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Card Back. Tap to flip back."
+            onPress={handleFlip}
+            disabled={disabled}
+            style={{
+              flex: 1,
+              borderRadius: 28,
+              borderWidth: 1.5,
+              borderColor: isDark ? '#317054' : '#6B9985',
+              backgroundColor: isDark ? '#052E24' : '#F4FAF7',
+              padding: 24,
+              justifyContent: 'space-between',
+              shadowColor: '#000000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: isDark ? 0.3 : 0.05,
+              shadowRadius: 12,
+              elevation: 4,
+            }}
+          >
+            {/* Header: Answer Tag */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    backgroundColor: '#317054',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <CheckIcon color="#FFFFFF" size={12} />
                 </View>
-                <Text className="text-xs font-bold uppercase tracking-wider text-success">
-                  Answer
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: '700',
+                    letterSpacing: 0.8,
+                    textTransform: 'uppercase',
+                    color: isDark ? '#A6C2B5' : '#317054',
+                  }}
+                >
+                  Full Answer & Context
                 </Text>
               </View>
 
-              <View className="rounded-full bg-success/10 px-2.5 py-0.5 border border-success/30">
-                <Text className="text-[11px] font-semibold text-success">Revealed</Text>
-              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Audio pronunciation"
+                hitSlop={8}
+                onPress={(e) => {
+                  e.stopPropagation()
+                }}
+              >
+                <VolumeIcon color={isDark ? '#A6C2B5' : '#4C5854'} size={18} />
+              </TouchableOpacity>
             </View>
 
-            <View className="items-center justify-center gap-3 py-6">
-              {card.blankAnswers && card.blankAnswers.length > 0 ? (
-                card.blankAnswers.map((answer, index) => (
-                  <View
-                    key={index}
-                    className="w-full rounded-2xl bg-success/12 border border-success/25 px-5 py-4 items-center justify-center shadow-sm"
-                  >
-                    {card.blankCount > 1 && (
-                      <Text className="text-[11px] font-bold text-success/80 uppercase tracking-widest mb-1">
-                        Blank {index + 1}
+            {/* Center Answer Explanation */}
+            <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 16 }}>
+              {card.blankAnswers && card.blankAnswers.length > 0
+                ? card.blankAnswers.map((ans, idx) => (
+                    <View
+                      key={idx}
+                      style={{
+                        width: '100%',
+                        paddingVertical: 10,
+                        paddingHorizontal: 16,
+                        borderRadius: 16,
+                        backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#FFFFFF',
+                        marginBottom: 8,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 20,
+                          fontWeight: '700',
+                          color: isDark ? '#FFFFFF' : '#052E24',
+                          textAlign: 'center',
+                        }}
+                      >
+                        {ans}
                       </Text>
-                    )}
-                    <Text className="text-center text-xl font-bold text-success tracking-tight">
-                      {answer}
-                    </Text>
-                  </View>
-                ))
-              ) : (
-                <View className="p-4 items-center justify-center">
-                  <Text className="text-center text-sm text-muted-foreground">
-                    No answer data available for this card.
-                  </Text>
-                </View>
+                    </View>
+                  ))
+                : null}
+
+              {contextSentence.length > 0 && (
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: '500',
+                    textAlign: 'center',
+                    color: isDark ? 'rgba(255,255,255,0.85)' : '#4C5854',
+                    lineHeight: 22,
+                    marginTop: 8,
+                  }}
+                >
+                  {contextSentence}
+                </Text>
               )}
             </View>
-          </View>
 
-          <View className="mt-4 flex-row items-center justify-between gap-3 border-t border-border/40 pt-4">
-            <Pressable
-              accessibilityRole="button"
-              className="flex-1 items-center justify-center rounded-2xl border border-danger/30 bg-danger/10 py-3.5 flex-row gap-2 active:bg-danger/20"
-              onPress={() => handleRating(false)}
+            {/* Bottom Flip Affordance */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              }}
             >
-              <CloseIcon color={dangerColor} size={16} />
-              <Text className="font-bold text-danger text-sm">Need Review</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              className="flex-1 items-center justify-center rounded-2xl bg-primary py-3.5 flex-row gap-2 active:bg-primary/90 shadow-sm"
-              onPress={() => handleRating(true)}
-            >
-              <CheckIcon color={primaryFg} size={16} />
-              <Text className="font-bold text-primary-foreground text-sm">Got It</Text>
-            </Pressable>
-          </View>
+              <RotateCwIcon color={isDark ? '#A6C2B5' : '#317054'} size={14} />
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '800',
+                  letterSpacing: 0.8,
+                  textTransform: 'uppercase',
+                  color: isDark ? '#A6C2B5' : '#317054',
+                }}
+              >
+                Tap to Flip Back
+              </Text>
+            </View>
+          </Pressable>
+        </Animated.View>
+      </View>
+
+      {/* ── FOOTER: RECALL RATING (Matching Image 3) ── */}
+      <View style={{ gap: 10, marginTop: 4 }}>
+        <Text
+          style={{
+            fontSize: 13,
+            fontWeight: '600',
+            textAlign: 'center',
+            color: isDark ? '#889591' : '#4C5854',
+          }}
+        >
+          Did you recall this card correctly?
+        </Text>
+
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          {/* Incorrect Button */}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Mark Incorrect"
+            disabled={disabled}
+            activeOpacity={0.8}
+            onPress={() => handleRating(false)}
+            style={{
+              flex: 1,
+              height: 52,
+              borderRadius: 18,
+              borderWidth: 1.5,
+              borderColor: '#EF4444',
+              backgroundColor: isDark ? '#111A17' : '#FFFFFF',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            }}
+          >
+            <CloseIcon color="#EF4444" size={16} />
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#EF4444' }}>Incorrect</Text>
+          </TouchableOpacity>
+
+          {/* Correct Button */}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Mark Correct"
+            disabled={disabled}
+            activeOpacity={0.8}
+            onPress={() => handleRating(true)}
+            style={{
+              flex: 1,
+              height: 52,
+              borderRadius: 18,
+              backgroundColor: '#052E24',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              shadowColor: '#052E24',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.2,
+              shadowRadius: 8,
+              elevation: 3,
+            }}
+          >
+            <CheckIcon color="#FFFFFF" size={16} />
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>Correct</Text>
+          </TouchableOpacity>
         </View>
-      </Animated.View>
+      </View>
     </View>
   )
 }
@@ -245,11 +409,11 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     position: 'relative',
-    minHeight: 280,
+    height: 320,
   },
   face: {
     width: '100%',
-    minHeight: 280,
+    height: 320,
   },
   backFace: {
     position: 'absolute',

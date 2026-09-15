@@ -8,9 +8,9 @@ import Animated, {
   Easing,
   runOnJS,
 } from 'react-native-reanimated'
-import { ChevronLeftIcon, SettingsIcon } from '../../components/icons'
+import { ChevronLeftIcon } from '../../components/icons'
 import { TabBar } from '../../components/tab-bar'
-import { ThemeToggle } from '../../components/theme-toggle'
+import { ProfileHeaderButton } from '../../components/profile-header-button'
 import { SauladoLogo } from '../../components/saulado-logo'
 import { useAuthStore } from '../../stores/auth'
 import { useTokenColor } from '../../stores/theme'
@@ -27,21 +27,12 @@ import { useTokenColor } from '../../stores/theme'
 
 /**
  * Every screen in the group, and the title its header shows.
- *
- * `name` is the route file relative to this layout, not the URL — `sets/index`
- * rather than `/sets`, because there is no `sets/_layout.tsx` and so both files
- * under `sets/` are screens of *this* navigator.
- *
- * No `href: null` on any of them any more. That option existed to hide the six
- * screens the tab bar should not list, and a custom `tabBar` decides that by
- * itself — what is left for the navigator is the `title` its header reads, which
- * left unset falls back to the route name and captions the set screen
- * `sets/[setId]`.
  */
 const SCREENS: { name: string; title: string }[] = [
-  { name: 'index', title: 'Dashboard' },
-  { name: 'sets/index', title: 'Sets' },
-  { name: 'files/index', title: 'File Repository' },
+  { name: 'index', title: 'Saulado' },
+  { name: 'sets/index', title: 'Study Sets' },
+  { name: 'progress', title: 'Progress' },
+  { name: 'files/index', title: 'Study Bag' },
   { name: 'files/[fileId]', title: 'Document Viewer' },
   { name: 'files/bag-studio', title: 'Card Creation Studio' },
   { name: 'scan', title: 'Scan a page' },
@@ -51,32 +42,6 @@ const SCREENS: { name: string; title: string }[] = [
   { name: 'settings', title: 'Settings' },
   { name: 'account', title: 'Account' },
 ]
-
-/**
- * The way into settings and account.
- *
- * The web keeps them behind a header dropdown. There is no dropdown here, and a
- * fifth tab for a screen visited once a month would cost a fifth of the tab bar
- * permanently — so it is a header button beside the theme toggle, matching where
- * the web puts the same affordance.
- */
-function SettingsButton(): ReactElement {
-  const router = useRouter()
-  const foreground = useTokenColor('--foreground')
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Settings"
-      onPress={() => {
-        router.push('/settings')
-      }}
-      className="h-11 w-11 items-center justify-center rounded-md"
-    >
-      <SettingsIcon color={foreground} />
-    </Pressable>
-  )
-}
 
 export default function AppLayout(): ReactElement {
   const status = useAuthStore((s) => s.status)
@@ -170,12 +135,7 @@ export default function AppLayout(): ReactElement {
             headerStyle: { backgroundColor: background },
             headerTintColor: foreground,
             headerShadowVisible: false,
-            headerRight: () => (
-              <View className="flex-row items-center pr-1">
-                <SettingsButton />
-                <ThemeToggle />
-              </View>
-            ),
+            headerRight: () => <ProfileHeaderButton />,
           }}
         >
           {SCREENS.map(({ name, title }) => {
@@ -194,7 +154,9 @@ export default function AppLayout(): ReactElement {
                     name === 'scan-review' ||
                     name === 'sets/[setId]' ||
                     name === 'files/[fileId]' ||
-                    name === 'files/bag-studio'
+                    name === 'files/bag-studio' ||
+                    name === 'settings' ||
+                    name === 'account'
                   ? {
                       headerLeft: () => (
                         <Pressable

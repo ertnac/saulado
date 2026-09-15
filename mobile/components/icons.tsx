@@ -553,4 +553,84 @@ export function ShuffleIcon(props: IconProps): ReactElement {
   )
 }
 
+export function ScanQRIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M4 8V6a2 2 0 0 1 2-2h2" />
+      <Path d="M16 4h2a2 2 0 0 1 2 2v2" />
+      <Path d="M20 16v2a2 2 0 0 1-2 2h-2" />
+      <Path d="M8 20H6a2 2 0 0 1-2-2v-2" />
+      <Path d="M9 9h6v6H9z" strokeWidth={1.75} />
+      <Path d="M12 12h.01" strokeWidth={2.5} />
+    </Icon>
+  )
+}
+
+export function TrendingUpIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="m22 7-8.5 8.5-5-5L2 17" />
+      <Path d="M16 7h6v6" />
+    </Icon>
+  )
+}
+
+export function BoxCubeIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="m21 16-9 5-9-5V8l9-5 9 5v8Z" />
+      <Path d="m3.27 6.96 8.73 4.88 8.73-4.88" />
+      <Path d="M12 21V12" />
+    </Icon>
+  )
+}
+
+export function PeopleIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Circle cx={12} cy={8} r={4} />
+      <Path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" />
+    </Icon>
+  )
+}
+
+export function FilePlusIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <Path d="M14 2v6h6" />
+      <Path d="M12 12v6" />
+      <Path d="M9 15h6" />
+    </Icon>
+  )
+}
+
+export function CameraIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+      <Circle cx={12} cy={13} r={3} />
+    </Icon>
+  )
+}
+
+export function ArrowRightIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M5 12h14" />
+      <Path d="m12 5 7 7-7 7" />
+    </Icon>
+  )
+}
+
+export function VolumeIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M11 5 6 9H2v6h4l5 4V5z" />
+      <Path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+      <Path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+    </Icon>
+  )
+}
+
 export { SauladoLogo, SauladoIcon, type SauladoLogoProps } from './saulado-logo'

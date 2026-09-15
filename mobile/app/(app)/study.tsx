@@ -18,13 +18,12 @@ import { FlashcardCard } from '../../components/flashcard-card'
 import { ModePicker } from '../../components/mode-picker'
 import {
   CheckIcon,
-  CloseIcon,
-  PencilIcon,
-  ListIcon,
-  CardsIcon,
+  ChevronDownIcon,
   ChevronLeftIcon,
+  CloseIcon,
   ShuffleIcon,
 } from '../../components/icons'
+import { StudyModeSheet } from '../../components/study-mode-sheet'
 import { forgetSession, readResumableSession, rememberSession } from '../../lib/study-resume'
 import { completeSession, getSession, startSession, submitAnswer } from '../../services/study'
 import { ApiError } from '../../services/api'
@@ -32,7 +31,7 @@ import { useStudySession } from '../../hooks/useStudySession'
 import { useDueCounts } from '../../hooks/study'
 import { useSet } from '../../hooks/cards'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useTokenColor } from '../../stores/theme'
+import { useTheme, useTokenColor } from '../../stores/theme'
 import { getOfflineSet } from '../../lib/offline/sets'
 import { generateOfflineSession } from '../../lib/offline/study-generation'
 import { useAuthStore } from '../../stores/auth'
@@ -146,6 +145,8 @@ export default function StudyScreen(): ReactElement {
 
   const [mode, setMode] = useState<StartableMode>(initialMode ?? 'spaced')
   const [answeringType, setAnsweringType] = useState<AnsweringType>('identification')
+  const [isModeSheetOpen, setIsModeSheetOpen] = useState(false)
+  const { isDark } = useTheme()
   const [picking, setPicking] = useState(false)
 
   const dueCounts = useDueCounts()
@@ -188,8 +189,6 @@ export default function StudyScreen(): ReactElement {
 
   const elapsed = useCardTimer(session.card?.cardId)
   const started = useRef(false)
-  const primaryColor = useTokenColor('--primary')
-  const mutedColor = useTokenColor('--muted-foreground')
   const foreground = useTokenColor('--foreground')
 
   const currentSetRef = useRef<string | null | undefined>(undefined)
@@ -747,117 +746,171 @@ export default function StudyScreen(): ReactElement {
 
   const answered = session.progress.answered
   const total = Math.max(session.progress.total, 1)
+  const percentComplete = Math.min(100, Math.round((answered / total) * 100))
+  const deckTitle =
+    setDetails.data?.set.title || offlineSetEntry?.metadata?.title || 'Cardiovascular Drugs'
 
-  const getModeInfo = (type: AnsweringType) => {
-    switch (type) {
-      case 'identification':
-        return { label: 'Type In', icon: <PencilIcon color={primaryColor} size={13} /> }
-      case 'multiple-choice':
-        return { label: 'Quiz', icon: <ListIcon color={primaryColor} size={13} /> }
-      case 'flashcard':
-        return { label: 'Cards', icon: <CardsIcon color={primaryColor} size={13} /> }
-    }
-  }
+  const currentModeTitle =
+    answeringType === 'identification'
+      ? 'Identification'
+      : answeringType === 'multiple-choice'
+        ? 'Multiple Choice'
+        : 'Smart Flashcards'
 
-  const modeInfo = getModeInfo(answeringType)
+  const currentModePillLabel =
+    answeringType === 'identification'
+      ? 'Identification'
+      : answeringType === 'multiple-choice'
+        ? 'Multiple Choice'
+        : 'Flashcards'
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-background"
+      style={{ flex: 1, backgroundColor: isDark ? '#050D0A' : '#FAFBF9' }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 20}
     >
-      {/* ── Sleek Top Navigation Bar ── */}
+      {/* ── 1. Top Header (Matching Images 1, 2, 3) ── */}
       <View
-        style={{ paddingTop: Math.max(12, insets.top) }}
-        className="flex-row items-center justify-between border-b border-border/50 bg-surface px-4 pb-3 shadow-xs"
+        style={{
+          paddingTop: Math.max(14, insets.top),
+          paddingHorizontal: 20,
+          paddingBottom: 14,
+          backgroundColor: isDark ? '#050D0A' : '#FAFBF9',
+        }}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="End session"
-          className="h-9 w-9 rounded-full bg-surface border border-border/80 items-center justify-center shadow-xs active:bg-surface-muted"
-          disabled={complete.isPending}
-          onPress={() => {
-            if (sessionId) finish(sessionId)
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
           }}
         >
-          <CloseIcon color={mutedColor} size={15} />
-        </Pressable>
-
-        <View className="flex-1 mx-3 gap-1">
-          <View className="flex-row items-center justify-between">
-            <Text className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              Progress
+          <View style={{ gap: 3, flex: 1, marginRight: 12 }}>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: '800',
+                letterSpacing: -0.4,
+                color: isDark ? '#FFFFFF' : '#052E24',
+              }}
+            >
+              {currentModeTitle}
             </Text>
-            <Text className="text-xs font-bold text-foreground">
-              {answered}{' '}
-              <Text className="font-normal text-muted-foreground">/ {session.progress.total}</Text>
+            <Text
+              numberOfLines={1}
+              style={{
+                fontSize: 13,
+                fontWeight: '500',
+                color: isDark ? '#889591' : '#4C5854',
+              }}
+            >
+              {deckTitle} · Study
+            </Text>
+
+            {/* In-Session Mode Dropdown Pill */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Current mode is ${currentModePillLabel}. Tap to change study mode.`}
+              onPress={() => setIsModeSheetOpen(true)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                alignSelf: 'flex-start',
+                gap: 6,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 999,
+                backgroundColor: isDark ? '#111A17' : '#FFFFFF',
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+                marginTop: 6,
+                shadowColor: '#000000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.05,
+                shadowRadius: 3,
+                elevation: 1,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: '700',
+                  color: isDark ? '#A6C2B5' : '#052E24',
+                }}
+              >
+                {currentModePillLabel}
+              </Text>
+              <ChevronDownIcon color={isDark ? '#A6C2B5' : '#052E24'} size={14} />
+            </Pressable>
+          </View>
+
+          {/* Close Button */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close study session"
+            disabled={complete.isPending}
+            onPress={() => {
+              if (sessionId) finish(sessionId)
+              else if (router.canGoBack()) router.back()
+              else router.replace('/')
+            }}
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 19,
+              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E8F3EE',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <CloseIcon color={isDark ? '#FFFFFF' : '#052E24'} size={16} />
+          </Pressable>
+        </View>
+
+        {/* ── 2. Progress Indicator Section ── */}
+        <View style={{ marginTop: 16, gap: 6 }}>
+          <View
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+          >
+            <Text
+              style={{ fontSize: 12, fontWeight: '600', color: isDark ? '#889591' : '#4C5854' }}
+            >
+              Card {Math.min(answered + 1, total)} of {total}
+            </Text>
+            <Text
+              style={{ fontSize: 12, fontWeight: '700', color: isDark ? '#A6C2B5' : '#317054' }}
+            >
+              {percentComplete}% Complete
             </Text>
           </View>
+
+          {/* Rounded Green Progress Bar */}
           <View
-            accessibilityRole="progressbar"
-            accessibilityLabel="Session progress"
-            accessibilityValue={{ min: 0, max: total, now: answered }}
-            className="h-2 w-full overflow-hidden rounded-full bg-surface-muted border border-border/40"
+            style={{
+              height: 5,
+              width: '100%',
+              borderRadius: 3,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#E8F3EE',
+              overflow: 'hidden',
+            }}
           >
             <View
-              className="h-full bg-primary rounded-full"
-              style={{ width: `${Math.min(100, Math.max(5, (answered / total) * 100))}%` }}
+              style={{
+                height: '100%',
+                width: `${Math.min(100, Math.max(3, percentComplete))}%`,
+                borderRadius: 3,
+                backgroundColor: '#317054',
+              }}
             />
           </View>
         </View>
-
-        <View className="flex-row items-center gap-1.5">
-          {session.remaining > 1 && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={
-                mode === 'shuffled'
-                  ? 'Reshuffle remaining questions'
-                  : 'Shuffle remaining questions'
-              }
-              disabled={session.answer !== null}
-              className={`rounded-full bg-surface border border-border/80 px-2.5 py-1.5 flex-row items-center gap-1 shadow-xs active:bg-surface-muted ${
-                session.answer !== null ? 'opacity-40' : 'opacity-100'
-              }`}
-              onPress={() => {
-                session.reshuffleRemaining()
-              }}
-            >
-              <ShuffleIcon color={mode === 'shuffled' ? primaryColor : mutedColor} size={13} />
-              {mode === 'shuffled' && (
-                <Text className="text-[11px] font-medium text-foreground">Reshuffle</Text>
-              )}
-            </Pressable>
-          )}
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Switch answering mode"
-            disabled={session.answer !== null}
-            className={`rounded-full bg-surface border border-border/80 px-3 py-1.5 flex-row items-center gap-1.5 shadow-xs active:bg-surface-muted ${
-              session.answer !== null ? 'opacity-40' : 'opacity-100'
-            }`}
-            onPress={() => {
-              if (session.answer !== null) return
-              setAnsweringType((prev) =>
-                prev === 'identification'
-                  ? 'multiple-choice'
-                  : prev === 'multiple-choice'
-                    ? 'flashcard'
-                    : 'identification',
-              )
-            }}
-          >
-            {modeInfo.icon}
-            <Text className="text-xs font-semibold text-foreground">{modeInfo.label}</Text>
-          </Pressable>
-        </View>
       </View>
 
+      {/* ── 3. Active Quiz Question Viewport ── */}
       <ScrollView
-        className="flex-1"
-        contentContainerClassName="gap-5 p-5 pb-10"
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24 }}
         keyboardShouldPersistTaps="handled"
       >
         {answeringType === 'flashcard' ? (
@@ -883,46 +936,114 @@ export default function StudyScreen(): ReactElement {
         )}
 
         {session.answer && answeringType !== 'flashcard' && (
-          <FeedbackPanel answer={session.answer} />
+          <View style={{ marginTop: 14 }}>
+            <FeedbackPanel answer={session.answer} />
+          </View>
         )}
       </ScrollView>
 
-      {/* ── Bottom Sticky Action Footer ── */}
+      {/* ── 4. Bottom Action Footer (Matching Images 1 & 2) ── */}
       {answeringType !== 'flashcard' && (
         <View
-          style={{ paddingBottom: Math.max(16, insets.bottom) }}
-          className="flex-row gap-3 border-t border-border/80 bg-surface/95 px-5 pt-3.5 shadow-md"
+          style={{
+            paddingHorizontal: 20,
+            paddingTop: 12,
+            paddingBottom: Math.max(16, insets.bottom),
+            backgroundColor: isDark ? '#050D0A' : '#FAFBF9',
+            borderTopWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+            gap: 12,
+          }}
         >
-          {session.answer ? (
-            <Button
-              className="flex-1"
-              size="lg"
-              label={session.isLast ? 'Finish session 🎉' : 'Next card →'}
-              loading={complete.isPending}
-              onPress={next}
-            />
-          ) : (
-            <>
-              <Button
-                size="lg"
-                variant="outline"
-                label="Reveal"
-                onPress={() => {
-                  send(true)
-                }}
-              />
-              <Button
-                className="flex-1"
-                size="lg"
-                label="Check answer"
-                onPress={() => {
-                  send(false)
-                }}
-              />
-            </>
+          {/* Utility Row (Shuffle Remaining & Don't know? Reveal) */}
+          {!session.answer && (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              {session.remaining > 1 ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Shuffle remaining questions"
+                  onPress={() => session.reshuffleRemaining()}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                >
+                  <ShuffleIcon color={isDark ? '#889591' : '#4C5854'} size={14} />
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '600',
+                      color: isDark ? '#889591' : '#4C5854',
+                    }}
+                  >
+                    Shuffle Remaining
+                  </Text>
+                </Pressable>
+              ) : (
+                <View />
+              )}
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Reveal answer"
+                onPress={() => send(true)}
+              >
+                <Text
+                  style={{ fontSize: 12, fontWeight: '600', color: isDark ? '#A6C2B5' : '#4C5854' }}
+                >
+                  Don't know? <Text style={{ textDecorationLine: 'underline' }}>Reveal</Text>
+                </Text>
+              </Pressable>
+            </View>
           )}
+
+          {/* Primary Action Button (Deep Forest #052E24) */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={session.answer ? 'Next Question' : 'Check Answer'}
+            onPress={() => {
+              if (session.answer) {
+                next()
+              } else {
+                send(false)
+              }
+            }}
+            style={{
+              height: 52,
+              borderRadius: 18,
+              backgroundColor: '#052E24',
+              alignItems: 'center',
+              justifyContent: 'center',
+              shadowColor: '#052E24',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.25,
+              shadowRadius: 8,
+              elevation: 4,
+            }}
+          >
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#FFFFFF' }}>
+              {session.answer
+                ? session.isLast
+                  ? 'Finish Session 🎉'
+                  : 'Next Question'
+                : 'Check Answer'}
+            </Text>
+          </Pressable>
         </View>
       )}
+
+      {/* ── 5. In-Session Study Mode Bottom Sheet (Matching Image 4) ── */}
+      <StudyModeSheet
+        visible={isModeSheetOpen}
+        currentMode={answeringType}
+        onSelectMode={(newMode) => {
+          setAnsweringType(newMode)
+        }}
+        onClose={() => setIsModeSheetOpen(false)}
+      />
     </KeyboardAvoidingView>
   )
 }
