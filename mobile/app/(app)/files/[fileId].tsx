@@ -50,6 +50,7 @@ export default function DocumentViewerScreen(): ReactElement {
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'visual' | 'reader'>('visual')
   const [zoomScale, setZoomScale] = useState<number>(1.0)
+  const [pageProgress, setPageProgress] = useState<{ current: number; total: number } | null>(null)
 
   const [currentSelection, setCurrentSelection] = useState<CurrentSelection | null>(null)
   const [isBagModalOpen, setIsBagModalOpen] = useState(false)
@@ -143,6 +144,14 @@ export default function DocumentViewerScreen(): ReactElement {
         } else if (payload.type === 'PDF_SCANNED_PAGE') {
           setBaggedNotice('This page contains no digital text layer.')
           setTimeout(() => setBaggedNotice(null), 3000)
+        } else if (payload.type === 'PDF_PAGE_CHANGED') {
+          const pagePayload = payload as { pageNumber?: unknown; totalPages?: unknown }
+          if (
+            typeof pagePayload.pageNumber === 'number' &&
+            typeof pagePayload.totalPages === 'number'
+          ) {
+            setPageProgress({ current: pagePayload.pageNumber, total: pagePayload.totalPages })
+          }
         }
       }
     } catch (err) {
@@ -249,6 +258,9 @@ export default function DocumentViewerScreen(): ReactElement {
           </Text>
           <Text numberOfLines={1} className="text-[11px] text-muted-foreground">
             {file.fileType.toUpperCase()} · {formatFileSize(file.fileSize)}
+            {viewMode === 'visual' && file.fileType === 'pdf' && pageProgress
+              ? ` · Page ${pageProgress.current} of ${pageProgress.total}`
+              : ''}
             {highlights.length > 0
               ? ` · ${highlights.length} highlight${highlights.length === 1 ? '' : 's'}`
               : ''}

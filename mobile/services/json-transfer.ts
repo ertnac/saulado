@@ -1,4 +1,7 @@
-import { Alert, Share } from 'react-native'
+import { Alert, Platform, Share } from 'react-native'
+import * as FileSystem from 'expo-file-system/legacy'
+import * as Sharing from 'expo-sharing'
+import { onlineManager } from '@tanstack/react-query'
 import {
   ANSWERS_MAX_PER_CARD,
   codePointLength,
@@ -8,8 +11,13 @@ import {
   toCodePoints,
   type AnswerInput,
   type SetColor,
+  type StudyCard,
+  type StudyCardSummary,
 } from '@saulado/shared'
 import * as api from './cards'
+import * as offlineData from '../lib/offline/data-source'
+import { useOfflineSetsStore } from '../stores/offline-sets'
+import { createCardOfflineAware, resolveUserId } from '../hooks/cards'
 
 export interface ParsedImportCard {
   paragraph: string
@@ -410,8 +418,25 @@ export function parseAndValidateJson(
 }
 
 /**
+ * Bounded concurrency helper for parallel tasks
+ */
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = []
+  for (let i = 0; i < items.length; i += limit) {
+    const batch = items.slice(i, i + limit)
+    const batchResults = await Promise.all(batch.map(fn))
+    results.push(...batchResults)
+  }
+  return results
+}
+
+/**
  * Creates imported sets and cards sequentially in the user's account with progress tracking
- * and resilient error recovery.
+ * and resilient offline/online error recovery.
  */
 export async function importSetsAndCards(
   importData: ParsedImportResult,
@@ -422,6 +447,7 @@ export async function importSetsAndCards(
   let failedCards = 0
   const totalSteps = importData.sets.length + importData.totalCards
   let currentStep = 0
+  const userId = await resolveUserId()
 
   for (const s of importData.sets) {
     currentStep++
@@ -429,11 +455,26 @@ export async function importSetsAndCards(
 
     let createdSetId: string
     try {
-      const createdSet = await api.createSet({
-        title: s.title,
-        color: s.color,
-      })
-      createdSetId = createdSet.set.id
+      if (!onlineManager.isOnline() && userId) {
+        const local = await offlineData.createSet(userId, { title: s.title, color: s.color })
+        createdSetId = local.id
+      } else {
+        try {
+          const createdSet = await api.createSet({
+            title: s.title,
+            color: s.color,
+          })
+          createdSetId = createdSet.set.id
+        } catch (apiErr) {
+          if (userId) {
+            // Fallback to offline creation
+            const local = await offlineData.createSet(userId, { title: s.title, color: s.color })
+            createdSetId = local.id
+          } else {
+            throw apiErr
+          }
+        }
+      }
       importedSets++
     } catch {
       // If set creation failed, skip its cards
@@ -447,7 +488,7 @@ export async function importSetsAndCards(
       onProgress?.(currentStep, totalSteps, `Adding card to "${s.title}"...`)
 
       try {
-        await api.createCard(createdSetId, {
+        await createCardOfflineAware(createdSetId, {
           paragraph: c.paragraph,
           answers: c.answers,
           tags: c.tags,
@@ -463,36 +504,150 @@ export async function importSetsAndCards(
   return { importedSets, importedCards, failedCards }
 }
 
+export interface ExportSingleSetOptions {
+  title?: string
+  color?: SetColor
+}
+
 /**
  * Builds a JSON export for a single set and all its cards.
+ * Resilient to offline mode, local/unsynced sets, large decks, and network hiccups.
  */
-export async function exportSingleSetAsJson(setId: string): Promise<string> {
-  const setResponse = await api.getSet(setId)
-  const cardsResponse = await api.listCards(setId, { limit: 200 })
+export async function exportSingleSetAsJson(
+  setId: string,
+  options?: ExportSingleSetOptions,
+): Promise<string> {
+  const isOnline = onlineManager.isOnline()
+  const isTemp = setId.startsWith('temp-set-')
+  const offlineEntry = useOfflineSetsStore.getState().sets[setId]
 
-  const cardsWithAnswers = await Promise.all(
-    cardsResponse.items.map(async (summary) => {
-      const cardDetail = await api.getCard(summary.id)
+  let setTitle = options?.title ?? offlineEntry?.metadata?.title
+  let setColor = options?.color ?? offlineEntry?.metadata?.color
+
+  // 1. Try local SQLite data source first
+  let localCards: StudyCard[] = []
+  try {
+    const userId = await resolveUserId()
+    let fetched = await offlineData.getCards(userId, setId)
+    if (fetched.length === 0 && userId !== 'local-user') {
+      fetched = await offlineData.getCards('local-user', setId)
+    }
+    localCards = fetched
+
+    if (!setTitle || !setColor) {
+      let localSet = await offlineData.getSet(userId, setId)
+      if (!localSet && userId !== 'local-user') {
+        localSet = await offlineData.getSet('local-user', setId)
+      }
+      if (localSet) {
+        setTitle = setTitle ?? localSet.title
+        setColor = setColor ?? localSet.color
+      }
+    }
+  } catch (err) {
+    console.warn('Could not read cards from offline database:', err)
+  }
+
+  // 2. If we found cards locally in SQLite, build and return the payload immediately
+  if (localCards.length > 0) {
+    const cardsWithAnswers = localCards.map((c) => ({
+      paragraph: c.paragraph,
+      answers: (c.answers ?? []).map((a) => ({
+        startOffset: a.startOffset,
+        endOffset: a.endOffset,
+        answerText: a.answerText,
+        altAnswers: a.altAnswers,
+      })),
+      tags: c.tags && c.tags.length > 0 ? c.tags : undefined,
+    }))
+
+    const payload = {
+      formatVersion: 2,
+      exportedAt: new Date().toISOString(),
+      type: 'single_set',
+      set: {
+        title: setTitle || 'Exported Set',
+        color: setColor,
+        cards: cardsWithAnswers,
+      },
+    }
+
+    return JSON.stringify(payload, null, 2)
+  }
+
+  // 3. If no local cards and we are offline (or this is a temp set that only exists locally)
+  if (!isOnline || isTemp) {
+    throw new Error(
+      isTemp
+        ? 'This set was created locally and has no cards to export.'
+        : 'This set is not saved for offline use. Please connect to the internet to export it.',
+    )
+  }
+
+  // 4. Fetch from remote API with pagination and bounded concurrency
+  try {
+    const setResponse = await api.getSet(setId)
+    setTitle = setResponse.set.title ?? setTitle
+    setColor = setResponse.set.color ?? setColor
+  } catch {
+    if (!setTitle) {
+      throw new Error('Could not fetch set details from server.')
+    }
+  }
+
+  // Fetch all card summaries with pagination
+  const cardSummaries: StudyCardSummary[] = []
+  let cursor: string | null = null
+  do {
+    const page = await api.listCards(setId, { limit: 50, cursor: cursor || undefined })
+    cardSummaries.push(...page.items)
+    cursor = page.nextCursor
+  } while (cursor)
+
+  if (cardSummaries.length === 0) {
+    const payload = {
+      formatVersion: 2,
+      exportedAt: new Date().toISOString(),
+      type: 'single_set',
+      set: {
+        title: setTitle || 'Exported Set',
+        color: setColor,
+        cards: [],
+      },
+    }
+    return JSON.stringify(payload, null, 2)
+  }
+
+  // Fetch card details in batches of 5 with fallback to summary if a single card fetch fails
+  const cardsWithAnswers = await mapLimit(cardSummaries, 5, async (summary) => {
+    try {
+      const detail = await api.getCard(summary.id)
       return {
-        paragraph: cardDetail.card.paragraph,
-        answers: cardDetail.card.answers.map((a) => ({
+        paragraph: detail.card.paragraph,
+        answers: (detail.card.answers ?? []).map((a) => ({
           startOffset: a.startOffset,
           endOffset: a.endOffset,
           answerText: a.answerText,
           altAnswers: a.altAnswers,
         })),
-        tags: cardDetail.card.tags,
+        tags: detail.card.tags && detail.card.tags.length > 0 ? detail.card.tags : undefined,
       }
-    }),
-  )
+    } catch {
+      return {
+        paragraph: summary.paragraph,
+        answers: [],
+        tags: summary.tags && summary.tags.length > 0 ? summary.tags : undefined,
+      }
+    }
+  })
 
   const payload = {
     formatVersion: 2,
     exportedAt: new Date().toISOString(),
     type: 'single_set',
     set: {
-      title: setResponse.set.title,
-      color: setResponse.set.color,
+      title: setTitle || 'Exported Set',
+      color: setColor,
       cards: cardsWithAnswers,
     },
   }
@@ -501,15 +656,85 @@ export async function exportSingleSetAsJson(setId: string): Promise<string> {
 }
 
 /**
- * Opens native Share sheet with the JSON payload.
+ * Writes JSON to a temp file and opens the native Share sheet.
+ *
+ * File-based sharing avoids the Android intent payload limit (~500 KB) that
+ * crashes `Share.share({ message })` for any non-trivial library. It also
+ * gives the recipient a `.json` file they can import directly rather than
+ * a wall of text they must copy into a text editor first.
  */
 export async function shareJsonPayload(filename: string, json: string): Promise<void> {
   try {
-    await Share.share({
-      title: filename,
-      message: json,
+    const cacheDir = FileSystem.cacheDirectory
+    if (!cacheDir) {
+      // Fallback: try message-based sharing if no cache directory is available
+      await Share.share({ title: filename, message: json })
+      return
+    }
+
+    // Sanitize filename for Android/iOS filesystem: strip illegal characters
+    const sanitized = filename.replace(/[/\\?%*:|"<>]/g, '_').trim() || 'study-set'
+    const safeName = sanitized.endsWith('.json') ? sanitized : `${sanitized}.json`
+    const dir = cacheDir.endsWith('/') ? cacheDir : `${cacheDir}/`
+    const filePath = `${dir}${safeName}`
+
+    await FileSystem.writeAsStringAsync(filePath, json, {
+      encoding: FileSystem.EncodingType.UTF8,
     })
-  } catch {
+
+    const canShare = await Sharing.isAvailableAsync()
+    if (canShare) {
+      await Sharing.shareAsync(filePath, {
+        mimeType: 'application/json',
+        dialogTitle: safeName,
+        UTI: 'public.json',
+      })
+    } else {
+      // Device doesn't support sharing files — fall back to text
+      await Share.share({ title: safeName, message: json })
+    }
+  } catch (err) {
+    console.error('Sharing failed:', err)
     Alert.alert('Sharing Failed', 'Could not open the share sheet.')
+  }
+}
+
+/**
+ * Saves a JSON file directly to device storage (e.g., Downloads folder).
+ * On Android, prompts the user to select or confirm a destination directory using
+ * the Storage Access Framework (SAF), writing the file directly to storage
+ * without requiring intermediate third-party applications.
+ * On other platforms, invokes the native share sheet with "Save to Files".
+ */
+export async function saveJsonToDevice(filename: string, json: string): Promise<boolean> {
+  try {
+    const sanitized = filename.replace(/[/\\?%*:|"<>]/g, '_').trim() || 'study-set'
+    const safeName = sanitized.endsWith('.json') ? sanitized : `${sanitized}.json`
+
+    if (Platform.OS === 'android' && FileSystem.StorageAccessFramework) {
+      const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync()
+      if (!permissions.granted) {
+        return false
+      }
+
+      const baseName = safeName.replace(/\.json$/i, '')
+      const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+        permissions.directoryUri,
+        baseName,
+        'application/json',
+      )
+      await FileSystem.writeAsStringAsync(fileUri, json, {
+        encoding: FileSystem.EncodingType.UTF8,
+      })
+      Alert.alert('Saved to Device', `"${safeName}" was successfully saved to your chosen folder.`)
+      return true
+    } else {
+      await shareJsonPayload(safeName, json)
+      return true
+    }
+  } catch (err) {
+    console.error('Save to device failed:', err)
+    Alert.alert('Save Failed', 'Could not save the file to your device.')
+    return false
   }
 }

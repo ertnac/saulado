@@ -7,7 +7,6 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  Share,
   Text,
   TextInput,
   View,
@@ -20,7 +19,7 @@ import {
   type DataExport,
 } from '@saulado/shared'
 import * as DocumentPicker from 'expo-document-picker'
-import { File } from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 import * as ImagePicker from 'expo-image-picker'
 import { Button } from '../../components/button'
 import { Card } from '../../components/card'
@@ -44,7 +43,11 @@ import {
   useUpdateSettings,
 } from '../../hooks/settings'
 import { useFormErrors } from '../../hooks/useFormErrors'
-import { importSetsAndCards, parseAndValidateJson } from '../../services/json-transfer'
+import {
+  importSetsAndCards,
+  parseAndValidateJson,
+  shareJsonPayload,
+} from '../../services/json-transfer'
 import { useAuthStore } from '../../stores/auth'
 import { useTokenColor } from '../../stores/theme'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -507,25 +510,12 @@ function ChangePasswordSection(): ReactElement {
 }
 
 /**
- * Android refuses an intent payload much over a megabyte, and the failure is a
- * crash in the OS rather than a rejected promise. Half of that is the cut, since
- * the JSON is UTF-16 in memory and other extras ride along.
- */
-const SHARE_MAX_CHARS = 512_000
-
-/**
  * The GDPR Art. 20 export.
  *
- * `Share.share` is the sink — rung 4 of the ladder, the platform's own sheet,
- * which already reaches Files, Drive, Mail and everything else the user has
- * installed. `expo-file-system` plus `expo-sharing` would write a real `.json`
- * and hand it over as a file, but that is two dependencies for a button most
- * users press once.
- *
- * ponytail: text through the share sheet, so a large library exceeds what an
- * intent can carry and is refused with a pointer at the web. Add
- * `expo-file-system` + `expo-sharing` and write the JSON to
- * `cacheDirectory` when someone actually hits that.
+ * Uses `expo-sharing` to write the JSON to a temp file and hand it to the
+ * system share sheet. This bypasses the Android intent payload limit that
+ * crashed the old `Share.share({ message })` approach and gives the recipient
+ * a proper `.json` file instead of a wall of text.
  */
 function JsonTransferSection(): ReactElement {
   const exportData = useExportData()
@@ -546,21 +536,8 @@ function JsonTransferSection(): ReactElement {
     exportData.mutate(undefined, {
       onSuccess: (data: DataExport) => {
         const json = JSON.stringify(data, null, 2)
-
-        if (json.length > SHARE_MAX_CHARS) {
-          Alert.alert(
-            'Too large to share here',
-            'Your library is bigger than this phone can hand to another app. Export from the web app instead — same file, no size limit.',
-          )
-          return
-        }
-
-        void Share.share({
-          message: json,
-          title: `saulado-export-${data.exportedAt.slice(0, 10)}.json`,
-        }).catch(() => {
-          Alert.alert('Could not share', 'Nothing on this phone accepted the file.')
-        })
+        const filename = `saulado-export-${data.exportedAt.slice(0, 10)}.json`
+        void shareJsonPayload(filename, json)
       },
       onError: () => {
         Alert.alert('Export failed', 'The export could not be built. Try again in a moment.')
@@ -579,8 +556,7 @@ function JsonTransferSection(): ReactElement {
         const file = res.assets[0]
         if (file) {
           setSelectedFile({ name: file.name, size: file.size })
-          const fileObj = new File(file.uri)
-          const content = await fileObj.text()
+          const content = await FileSystem.readAsStringAsync(file.uri)
           setJsonText(content)
         }
       }

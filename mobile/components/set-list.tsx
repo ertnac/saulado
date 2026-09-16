@@ -22,7 +22,11 @@ import {
   useSets,
 } from '../hooks/cards'
 import { useDueCounts } from '../hooks/study'
-import { exportSingleSetAsJson, shareJsonPayload } from '../services/json-transfer'
+import {
+  exportSingleSetAsJson,
+  saveJsonToDevice,
+  shareJsonPayload,
+} from '../services/json-transfer'
 import { useTokenColor } from '../stores/theme'
 import { useOfflineSetsStore } from '../stores/offline-sets'
 import { downloadSet, removeOfflineSet } from '../lib/offline/sets'
@@ -122,10 +126,21 @@ function SetRow({
 
   const handleShare = (): void => {
     setMenuVisible(false)
-    void exportSingleSetAsJson(set.id)
+    void exportSingleSetAsJson(set.id, { title: set.title, color: set.color })
       .then((json) => shareJsonPayload(`${set.title}.json`, json))
-      .catch(() => {
-        Alert.alert('Export Failed', 'Could not build JSON for this set.')
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Could not build JSON for this set.'
+        Alert.alert('Export Failed', message)
+      })
+  }
+
+  const handleSaveToDevice = (): void => {
+    setMenuVisible(false)
+    void exportSingleSetAsJson(set.id, { title: set.title, color: set.color })
+      .then((json) => saveJsonToDevice(`${set.title}.json`, json))
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Could not save set to device.'
+        Alert.alert('Save Failed', message)
       })
   }
 
@@ -340,6 +355,17 @@ function SetRow({
             >
               <FolderInputIcon color={foreground} size={20} />
               <Text className="text-base font-semibold text-foreground">Move Set</Text>
+            </TouchableOpacity>
+
+            <View className="h-px bg-border/40" />
+
+            {/* Save to Device */}
+            <TouchableOpacity
+              onPress={handleSaveToDevice}
+              className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
+            >
+              <DownloadIcon color={foreground} size={20} />
+              <Text className="text-base font-semibold text-foreground">Save to Device</Text>
             </TouchableOpacity>
 
             <View className="h-px bg-border/40" />

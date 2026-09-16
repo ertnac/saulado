@@ -134,7 +134,7 @@ describe('file-repository service', () => {
       expect(html).toContain('#031a14') // dark background
     })
 
-    it('generates PDF viewer HTML with pdf.js script and navigation controls', () => {
+    it('generates continuous scroll PDF viewer HTML with page container and indicator', () => {
       const html = generatePdfViewerHtml({
         pdfBase64: 'JVBERg==',
         title: 'Sample PDF',
@@ -142,9 +142,39 @@ describe('file-repository service', () => {
       })
       expect(html).toContain('pdf.js')
       expect(html).toContain('Sample PDF')
-      expect(html).toContain('pdf-canvas')
-      expect(html).toContain('prevPage()')
-      expect(html).toContain('nextPage()')
+      expect(html).toContain('pdf-container')
+      expect(html).toContain('page-indicator')
+      expect(html).not.toContain('prevPage()')
+      expect(html).not.toContain('nextPage()')
+      expect(html).toContain('IntersectionObserver')
+      expect(html).toContain('page-wrapper')
+    })
+
+    it('embeds highlights and dark mode styles in continuous scroll PDF viewer', () => {
+      const highlights = [
+        {
+          id: 'hl-1',
+          fileId: 'file-1',
+          userId: 'user-1',
+          pageNumber: 2,
+          text: 'Highlighted concept',
+          startOffset: 10,
+          endOffset: 29,
+          color: 'yellow' as const,
+          createdAt: '2026-09-16T00:00:00.000Z',
+        },
+      ]
+      const html = generatePdfViewerHtml({
+        pdfBase64: 'JVBERg==',
+        title: 'Dark PDF',
+        isDark: true,
+        highlights,
+      })
+      expect(html).toContain('#031a14')
+      expect(html).toContain('Highlighted concept')
+      expect(html).toContain('PDF_PAGE_CHANGED')
+      expect(html).toContain('PDF_TEXT_SELECTION')
+      expect(html).toContain("closest('.page-wrapper')")
     })
   })
 

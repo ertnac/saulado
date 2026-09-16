@@ -33,18 +33,22 @@ export function FlashcardCard({ card, disabled, onSubmit }: FlashcardCardProps):
     setIsFlipped(!isFlipped)
   }
 
+  const getAnswerForOrdinal = (ordinal: number): string => {
+    if (card.blankAnswers && card.blankAnswers[ordinal]) {
+      return card.blankAnswers[ordinal]
+    }
+    if (card.cardAnswers && card.cardAnswers[ordinal]) {
+      return card.cardAnswers[ordinal].answerText
+    }
+    return ''
+  }
+
   const handleRating = (isCorrect: boolean) => {
     if (disabled) return
 
     const overrideValues: Record<number, string> = {}
-    if (isCorrect && card.blankAnswers) {
-      for (let i = 0; i < card.blankCount; i++) {
-        overrideValues[i] = card.blankAnswers[i] ?? ''
-      }
-    } else {
-      for (let i = 0; i < card.blankCount; i++) {
-        overrideValues[i] = ''
-      }
+    for (let i = 0; i < card.blankCount; i++) {
+      overrideValues[i] = isCorrect ? getAnswerForOrdinal(i) : ''
     }
 
     onSubmit(overrideValues)
@@ -68,26 +72,20 @@ export function FlashcardCard({ card, disabled, onSubmit }: FlashcardCardProps):
     }
   })
 
-  // Derive term and context
-  const primaryAnswer = card.blankAnswers?.[0] || 'Concept Term'
-  const contextSentence = card.segments
-    .map((s) => (s.kind === 'text' ? s.text : '______'))
-    .join('')
-    .trim()
-
-  const categoryTag = card.tags?.[0] ? card.tags[0].toUpperCase() : 'CONCEPT TERM'
+  const categoryTag = card.tags?.[0] ? card.tags[0].toUpperCase() : 'CONCEPT QUESTION'
+  const conceptTag = card.tags?.[1] ? `#${card.tags[1]}` : null
 
   return (
     <View style={{ gap: 20, width: '100%' }}>
       <View style={styles.container}>
-        {/* ── FRONT SIDE (Matching Image 3) ── */}
+        {/* ── FRONT SIDE (The Question / Prompt Face) ── */}
         <Animated.View
           style={[styles.face, frontAnimatedStyle]}
           pointerEvents={isFlipped ? 'none' : 'auto'}
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Card Front. Tap to flip."
+            accessibilityLabel="Card Front: Question. Tap to reveal answer."
             onPress={handleFlip}
             disabled={disabled}
             style={{
@@ -105,7 +103,7 @@ export function FlashcardCard({ card, disabled, onSubmit }: FlashcardCardProps):
               elevation: 3,
             }}
           >
-            {/* Header: Category Tag & Audio Icon */}
+            {/* Header: Category Tag, Question Badge & Audio Icon */}
             <View
               style={{
                 flexDirection: 'row',
@@ -113,17 +111,40 @@ export function FlashcardCard({ card, disabled, onSubmit }: FlashcardCardProps):
                 justifyContent: 'space-between',
               }}
             >
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontWeight: '700',
-                  letterSpacing: 0.8,
-                  textTransform: 'uppercase',
-                  color: isDark ? '#A6C2B5' : '#317054',
-                }}
-              >
-                {categoryTag}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: '700',
+                    letterSpacing: 0.8,
+                    textTransform: 'uppercase',
+                    color: isDark ? '#A6C2B5' : '#317054',
+                  }}
+                >
+                  {categoryTag}
+                </Text>
+                <View
+                  style={{
+                    paddingHorizontal: 8,
+                    paddingVertical: 2,
+                    borderRadius: 999,
+                    backgroundColor: isDark ? 'rgba(49, 112, 84, 0.25)' : '#E8F3EE',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontWeight: '700',
+                      letterSpacing: 0.5,
+                      textTransform: 'uppercase',
+                      color: isDark ? '#A6C2B5' : '#317054',
+                    }}
+                  >
+                    Question
+                  </Text>
+                </View>
+              </View>
+
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel="Audio pronunciation"
@@ -136,44 +157,70 @@ export function FlashcardCard({ card, disabled, onSubmit }: FlashcardCardProps):
               </TouchableOpacity>
             </View>
 
-            {/* Center Concept & Subtext */}
-            <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 20 }}>
+            {/* Center: Question Prompt with Cloze Blanks */}
+            <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 18 }}>
               <Text
                 style={{
-                  fontSize: 26,
-                  fontWeight: '800',
-                  letterSpacing: -0.5,
-                  textAlign: 'center',
-                  color: isDark ? '#FFFFFF' : '#052E24',
-                  marginBottom: 8,
+                  fontSize: 19,
+                  fontWeight: '600',
+                  lineHeight: 29,
+                  color: isDark ? '#FFFFFF' : '#111A17',
+                  textAlign: 'left',
                 }}
               >
-                {primaryAnswer}
+                {card.segments.map((segment, index) => {
+                  if (segment.kind === 'text') {
+                    return <Text key={`t-${index}`}>{segment.text}</Text>
+                  }
+                  return (
+                    <Text
+                      key={`b-${segment.ordinal}`}
+                      style={{
+                        fontWeight: '800',
+                        color: isDark ? '#A6C2B5' : '#317054',
+                        backgroundColor: isDark ? 'rgba(49, 112, 84, 0.35)' : '#E8F3EE',
+                      }}
+                    >
+                      {' [ ? ] '}
+                    </Text>
+                  )
+                })}
               </Text>
-              {contextSentence.length > 0 && (
-                <Text
-                  numberOfLines={3}
-                  style={{
-                    fontSize: 14,
-                    fontWeight: '500',
-                    textAlign: 'center',
-                    color: isDark ? '#889591' : '#6B9985',
-                    lineHeight: 20,
-                    maxWidth: '90%',
-                  }}
-                >
-                  {contextSentence}
-                </Text>
+
+              {conceptTag && (
+                <View style={{ flexDirection: 'row', marginTop: 14 }}>
+                  <View
+                    style={{
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                      borderRadius: 999,
+                      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#EEF2EE',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '600',
+                        color: isDark ? '#889591' : '#6B9985',
+                      }}
+                    >
+                      {conceptTag}
+                    </Text>
+                  </View>
+                </View>
               )}
             </View>
 
-            {/* Bottom Affordance: TAP CARD TO FLIP */}
+            {/* Bottom Affordance: Tap Card to Reveal Answer */}
             <View
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 6,
+                borderTopWidth: 1,
+                borderTopColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#EEF2EE',
+                paddingTop: 14,
               }}
             >
               <RotateCwIcon color={isDark ? '#A6C2B5' : '#317054'} size={14} />
@@ -186,20 +233,20 @@ export function FlashcardCard({ card, disabled, onSubmit }: FlashcardCardProps):
                   color: isDark ? '#A6C2B5' : '#317054',
                 }}
               >
-                Tap Card to Flip
+                Tap Card to Reveal Answer
               </Text>
             </View>
           </Pressable>
         </Animated.View>
 
-        {/* ── BACK SIDE (Revealed Answer) ── */}
+        {/* ── BACK SIDE (Revealed Answer Face) ── */}
         <Animated.View
           style={[styles.face, styles.backFace, backAnimatedStyle]}
           pointerEvents={isFlipped ? 'auto' : 'none'}
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Card Back. Tap to flip back."
+            accessibilityLabel="Card Back: Revealed Answer. Tap to flip back."
             onPress={handleFlip}
             disabled={disabled}
             style={{
@@ -247,7 +294,7 @@ export function FlashcardCard({ card, disabled, onSubmit }: FlashcardCardProps):
                     color: isDark ? '#A6C2B5' : '#317054',
                   }}
                 >
-                  Full Answer & Context
+                  Answer Revealed
                 </Text>
               </View>
 
@@ -263,59 +310,98 @@ export function FlashcardCard({ card, disabled, onSubmit }: FlashcardCardProps):
               </TouchableOpacity>
             </View>
 
-            {/* Center Answer Explanation */}
-            <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 16 }}>
-              {card.blankAnswers && card.blankAnswers.length > 0
-                ? card.blankAnswers.map((ans, idx) => (
+            {/* Center: Revealed Answer Box(es) and Context Sentence */}
+            <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 14, gap: 12 }}>
+              {/* Answer Boxes */}
+              <View style={{ gap: 8 }}>
+                {Array.from({ length: card.blankCount }).map((_, idx) => {
+                  const answer = getAnswerForOrdinal(idx)
+                  return (
                     <View
                       key={idx}
                       style={{
                         width: '100%',
-                        paddingVertical: 10,
+                        paddingVertical: 12,
                         paddingHorizontal: 16,
                         borderRadius: 16,
-                        backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#FFFFFF',
-                        marginBottom: 8,
+                        backgroundColor: isDark ? 'rgba(49, 112, 84, 0.25)' : '#E8F3EE',
+                        borderWidth: 1.5,
+                        borderColor: isDark ? '#317054' : '#6B9985',
                         alignItems: 'center',
                       }}
                     >
+                      {card.blankCount > 1 && (
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            fontWeight: '700',
+                            letterSpacing: 0.8,
+                            textTransform: 'uppercase',
+                            color: isDark ? '#A6C2B5' : '#317054',
+                            marginBottom: 3,
+                          }}
+                        >
+                          Blank {idx + 1}
+                        </Text>
+                      )}
                       <Text
                         style={{
-                          fontSize: 20,
-                          fontWeight: '700',
+                          fontSize: 22,
+                          fontWeight: '800',
+                          letterSpacing: -0.3,
                           color: isDark ? '#FFFFFF' : '#052E24',
                           textAlign: 'center',
                         }}
                       >
-                        {ans}
+                        {answer || 'Answer'}
                       </Text>
                     </View>
-                  ))
-                : null}
+                  )
+                })}
+              </View>
 
-              {contextSentence.length > 0 && (
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: '500',
-                    textAlign: 'center',
-                    color: isDark ? 'rgba(255,255,255,0.85)' : '#4C5854',
-                    lineHeight: 22,
-                    marginTop: 8,
-                  }}
-                >
-                  {contextSentence}
-                </Text>
-              )}
+              {/* Full Context Sentence with Highlighted Answer */}
+              <Text
+                style={{
+                  fontSize: 14,
+                  lineHeight: 22,
+                  fontWeight: '500',
+                  color: isDark ? 'rgba(255, 255, 255, 0.85)' : '#4C5854',
+                  textAlign: 'center',
+                  marginTop: 4,
+                }}
+              >
+                {card.segments.map((segment, index) => {
+                  if (segment.kind === 'text') {
+                    return <Text key={`bt-${index}`}>{segment.text}</Text>
+                  }
+                  const ans = getAnswerForOrdinal(segment.ordinal)
+                  return (
+                    <Text
+                      key={`bb-${segment.ordinal}`}
+                      style={{
+                        fontWeight: '800',
+                        color: isDark ? '#A6C2B5' : '#317054',
+                        textDecorationLine: 'underline',
+                      }}
+                    >
+                      {` ${ans || '___'} `}
+                    </Text>
+                  )
+                })}
+              </Text>
             </View>
 
-            {/* Bottom Flip Affordance */}
+            {/* Bottom Flip Affordance: Tap to Flip Back */}
             <View
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 6,
+                borderTopWidth: 1,
+                borderTopColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(49, 112, 84, 0.15)',
+                paddingTop: 14,
               }}
             >
               <RotateCwIcon color={isDark ? '#A6C2B5' : '#317054'} size={14} />
@@ -409,11 +495,11 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     position: 'relative',
-    height: 320,
+    minHeight: 330,
   },
   face: {
     width: '100%',
-    height: 320,
+    minHeight: 330,
   },
   backFace: {
     position: 'absolute',

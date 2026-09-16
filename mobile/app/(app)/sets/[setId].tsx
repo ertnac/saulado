@@ -52,7 +52,11 @@ import {
   useSet,
 } from '../../../hooks/cards'
 import { useDueCounts } from '../../../hooks/study'
-import { exportSingleSetAsJson, shareJsonPayload } from '../../../services/json-transfer'
+import {
+  exportSingleSetAsJson,
+  saveJsonToDevice,
+  shareJsonPayload,
+} from '../../../services/json-transfer'
 import { useTokenColor } from '../../../stores/theme'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -291,10 +295,28 @@ export default function SetDetailScreen(): ReactElement {
   const handleShareSet = (): void => {
     if (!setId) return
     setMenuVisible(false)
-    void exportSingleSetAsJson(setId)
+    void exportSingleSetAsJson(setId, {
+      title: title ?? undefined,
+      color: set.data?.set.color ?? offlineEntry?.metadata?.color,
+    })
       .then((json) => shareJsonPayload(`${title ?? 'set'}.json`, json))
-      .catch(() => {
-        Alert.alert('Export Failed', 'Could not build JSON for this set.')
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Could not build JSON for this set.'
+        Alert.alert('Export Failed', message)
+      })
+  }
+
+  const handleSaveSetToDevice = (): void => {
+    if (!setId) return
+    setMenuVisible(false)
+    void exportSingleSetAsJson(setId, {
+      title: title ?? undefined,
+      color: set.data?.set.color ?? offlineEntry?.metadata?.color,
+    })
+      .then((json) => saveJsonToDevice(`${title ?? 'set'}.json`, json))
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Could not save set to device.'
+        Alert.alert('Save Failed', message)
       })
   }
 
@@ -672,6 +694,17 @@ export default function SetDetailScreen(): ReactElement {
             <View className="h-px bg-border/40" />
 
             {/* Option 3: Share JSON */}
+            {/* Save to Device */}
+            <TouchableOpacity
+              onPress={handleSaveSetToDevice}
+              className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
+            >
+              <DownloadIcon color={foreground} size={20} />
+              <Text className="text-base font-semibold text-foreground">Save to Device</Text>
+            </TouchableOpacity>
+
+            <View className="h-px bg-border/40" />
+
             <TouchableOpacity
               onPress={handleShareSet}
               className="flex-row items-center gap-3 px-5 py-4 active:bg-surface-muted"
