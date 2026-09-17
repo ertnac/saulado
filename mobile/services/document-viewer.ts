@@ -1,15 +1,165 @@
 import * as FileSystem from 'expo-file-system/legacy'
-import mammoth from 'mammoth'
+import JSZip from 'jszip'
 import { extractTextFromPdfStream, type PdfHighlight } from '@saulado/shared'
 import type { RepositoryFile } from '../lib/offline/types'
 
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binaryString = atob(base64)
-  const bytes = new Uint8Array(binaryString.length)
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i)
+function decodeXmlEntities(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCharCode(Number(dec)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+}
+
+export async function parseDocxContent(base64: string): Promise<{ html: string; text: string }> {
+  try {
+    const zip = await JSZip.loadAsync(base64, { base64: true })
+    const docXmlFile = zip.file('word/document.xml')
+    if (!docXmlFile) {
+      return { html: '<p><em>(Empty document)</em></p>', text: '' }
+    }
+    const xml = await docXmlFile.async('text')
+    const bodyMatch = xml.match(/<w:body[^>]*>([\s\S]*?)<\/w:body>/)
+    if (!bodyMatch || !bodyMatch[1]) {
+      return { html: '<p><em>(Empty document)</em></p>', text: '' }
+    }
+    const bodyContent = bodyMatch[1]
+    const blockRegex = /<w:tbl[\s\S]*?<\/w:tbl>|<w:p[\s\S]*?<\/w:p>/g
+    const blocks = bodyContent.match(blockRegex) || []
+
+    const htmlParts: string[] = []
+    const textParts: string[] = []
+    let inList = false
+
+    for (const block of blocks) {
+      if (block.startsWith('<w:tbl')) {
+        if (inList) {
+          htmlParts.push('</ul>')
+          inList = false
+        }
+        const rows = block.match(/<w:tr[\s\S]*?<\/w:tr>/g) || []
+        const trHtml: string[] = []
+        const trText: string[] = []
+        for (const row of rows) {
+          const cells = row.match(/<w:tc[\s\S]*?<\/w:tc>/g) || []
+          const tdHtml: string[] = []
+          const tdText: string[] = []
+          for (const cell of cells) {
+            const pMatches = cell.match(/<w:p[\s\S]*?<\/w:p>/g) || [cell]
+            const cellTexts: string[] = []
+            for (const p of pMatches) {
+              const tMatches = p.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || []
+              const pText = tMatches
+                .map((t) => decodeXmlEntities(t.replace(/<w:t[^>]*>([\s\S]*?)<\/w:t>/, '$1')))
+                .join('')
+              if (pText.trim()) cellTexts.push(pText.trim())
+            }
+            const cellContent = cellTexts.join(' ')
+            tdHtml.push(`<td>${cellContent || '&nbsp;'}</td>`)
+            tdText.push(cellContent)
+          }
+          if (tdHtml.length > 0) {
+            trHtml.push(`<tr>${tdHtml.join('')}</tr>`)
+            trText.push(tdText.join(' | '))
+          }
+        }
+        if (trHtml.length > 0) {
+          htmlParts.push(
+            `<table border="1" style="width:100%; border-collapse:collapse; margin:12px 0;">${trHtml.join('')}</table>`,
+          )
+          textParts.push(trText.join('\n'))
+        }
+      } else {
+        const headingMatch = block.match(
+          /<w:pStyle\s+[^>]*w:val=["'](?:Heading|Title)?([1-6])?["']/i,
+        )
+        const isList = /<w:numPr[\s\S]*?<\/w:numPr>/.test(block)
+
+        const runs = block.match(/<w:r[\s\S]*?<\/w:r>/g) || []
+        let pText = ''
+        let pHtml = ''
+
+        for (const run of runs) {
+          const isBold =
+            /<w:b(\s|\/|>)/.test(run) && !/<w:b\s+[^>]*w:val=["'](?:0|false|off)["']/.test(run)
+          const isItalic =
+            /<w:i(\s|\/|>)/.test(run) && !/<w:i\s+[^>]*w:val=["'](?:0|false|off)["']/.test(run)
+          const isUnderline =
+            /<w:u(\s|\/|>)/.test(run) && !/<w:u\s+[^>]*w:val=["'](?:none)["']/.test(run)
+
+          const parts =
+            run.match(
+              /<w:t[^>]*>[\s\S]*?<\/w:t>|<w:br\b[^>]*\/>|<w:cr\b[^>]*\/>|<w:tab\b[^>]*\/>/g,
+            ) || []
+          let runText = ''
+          let runHtml = ''
+          for (const part of parts) {
+            if (part.startsWith('<w:t')) {
+              const raw = part.replace(/<w:t[^>]*>([\s\S]*?)<\/w:t>/, '$1')
+              const decoded = decodeXmlEntities(raw)
+              runText += decoded
+              runHtml += decoded.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            } else if (part.startsWith('<w:br') || part.startsWith('<w:cr')) {
+              runText += '\n'
+              runHtml += '<br/>'
+            } else if (part.startsWith('<w:tab')) {
+              runText += '\t'
+              runHtml += '&nbsp;&nbsp;&nbsp;&nbsp;'
+            }
+          }
+
+          if (runText) {
+            pText += runText
+            let formattedHtml = runHtml
+            if (isBold) formattedHtml = `<strong>${formattedHtml}</strong>`
+            if (isItalic) formattedHtml = `<em>${formattedHtml}</em>`
+            if (isUnderline) formattedHtml = `<u>${formattedHtml}</u>`
+            pHtml += formattedHtml
+          }
+        }
+
+        const trimmedText = pText.trim()
+        if (trimmedText) {
+          textParts.push(trimmedText)
+          if (headingMatch && headingMatch[1]) {
+            if (inList) {
+              htmlParts.push('</ul>')
+              inList = false
+            }
+            const level = headingMatch[1]
+            htmlParts.push(`<h${level}>${pHtml}</h${level}>`)
+          } else if (isList) {
+            if (!inList) {
+              htmlParts.push('<ul>')
+              inList = true
+            }
+            htmlParts.push(`<li>${pHtml}</li>`)
+          } else {
+            if (inList) {
+              htmlParts.push('</ul>')
+              inList = false
+            }
+            htmlParts.push(`<p>${pHtml}</p>`)
+          }
+        }
+      }
+    }
+
+    if (inList) {
+      htmlParts.push('</ul>')
+    }
+
+    const finalHtml =
+      htmlParts.length > 0 ? htmlParts.join('\n') : '<p><em>(Empty document)</em></p>'
+    const finalText = textParts.join('\n\n')
+    return { html: finalHtml, text: finalText }
+  } catch (err) {
+    console.warn('[document-viewer] docx parsing error:', err)
+    return { html: '<p><em>(Could not parse document content)</em></p>', text: '' }
   }
-  return bytes.buffer
 }
 
 export function generateReaderHtml({
@@ -180,10 +330,12 @@ export function generatePdfViewerHtml({
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes" />
   <title>${title}</title>
-  <script src="file:///android_asset/pdfjs/pdf.min.js"></script>
+  <script src="pdfjs/pdf.min.js"></script>
+  <script src="pdfjs/pdf.worker.min.js"></script>
   <script>
     if (typeof pdfjsLib === 'undefined') {
-      document.write('<script src="pdfjs/pdf.min.js"><\\/script>');
+      document.write('<script src="file:///android_asset/pdfjs/pdf.min.js"><\\/script>');
+      document.write('<script src="file:///android_asset/pdfjs/pdf.worker.min.js"><\\/script>');
     }
   </script>
   <script>
@@ -347,12 +499,8 @@ export function generatePdfViewerHtml({
   <script>
     if (typeof pdfjsLib !== 'undefined') {
       try {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'file:///android_asset/pdfjs/pdf.worker.min.js';
-      } catch (e) {
-        try {
-          pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs/pdf.worker.min.js';
-        } catch (e2) {}
-      }
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+      } catch (e) {}
     }
 
     const pdfData = atob("${pdfBase64}");
@@ -837,12 +985,44 @@ export function generatePdfViewerHtml({
       setTimeout(checkSelection, 150);
     });
 
+    var loadingWatchdog = setTimeout(function() {
+      var loadEl = document.getElementById('loading');
+      if (loadEl && loadEl.style.display !== 'none') {
+        loadEl.innerHTML = '<div style="padding: 16px; border-radius: 14px; background: ' + (${isDark ? "'rgba(7,46,36,0.95)'" : "'#E8F3EE'"}) + '; border: 1px solid ' + (${isDark ? "'rgba(255,255,255,0.12)'" : "'#A6C2B5'"}) + '; max-width: 320px; margin: 0 auto; text-align: center; box-shadow: 0 4px 14px rgba(0,0,0,0.12);">' +
+          '<p style="margin: 0 0 12px 0; font-weight: 700; font-size: 14px; color: ' + (${isDark ? "'#FFFFFF'" : "'#052E24'"}) + ';">Document rendering is taking a moment…</p>' +
+          '<button id="switch-reader-btn" style="background: #052E24; color: #FFFFFF; border: none; padding: 10px 18px; border-radius: 20px; font-weight: 700; font-size: 13px; cursor: pointer;">Switch to Fast Reader Mode</button>' +
+          '</div>';
+        var btn = document.getElementById('switch-reader-btn');
+        if (btn) {
+          btn.onclick = function() {
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SWITCH_TO_READER' }));
+            }
+          };
+        }
+      }
+    }, 4500);
+
     if (typeof pdfjsLib === 'undefined') {
-      document.getElementById('loading').innerHTML =
-        '<strong>Offline Visual Engine Initializing...</strong><br/><span style="font-size: 13px; opacity: 0.8;">You can also switch to <em>Reader</em> mode at the top for instant distraction-free reading.</span>';
+      var loadEl = document.getElementById('loading');
+      if (loadEl) {
+        loadEl.innerHTML = '<div style="padding: 16px; border-radius: 14px; background: ' + (${isDark ? "'rgba(7,46,36,0.95)'" : "'#E8F3EE'"}) + '; border: 1px solid ' + (${isDark ? "'rgba(255,255,255,0.12)'" : "'#A6C2B5'"}) + '; max-width: 320px; margin: 0 auto; text-align: center; box-shadow: 0 4px 14px rgba(0,0,0,0.12);">' +
+          '<p style="margin: 0 0 12px 0; font-weight: 700; font-size: 14px; color: ' + (${isDark ? "'#FFFFFF'" : "'#052E24'"}) + ';">Visual engine unavailable offline</p>' +
+          '<button id="switch-reader-btn-init" style="background: #052E24; color: #FFFFFF; border: none; padding: 10px 18px; border-radius: 20px; font-weight: 700; font-size: 13px; cursor: pointer;">Open in Reader Mode</button>' +
+          '</div>';
+        var btn = document.getElementById('switch-reader-btn-init');
+        if (btn) {
+          btn.onclick = function() {
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SWITCH_TO_READER' }));
+            }
+          };
+        }
+      }
     } else {
       pdfjsLib.getDocument({ data: uint8Array }).promise.then(function(pdf) {
         pdfDoc = pdf;
+        clearTimeout(loadingWatchdog);
         document.getElementById('loading').style.display = 'none';
 
         updatePageIndicator(1);
@@ -881,8 +1061,22 @@ export function generatePdfViewerHtml({
           setupObservers();
         });
       }).catch(function(error) {
-        document.getElementById('loading').innerHTML =
-          '<strong>Notice:</strong> Could not render visual canvas (' + error.message + ').<br/><span style="font-size: 13px;">Please switch to <em>Reader</em> mode in the top bar to read the extracted text.</span>';
+        clearTimeout(loadingWatchdog);
+        var loadEl = document.getElementById('loading');
+        if (loadEl) {
+          loadEl.innerHTML = '<div style="padding: 16px; border-radius: 14px; background: ' + (${isDark ? "'rgba(7,46,36,0.95)'" : "'#E8F3EE'"}) + '; border: 1px solid ' + (${isDark ? "'rgba(255,255,255,0.12)'" : "'#A6C2B5'"}) + '; max-width: 320px; margin: 0 auto; text-align: center; box-shadow: 0 4px 14px rgba(0,0,0,0.12);">' +
+            '<p style="margin: 0 0 12px 0; font-weight: 700; font-size: 14px; color: ' + (${isDark ? "'#FFFFFF'" : "'#052E24'"}) + ';">Visual render error (' + (error && error.message ? error.message : 'error') + ')</p>' +
+            '<button id="switch-reader-btn-err" style="background: #052E24; color: #FFFFFF; border: none; padding: 10px 18px; border-radius: 20px; font-weight: 700; font-size: 13px; cursor: pointer;">Switch to Reader Mode</button>' +
+            '</div>';
+          var btn = document.getElementById('switch-reader-btn-err');
+          if (btn) {
+            btn.onclick = function() {
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SWITCH_TO_READER' }));
+              }
+            };
+          }
+        }
       });
     }
   </script>
@@ -911,20 +1105,18 @@ export async function loadDocumentContent(
 
   // 1. DOCX (Word Modern)
   if (file.fileType === 'docx') {
-    const arrayBuffer = base64ToArrayBuffer(base64)
-    const result = await mammoth.convertToHtml({ arrayBuffer })
-    const rawTextResult = await mammoth.extractRawText({ arrayBuffer })
+    const docxResult = await parseDocxContent(base64)
 
     const fullHtml = generateReaderHtml({
       title: file.name,
-      bodyHtml: result.value || '<p><em>(Empty document)</em></p>',
+      bodyHtml: docxResult.html || '<p><em>(Empty document)</em></p>',
       isDark,
       enableSnippetSelection: true,
     })
 
     return {
       html: fullHtml,
-      extractedText: rawTextResult.value || '',
+      extractedText: docxResult.text || '',
       hasReaderMode: false,
     }
   }

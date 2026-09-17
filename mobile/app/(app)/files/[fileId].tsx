@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -170,6 +171,8 @@ export default function DocumentViewerScreen(): ReactElement {
           if (typeof payload.pageNumber === 'number' && typeof payload.totalPages === 'number') {
             setPageProgress({ current: payload.pageNumber, total: payload.totalPages })
           }
+        } else if (payload.type === 'SWITCH_TO_READER') {
+          setViewMode('reader')
         }
       }
     } catch (err) {
@@ -470,7 +473,10 @@ export default function DocumentViewerScreen(): ReactElement {
         <WebView
           ref={webViewRef}
           originWhitelist={['*']}
-          source={{ html: currentHtml }}
+          source={{
+            html: currentHtml,
+            baseUrl: Platform.OS === 'android' ? 'file:///android_asset/' : undefined,
+          }}
           style={{ flex: 1, backgroundColor: isDark ? '#050D0A' : '#FAFBF9' }}
           scrollEnabled={true}
           javaScriptEnabled={true}
