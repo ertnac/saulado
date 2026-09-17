@@ -28,16 +28,20 @@ vi.mock('expo-file-system/legacy', () => ({
   copyAsync: vi.fn(),
   deleteAsync: vi.fn(),
   downloadAsync: vi.fn(),
+  writeAsStringAsync: vi.fn(),
   documentDirectory: 'file:///test-dir/',
   EncodingType: { Base64: 'base64' },
 }))
 
+import * as DocumentPicker from 'expo-document-picker'
 import {
   detectFileType,
   formatFileSize,
   verifyMagicBytes,
   fetchCloudFiles,
   getDownloadedCloudFileMap,
+  pickAndImportFiles,
+  type ImportProgressUpdate,
 } from '../file-repository'
 import { generateReaderHtml, generatePdfViewerHtml } from '../document-viewer'
 import * as FileSystem from 'expo-file-system/legacy'
@@ -248,6 +252,69 @@ describe('file-repository service', () => {
       expect(map.get('cloud-1')).toBe('local-1')
       expect(map.get('cloud-2')).toBe('local-2')
       expect(map.get('cloud-3')).toBeUndefined()
+    })
+  })
+
+  describe('pickAndImportFiles progress callback', () => {
+    it('notifies 3 distinct steps when importing a PowerPoint presentation', async () => {
+      vi.mocked(DocumentPicker.getDocumentAsync).mockResolvedValueOnce({
+        canceled: false,
+        assets: [
+          {
+            uri: 'file:///sample.pptx',
+            name: 'Microeconomics.pptx',
+            mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            size: 5000,
+          },
+        ],
+      })
+
+      vi.mocked(FileSystem.getInfoAsync).mockResolvedValue({
+        exists: true,
+        isDirectory: true,
+        uri: 'file:///test-dir/',
+        size: 5000,
+        modificationTime: 0,
+      })
+
+      // Magic bytes for PPTX (PK.. -> 50 4B 03 04)
+      vi.mocked(FileSystem.readAsStringAsync).mockImplementation((_uri, options) => {
+        if (options && 'length' in options) {
+          return Promise.resolve('UEsDBBQAAAAIAAA=')
+        }
+        return Promise.resolve('mock-base64-pptx')
+      })
+
+      // Backend conversion response
+      vi.mocked(authorizedRequest).mockResolvedValueOnce({
+        file: {
+          name: 'Microeconomics.pdf',
+          fileSize: 4500,
+          dataBase64: 'JVBERi0xLjQK...',
+        },
+      })
+
+      const mockDb = {
+        runAsync: vi.fn().mockResolvedValue({}),
+      }
+      vi.mocked(getDatabase).mockResolvedValue(
+        mockDb as unknown as ReturnType<typeof getDatabase> extends Promise<infer U> ? U : never,
+      )
+
+      const progressEvents: ImportProgressUpdate[] = []
+      const imported = await pickAndImportFiles('user-1', (update) => {
+        progressEvents.push(update)
+      })
+
+      expect(imported).toHaveLength(1)
+      expect(imported[0].name).toBe('Microeconomics.pdf')
+      expect(imported[0].fileType).toBe('pdf')
+
+      // Verify all 3 steps fired
+      expect(progressEvents.map((p) => p.step)).toEqual([1, 2, 3])
+      expect(progressEvents[0].title).toContain('Step 1 of 3')
+      expect(progressEvents[1].title).toContain('Step 2 of 3')
+      expect(progressEvents[2].title).toContain('Step 3 of 3')
     })
   })
 })

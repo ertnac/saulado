@@ -144,11 +144,23 @@ function mapRowToRepositoryFile(row: SQLiteRepositoryFile): RepositoryFile {
   }
 }
 
+export interface ImportProgressUpdate {
+  step: 1 | 2 | 3
+  title: string
+  detail: string
+  fileName: string
+}
+
+export type ImportProgressCallback = (update: ImportProgressUpdate) => void
+
 /**
  * Opens system document picker filtered to PDF, DOC, and DOCX files,
  * validates magic bytes, copies into app sandbox, and saves metadata to SQLite.
  */
-export async function pickAndImportFiles(userId: string): Promise<RepositoryFile[]> {
+export async function pickAndImportFiles(
+  userId: string,
+  onProgress?: ImportProgressCallback,
+): Promise<RepositoryFile[]> {
   if (!userId) throw new Error('User must be authenticated to import repository files.')
 
   const pickResult = await DocumentPicker.getDocumentAsync({
@@ -188,6 +200,13 @@ export async function pickAndImportFiles(userId: string): Promise<RepositoryFile
     let fileSize = 0
 
     if (detectedType === 'pptx' || detectedType === 'ppt') {
+      onProgress?.({
+        step: 1,
+        title: 'Step 1 of 3: Preparing & Uploading',
+        detail: `Reading "${rawName}" and connecting to conversion engine...`,
+        fileName: rawName,
+      })
+
       if (!onlineManager.isOnline()) {
         throw new Error(
           'PowerPoint presentation conversion requires an active internet connection to preserve slide layout. Please connect to the internet to import.',
@@ -203,6 +222,13 @@ export async function pickAndImportFiles(userId: string): Promise<RepositoryFile
 
       const dataBase64 = await FileSystem.readAsStringAsync(asset.uri, {
         encoding: FileSystem.EncodingType.Base64,
+      })
+
+      onProgress?.({
+        step: 2,
+        title: 'Step 2 of 3: Converting to Vector PDF',
+        detail: 'Rendering slides, vector graphics, and selectable text layer...',
+        fileName: rawName,
       })
 
       let converted: ConvertPptResponse
@@ -235,6 +261,13 @@ export async function pickAndImportFiles(userId: string): Promise<RepositoryFile
         throw new Error(`Presentation conversion failed: ${anyErr?.message || 'Server error'}.`)
       }
 
+      onProgress?.({
+        step: 3,
+        title: 'Step 3 of 3: Saving Offline',
+        detail: 'Writing study document into your on-device library...',
+        fileName: converted.file.name,
+      })
+
       finalFileType = 'pdf'
       finalName = converted.file.name
       finalMime = 'application/pdf'
@@ -247,6 +280,13 @@ export async function pickAndImportFiles(userId: string): Promise<RepositoryFile
         encoding: FileSystem.EncodingType.Base64,
       })
     } else {
+      onProgress?.({
+        step: 1,
+        title: 'Step 1 of 3: Preparing File',
+        detail: `Verifying structure for "${rawName}"...`,
+        fileName: rawName,
+      })
+
       const sanitizedName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_')
       destinationPath = `${repoDir}${fileId}_${sanitizedName}`
 
@@ -263,6 +303,13 @@ export async function pickAndImportFiles(userId: string): Promise<RepositoryFile
           fileSize = info.size
         }
       }
+
+      onProgress?.({
+        step: 3,
+        title: 'Step 3 of 3: Saving Offline',
+        detail: 'Storing in on-device SQLite database...',
+        fileName: rawName,
+      })
 
       finalMime =
         asset.mimeType ||

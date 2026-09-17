@@ -1,0 +1,21 @@
+name: Keep Render Server Awake
+
+on:
+  schedule:
+    # Runs every 10 minutes, 24/7
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Saulado API Health Endpoint
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" -m 25 https://saulado-api.onrender.com/api/health)
+          echo "Render health status code: $response"
+          if [ "$response" -ne 200 ]; then
+            echo "Non-200 response received ($response)"
+          else
+            echo "Server is awake and healthy!"
+          fi

@@ -25,6 +25,7 @@ void SplashScreen.preventAutoHideAsync()
 // Removed createQueryClient() call since queryClient is exported directly
 
 import { syncEngine } from '../lib/offline/sync'
+import { startServerKeepAlive } from '../services/api'
 
 /**
  * Restores the session once, on launch.
@@ -44,6 +45,8 @@ function useSessionRestore(): void {
     void useAuthStore.getState().restore()
     // Phase 5.5: Load offline sets index
     void useOfflineSetsStore.getState().load()
+    // Start 10-minute server keepalive ping
+    startServerKeepAlive()
   }, [])
 }
 

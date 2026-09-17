@@ -33,8 +33,10 @@ import {
   getRepositoryStats,
   pickAndImportFiles,
   renameRepositoryFile,
+  type ImportProgressUpdate,
   type RepositoryStats,
 } from '../../../services/file-repository'
+import { ConversionProgressModal } from '../../../components/conversion-progress-modal'
 import { useAuthStore } from '../../../stores/auth'
 import { useTheme } from '../../../stores/theme'
 
@@ -60,6 +62,7 @@ export default function FileRepositoryScreen(): ReactElement {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState<ImportProgressUpdate | null>(null)
 
   const [activeFilter, setActiveFilter] = useState<'all' | 'pdf' | 'image'>('all')
 
@@ -102,8 +105,23 @@ export default function FileRepositoryScreen(): ReactElement {
   const handleImport = async (): Promise<void> => {
     try {
       setImporting(true)
-      const imported = await pickAndImportFiles(userId)
+      const imported = await pickAndImportFiles(userId, (update) => {
+        setImportProgress(update)
+      })
       if (imported.length > 0) {
+        // Show brief completion state so the student sees 100% checkmark
+        setImportProgress((prev) =>
+          prev
+            ? {
+                ...prev,
+                step: 3,
+                title: 'Conversion Complete!',
+                detail: 'Saved to your offline library.',
+              }
+            : null,
+        )
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        setImportProgress(null)
         await loadData()
         Alert.alert(
           'Files Imported',
@@ -112,6 +130,7 @@ export default function FileRepositoryScreen(): ReactElement {
       }
     } catch (error) {
       console.warn('[file-repository] import error:', error)
+      setImportProgress(null)
       const message =
         error instanceof Error
           ? error.message
@@ -119,6 +138,7 @@ export default function FileRepositoryScreen(): ReactElement {
       Alert.alert('Import Failed', message)
     } finally {
       setImporting(false)
+      setImportProgress(null)
     }
   }
 
@@ -726,6 +746,15 @@ export default function FileRepositoryScreen(): ReactElement {
           </Pressable>
         </Modal>
       )}
+
+      {/* 3-Step Automatic Document Conversion Progress Modal */}
+      <ConversionProgressModal
+        visible={Boolean(importProgress)}
+        step={importProgress?.step ?? 1}
+        title={importProgress?.title ?? 'Importing File'}
+        detail={importProgress?.detail ?? 'Processing document...'}
+        fileName={importProgress?.fileName}
+      />
     </View>
   )
 }

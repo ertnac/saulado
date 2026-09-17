@@ -371,3 +371,31 @@ export function authorizedRequest<T>(
 ): Promise<T> {
   return request<T>(path, { ...options, authorized: true })
 }
+
+let keepAliveInterval: ReturnType<typeof setInterval> | null = null
+
+/**
+ * Pings the server every 10 minutes to prevent Render from going to sleep
+ * while users are actively using the mobile app.
+ */
+export function startServerKeepAlive(): void {
+  if (keepAliveInterval) return
+
+  // Initial ping to wake up or check
+  void fetch(apiUrl('/api/health')).catch(() => {})
+
+  // Ping every 10 minutes (600,000 ms)
+  keepAliveInterval = setInterval(
+    () => {
+      void fetch(apiUrl('/api/health')).catch(() => {})
+    },
+    10 * 60 * 1000,
+  )
+}
+
+export function stopServerKeepAlive(): void {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval)
+    keepAliveInterval = null
+  }
+}
