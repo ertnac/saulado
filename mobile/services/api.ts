@@ -163,6 +163,8 @@ interface RequestOptions {
   signal?: AbortSignal
   /** Send the bearer token, and retry once through a refresh on 401. */
   authorized?: boolean
+  /** Request timeout in milliseconds (defaults to 30000). */
+  timeoutMs?: number
 }
 
 async function toApiError(res: Response): Promise<ApiError> {
@@ -190,7 +192,7 @@ async function toApiError(res: Response): Promise<ApiError> {
 const DEFAULT_TIMEOUT_MS = 30000
 
 async function dispatch(path: string, options: RequestOptions): Promise<Response> {
-  const { method = 'GET', body, authorized } = options
+  const { method = 'GET', body, authorized, timeoutMs = DEFAULT_TIMEOUT_MS } = options
   let signal = options.signal
   let timeoutId: ReturnType<typeof setTimeout> | undefined
   let isTimedOut = false
@@ -200,7 +202,7 @@ async function dispatch(path: string, options: RequestOptions): Promise<Response
     timeoutId = setTimeout(() => {
       isTimedOut = true
       controller.abort()
-    }, DEFAULT_TIMEOUT_MS)
+    }, timeoutMs)
     signal = controller.signal
   }
 
@@ -227,7 +229,7 @@ async function dispatch(path: string, options: RequestOptions): Promise<Response
   } catch (error) {
     if (isTimedOut) {
       throw new ApiError(
-        'Request timed out. The server took too long to respond. Please check your connection.',
+        'Request timed out. The server took too long to respond (it may be waking up from sleep on Render). Please try again.',
         408,
         'INTERNAL_ERROR',
       )

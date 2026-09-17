@@ -209,6 +209,7 @@ export async function pickAndImportFiles(userId: string): Promise<RepositoryFile
       try {
         converted = await authorizedRequest<ConvertPptResponse>('/api/files/convert-ppt', {
           method: 'POST',
+          timeoutMs: 120000,
           body: {
             name: rawName,
             mimeType: asset.mimeType,
