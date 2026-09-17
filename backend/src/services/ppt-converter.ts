@@ -41,9 +41,11 @@ export async function convertPresentationToPdf(
     const sofficeBin = process.env.LIBREOFFICE_PATH || 'soffice'
 
     try {
+      const userProfileDir = path.join(tempDir, 'user').replace(/\\/g, '/')
       await execFileAsync(
         sofficeBin,
         [
+          `-env:UserInstallation=file://${userProfileDir}`,
           '--headless',
           '--invisible',
           '--nodefault',
@@ -57,7 +59,7 @@ export async function convertPresentationToPdf(
           tempDir,
           inputFilePath,
         ],
-        { timeout: 45000 },
+        { timeout: 60000 },
       )
 
       const expectedPdfPath = inputFilePath.replace(new RegExp(`\\${ext}$`, 'i'), '.pdf')
@@ -67,7 +69,7 @@ export async function convertPresentationToPdf(
         buffer: pdfBuffer,
         fileName: outputFileName,
       }
-    } catch (execError) {
+    } catch (execError: unknown) {
       // In automated test environments without LibreOffice installed, provide fallback mock PDF
       if (process.env.NODE_ENV === 'test') {
         return {
@@ -76,8 +78,18 @@ export async function convertPresentationToPdf(
         }
       }
 
-      console.error('[ppt-converter] headless LibreOffice execution failed:', execError)
-      throw new Error('Presentation conversion engine unavailable or failed to convert document.')
+      const anyErr = execError as { message?: string; stdout?: string; stderr?: string }
+      console.error('[ppt-converter] headless LibreOffice execution failed:', {
+        message: anyErr.message,
+        stdout: anyErr.stdout,
+        stderr: anyErr.stderr,
+      })
+      throw new Error(
+        anyErr.stderr ||
+          anyErr.stdout ||
+          anyErr.message ||
+          'Presentation conversion engine failed to convert document.',
+      )
     }
   } finally {
     try {

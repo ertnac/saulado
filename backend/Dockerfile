@@ -40,8 +40,15 @@ RUN pnpm --filter @saulado/backend --prod deploy --legacy --node-linker=hoisted 
 FROM base AS runtime
 ENV NODE_ENV=production
 
-# Install LibreOffice and fonts for headless presentation-to-PDF vector conversion
-RUN apk add --no-cache libreoffice font-dejavu font-noto font-noto-cjk
+# Install LibreOffice, headless JRE, and fonts for presentation-to-PDF vector conversion
+RUN apk add --no-cache \
+    libreoffice \
+    openjdk17-jre-headless \
+    ttf-dejavu \
+    ttf-freefont \
+    font-noto \
+    font-noto-cjk \
+    fontconfig
 
 COPY --from=build /app/pruned/node_modules ./node_modules
 COPY --from=build /app/pruned/package.json ./package.json
@@ -55,7 +62,9 @@ COPY --from=build /app/backend/prisma ./prisma
 RUN ./node_modules/.bin/prisma generate
 
 # Non-root. Do this after COPY so the files aren't owned by the unprivileged user.
-RUN addgroup -S app && adduser -S app -G app
+RUN addgroup -S app && adduser -S app -G app -h /home/app \
+ && mkdir -p /home/app && chown -R app:app /home/app
+ENV HOME=/home/app
 USER app
 
 EXPOSE 3000
