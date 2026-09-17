@@ -41,25 +41,33 @@ export async function convertPresentationToPdf(
     const sofficeBin = process.env.LIBREOFFICE_PATH || 'soffice'
 
     try {
-      const userProfileDir = path.join(tempDir, 'user').replace(/\\/g, '/')
+      const sharedProfileDir = path
+        .join(os.tmpdir(), 'libreoffice-cached-profile')
+        .replace(/\\/g, '/')
+      const exportFilter =
+        ext.toLowerCase() === '.doc' || ext.toLowerCase() === '.docx'
+          ? 'pdf:writer_pdf_Export'
+          : 'pdf:impress_pdf_Export'
+
       await execFileAsync(
         sofficeBin,
         [
-          `-env:UserInstallation=file://${userProfileDir}`,
+          `-env:UserInstallation=file://${sharedProfileDir}`,
           '--headless',
           '--invisible',
           '--nodefault',
+          '--nofirststartwizard',
           '--view',
           '--nolockcheck',
           '--nologo',
           '--norestore',
           '--convert-to',
-          'pdf',
+          exportFilter,
           '--outdir',
           tempDir,
           inputFilePath,
         ],
-        { timeout: 60000 },
+        { timeout: 90000 },
       )
 
       const expectedPdfPath = inputFilePath.replace(new RegExp(`\\${ext}$`, 'i'), '.pdf')
