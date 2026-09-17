@@ -265,6 +265,7 @@ describe('file-repository service', () => {
             name: 'Microeconomics.pptx',
             mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
             size: 5000,
+            lastModified: 0,
           },
         ],
       })
@@ -307,14 +308,14 @@ describe('file-repository service', () => {
       })
 
       expect(imported).toHaveLength(1)
-      expect(imported[0].name).toBe('Microeconomics.pdf')
-      expect(imported[0].fileType).toBe('pdf')
+      expect(imported[0]?.name).toBe('Microeconomics.pdf')
+      expect(imported[0]?.fileType).toBe('pdf')
 
       // Verify all 3 steps fired
       expect(progressEvents.map((p) => p.step)).toEqual([1, 2, 3])
-      expect(progressEvents[0].title).toContain('Step 1 of 3')
-      expect(progressEvents[1].title).toContain('Step 2 of 3')
-      expect(progressEvents[2].title).toContain('Step 3 of 3')
+      expect(progressEvents[0]?.title).toContain('Step 1 of 3')
+      expect(progressEvents[1]?.title).toContain('Step 2 of 3')
+      expect(progressEvents[2]?.title).toContain('Step 3 of 3')
     })
   })
 })

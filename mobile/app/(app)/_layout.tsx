@@ -146,14 +146,13 @@ export default function AppLayout(): ReactElement {
                     unmountOnBlur: true,
                   }
                 : {}),
-              ...(name === 'study'
+              ...(name === 'study' || name === 'files/[fileId]'
                 ? {
                     headerShown: false,
                   }
                 : name === 'scan' ||
                     name === 'scan-review' ||
                     name === 'sets/[setId]' ||
-                    name === 'files/[fileId]' ||
                     name === 'files/bag-studio' ||
                     name === 'settings' ||
                     name === 'account'

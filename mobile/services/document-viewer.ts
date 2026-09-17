@@ -212,6 +212,7 @@ export function generatePdfViewerHtml({
       -webkit-overflow-scrolling: touch;
     }
     #page-indicator {
+      display: none !important;
       position: fixed;
       top: 12px;
       left: 50%;

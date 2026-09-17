@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState, type ComponentRef, type ReactElement } from 'react'
-import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WebView } from 'react-native-webview'
@@ -7,7 +16,15 @@ import * as Sharing from 'expo-sharing'
 import type { PdfHighlight } from '@saulado/shared'
 import { Button } from '../../../components/button'
 import { Card } from '../../../components/card'
-import { CloseIcon, ShareIcon, ShoppingBagIcon } from '../../../components/icons'
+import {
+  BookOpenIcon,
+  CheckIcon,
+  ChevronLeftIcon,
+  CloseIcon,
+  MoreHorizontalIcon,
+  ShareIcon,
+  ShoppingBagIcon,
+} from '../../../components/icons'
 import { QuickCardModal } from '../../../components/quick-card-modal'
 import { SnippetBagModal } from '../../../components/snippet-bag-modal'
 import type { RepositoryFile } from '../../../lib/offline/types'
@@ -20,7 +37,7 @@ import { loadDocumentContent, type DocumentContentResult } from '../../../servic
 import { getFileHighlights, saveFileHighlight } from '../../../services/highlights'
 import { resolveUserId } from '../../../hooks/cards'
 import { useSnippetBagStore } from '../../../stores/snippet-bag'
-import { useTheme, useTokenColor } from '../../../stores/theme'
+import { useTheme } from '../../../stores/theme'
 
 interface CurrentSelection {
   text: string
@@ -35,10 +52,6 @@ export default function DocumentViewerScreen(): ReactElement {
   const webViewRef = useRef<ComponentRef<typeof WebView>>(null)
   const { fileId } = useLocalSearchParams<{ fileId: string }>()
   const { isDark } = useTheme()
-
-  const primary = useTokenColor('--primary')
-  const background = useTokenColor('--background')
-  const foreground = useTokenColor('--foreground')
 
   const snippets = useSnippetBagStore((s) => s.snippets)
   const addSnippet = useSnippetBagStore((s) => s.addSnippet)
@@ -55,6 +68,8 @@ export default function DocumentViewerScreen(): ReactElement {
   const [currentSelection, setCurrentSelection] = useState<CurrentSelection | null>(null)
   const [isBagModalOpen, setIsBagModalOpen] = useState(false)
   const [isQuickCardOpen, setIsQuickCardOpen] = useState(false)
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false)
+  const [isAddedToastVisible, setIsAddedToastVisible] = useState(false)
   const [baggedNotice, setBaggedNotice] = useState<string | null>(null)
 
   const bottomNavOffset = Math.max(insets.bottom, 16) + 72
@@ -123,6 +138,7 @@ export default function DocumentViewerScreen(): ReactElement {
           pageNumber?: unknown
           startOffset?: unknown
           endOffset?: unknown
+          totalPages?: unknown
         }
 
         if (payload.type === 'PDF_TEXT_SELECTION' && typeof payload.text === 'string') {
@@ -145,12 +161,8 @@ export default function DocumentViewerScreen(): ReactElement {
           setBaggedNotice('This page contains no digital text layer.')
           setTimeout(() => setBaggedNotice(null), 3000)
         } else if (payload.type === 'PDF_PAGE_CHANGED') {
-          const pagePayload = payload as { pageNumber?: unknown; totalPages?: unknown }
-          if (
-            typeof pagePayload.pageNumber === 'number' &&
-            typeof pagePayload.totalPages === 'number'
-          ) {
-            setPageProgress({ current: pagePayload.pageNumber, total: pagePayload.totalPages })
+          if (typeof payload.pageNumber === 'number' && typeof payload.totalPages === 'number') {
+            setPageProgress({ current: payload.pageNumber, total: payload.totalPages })
           }
         }
       }
@@ -173,17 +185,14 @@ export default function DocumentViewerScreen(): ReactElement {
       endOffset: currentSelection.endOffset,
     })
 
-    const preview =
-      currentSelection.text.length > 28
-        ? `${currentSelection.text.slice(0, 28)}…`
-        : currentSelection.text
-    setBaggedNotice(`Bagged "${preview}"`)
     setCurrentSelection(null)
     webViewRef.current?.injectJavaScript('window.clearPdfSelection?.(); true;')
 
+    // Show "Added to bag" confirmation card matching Image 2
+    setIsAddedToastVisible(true)
     setTimeout(() => {
-      setBaggedNotice(null)
-    }, 2800)
+      setIsAddedToastVisible(false)
+    }, 3500)
   }
 
   const handleHighlightSelected = async (): Promise<void> => {
@@ -205,9 +214,8 @@ export default function DocumentViewerScreen(): ReactElement {
         `window.addPdfHighlight?.(${JSON.stringify(saved)}); window.clearPdfSelection?.(); true;`,
       )
 
-      setBaggedNotice(`Highlighted on Page ${currentSelection.pageNumber || 1}`)
       setCurrentSelection(null)
-
+      setBaggedNotice(`Highlighted on Page ${currentSelection.pageNumber || 1}`)
       setTimeout(() => {
         setBaggedNotice(null)
       }, 2500)
@@ -219,16 +227,40 @@ export default function DocumentViewerScreen(): ReactElement {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background gap-3">
-        <ActivityIndicator size="large" color={primary} />
-        <Text className="text-sm font-medium text-foreground">Preparing document…</Text>
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: isDark ? '#050D0A' : '#FAFBF9',
+          gap: 12,
+        }}
+      >
+        <ActivityIndicator size="large" color="#317054" />
+        <Text
+          style={{
+            fontSize: 14,
+            fontWeight: '600',
+            color: isDark ? '#FFFFFF' : '#111A17',
+          }}
+        >
+          Preparing document…
+        </Text>
       </View>
     )
   }
 
   if (error || !file || !content) {
     return (
-      <View className="flex-1 items-center justify-center bg-background p-6">
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: isDark ? '#050D0A' : '#FAFBF9',
+          padding: 24,
+        }}
+      >
         <Card tone="dashed" className="p-6 items-center justify-center gap-3 text-center">
           <Text className="text-base font-bold text-foreground">Failed to Open Document</Text>
           <Text className="text-xs text-muted-foreground text-center">
@@ -249,98 +281,152 @@ export default function DocumentViewerScreen(): ReactElement {
     viewMode === 'reader' && content.readerHtml ? content.readerHtml : content.html
 
   return (
-    <View className="flex-1 bg-background">
-      {/* Top Document Details & Controls Strip */}
-      <View className="flex-row items-center justify-between px-3.5 py-2.5 border-b border-border bg-surface">
-        <View className="flex-1 mr-2 min-w-0">
-          <Text numberOfLines={1} className="text-sm font-bold text-foreground">
-            {file.name}
-          </Text>
-          <Text numberOfLines={1} className="text-[11px] text-muted-foreground">
-            {file.fileType.toUpperCase()} · {formatFileSize(file.fileSize)}
-            {viewMode === 'visual' && file.fileType === 'pdf' && pageProgress
-              ? ` · Page ${pageProgress.current} of ${pageProgress.total}`
-              : ''}
-            {highlights.length > 0
-              ? ` · ${highlights.length} highlight${highlights.length === 1 ? '' : 's'}`
-              : ''}
-          </Text>
-        </View>
-
-        <View className="flex-row items-center gap-1.5 shrink-0">
-          {/* Visual / Reader Mode Toggle for PDFs */}
-          {file.fileType === 'pdf' && content.hasReaderMode && (
-            <View className="flex-row items-center rounded-full bg-surface-muted p-0.5 border border-border/60">
-              <Pressable
-                onPress={() => setViewMode('visual')}
-                className={`px-2 py-1 rounded-full ${viewMode === 'visual' ? 'bg-surface shadow-xs' : ''}`}
-              >
-                <Text
-                  className={`text-xs ${
-                    viewMode === 'visual' ? 'font-bold text-foreground' : 'text-muted-foreground'
-                  }`}
-                >
-                  Visual
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setViewMode('reader')}
-                className={`px-2 py-1 rounded-full ${viewMode === 'reader' ? 'bg-surface shadow-xs' : ''}`}
-              >
-                <Text
-                  className={`text-xs ${
-                    viewMode === 'reader' ? 'font-bold text-foreground' : 'text-muted-foreground'
-                  }`}
-                >
-                  Reader
-                </Text>
-              </Pressable>
-            </View>
-          )}
-
-          {/* Snippet Bag Button */}
-          <Pressable
-            onPress={() => setIsBagModalOpen(true)}
-            className="flex-row items-center gap-1 px-2.5 py-1.5 rounded-full bg-primary/10 border border-primary/20 active:opacity-75"
-            accessibilityLabel="Open Study Bag"
-          >
-            <ShoppingBagIcon color={primary} size={14} />
-            <Text className="text-xs font-bold text-primary">{snippets.length}</Text>
-          </Pressable>
-
-          {/* Zoom Toggle */}
-          {viewMode === 'visual' && file.fileType === 'pdf' && (
-            <Pressable
-              onPress={toggleZoom}
-              className="px-2.5 py-1.5 rounded-full bg-surface-muted border border-border/80 active:opacity-75"
-              accessibilityLabel="Toggle Zoom Scale"
-            >
-              <Text className="text-xs font-semibold text-foreground">
-                {zoomScale === 1.0 ? 'Fit ↔' : `${Math.round(zoomScale * 100)}% 🔍`}
-              </Text>
-            </Pressable>
-          )}
-
-          {/* Native Share */}
-          <Pressable
-            onPress={() => {
-              void handleShare()
+    <View style={{ flex: 1, backgroundColor: isDark ? '#050D0A' : '#FAFBF9' }}>
+      {/* 1. Top Custom Header Strip matching Image 1, 2, 3 */}
+      <View
+        style={{
+          paddingTop: insets.top + 8,
+          paddingHorizontal: 16,
+          paddingBottom: 12,
+          backgroundColor: isDark ? '#050D0A' : '#FAFBF9',
+          borderBottomWidth: 1,
+          borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : '#EEF2EE',
+          gap: 12,
+        }}
+      >
+        {/* Top Action Row: Back Button, Title + Meta, Options Button */}
+        <View
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          {/* Circular Back Button */}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: isDark ? '#111A17' : '#FFFFFF',
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+              alignItems: 'center',
+              justifyContent: 'center',
+              shadowColor: '#000000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.04,
+              shadowRadius: 4,
+              elevation: 2,
             }}
-            className="p-1.5 rounded-full bg-surface-muted border border-border/80 active:opacity-75"
-            accessibilityLabel="Share Document"
           >
-            <ShareIcon color={foreground} size={15} />
-          </Pressable>
+            <ChevronLeftIcon color={isDark ? '#FFFFFF' : '#111A17'} size={20} />
+          </TouchableOpacity>
+
+          {/* Document Title & Metadata */}
+          <View style={{ flex: 1, marginHorizontal: 12, alignItems: 'flex-start' }}>
+            <Text
+              numberOfLines={1}
+              style={{
+                fontSize: 15,
+                fontWeight: '700',
+                color: isDark ? '#FFFFFF' : '#111A17',
+                letterSpacing: -0.2,
+              }}
+            >
+              {file.name}
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={{
+                fontSize: 11,
+                color: isDark ? '#889591' : '#889591',
+                marginTop: 2,
+                fontWeight: '500',
+              }}
+            >
+              {file.fileType.toUpperCase()}
+              {pageProgress?.total ? ` • ${pageProgress.total} pages` : ''}
+              {file.fileSize ? ` • ${formatFileSize(file.fileSize)}` : ''}
+              {highlights.length > 0
+                ? ` • ${highlights.length} highlight${highlights.length === 1 ? '' : 's'}`
+                : ''}
+            </Text>
+          </View>
+
+          {/* Circular More Options Button */}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="More options"
+            onPress={() => setIsMoreMenuOpen(true)}
+            activeOpacity={0.7}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: isDark ? '#111A17' : '#FFFFFF',
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+              alignItems: 'center',
+              justifyContent: 'center',
+              shadowColor: '#000000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.04,
+              shadowRadius: 4,
+              elevation: 2,
+            }}
+          >
+            <MoreHorizontalIcon color={isDark ? '#FFFFFF' : '#111A17'} size={20} />
+          </TouchableOpacity>
         </View>
+
+        {/* Page Progress Badge Pill (Image 1, 2, 3) */}
+        {file.fileType === 'pdf' && pageProgress && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderRadius: 12,
+                backgroundColor: isDark ? '#1C2B25' : '#E8F3EE',
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.06)' : '#E0ECE5',
+              }}
+            >
+              <BookOpenIcon color={isDark ? '#A6C2B5' : '#317054'} size={14} />
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: '700',
+                  color: isDark ? '#A6C2B5' : '#317054',
+                }}
+              >
+                Pages
+              </Text>
+            </View>
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: '700',
+                color: isDark ? '#FFFFFF' : '#111A17',
+              }}
+            >
+              {pageProgress.current} / {pageProgress.total}
+            </Text>
+          </View>
+        )}
       </View>
 
-      {/* Main WebView Document Viewport */}
-      <View className="flex-1 relative">
+      {/* 2. Main WebView Document Viewport */}
+      <View style={{ flex: 1, position: 'relative' }}>
         <WebView
           ref={webViewRef}
           originWhitelist={['*']}
           source={{ html: currentHtml }}
-          style={{ flex: 1, backgroundColor: background }}
+          style={{ flex: 1, backgroundColor: isDark ? '#050D0A' : '#FAFBF9' }}
           scrollEnabled={true}
           javaScriptEnabled={true}
           domStorageEnabled={true}
@@ -353,92 +439,501 @@ export default function DocumentViewerScreen(): ReactElement {
           onMessage={handleWebViewMessage}
         />
 
-        {/* Floating Study Toolbar upon active text selection */}
-        {currentSelection && (
-          <View className="absolute left-4 right-4 z-40" style={{ bottom: bottomNavOffset }}>
-            <View className="rounded-2xl bg-neutral-900/95 dark:bg-neutral-800/95 border border-white/20 p-3 shadow-2xl backdrop-blur-md">
-              <View className="flex-row items-center justify-between pb-2 mb-2 border-b border-white/10">
-                <View className="flex-1 mr-2">
-                  <Text numberOfLines={1} className="text-xs font-medium text-white/90">
-                    "{currentSelection.text}"
-                  </Text>
-                  {currentSelection.pageNumber && (
-                    <Text className="text-[10px] text-white/60">
-                      Page {currentSelection.pageNumber}
-                    </Text>
-                  )}
-                </View>
+        {/* 3. Floating Bag Button (Image 1 & 2) */}
+        {!currentSelection && (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={`Open Study Bag (${snippets.length} items)`}
+            onPress={() => setIsBagModalOpen(true)}
+            activeOpacity={0.85}
+            style={{
+              position: 'absolute',
+              bottom: bottomNavOffset + 12,
+              right: 20,
+              zIndex: 40,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              paddingHorizontal: 18,
+              height: 46,
+              borderRadius: 23,
+              backgroundColor: '#052E24',
+              shadowColor: '#052E24',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 10,
+              elevation: 8,
+            }}
+          >
+            <ShoppingBagIcon color="#FFFFFF" size={18} />
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: '700',
+                color: '#FFFFFF',
+              }}
+            >
+              Bag ({snippets.length})
+            </Text>
+          </TouchableOpacity>
+        )}
 
-                <Pressable
-                  onPress={() => {
-                    setCurrentSelection(null)
-                    webViewRef.current?.injectJavaScript('window.clearPdfSelection?.(); true;')
-                  }}
-                  className="h-7 w-7 items-center justify-center rounded-full bg-white/10 active:opacity-60"
-                  accessibilityLabel="Dismiss selection"
-                >
-                  <CloseIcon color="#ffffff" size={14} />
-                </Pressable>
-              </View>
-
-              <View className="flex-row items-center justify-end gap-2 pt-1">
-                <Pressable
-                  onPress={() => {
-                    void handleHighlightSelected()
-                  }}
-                  className="px-3 py-1.5 rounded-xl border border-white/20 bg-white/10 active:opacity-75"
-                  accessibilityLabel="Highlight selected text"
-                >
-                  <Text className="text-xs font-semibold text-white">Highlight 📌</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    setIsQuickCardOpen(true)
-                  }}
-                  className="px-3 py-1.5 rounded-xl border border-white/20 bg-white/10 active:opacity-75"
-                  accessibilityLabel="Generate flashcard from selected text"
-                >
-                  <Text className="text-xs font-semibold text-white">Card ✨</Text>
-                </Pressable>
-                <Pressable
-                  onPress={handleAddSelectedToBag}
-                  className="px-3.5 py-1.5 rounded-xl bg-primary active:opacity-85"
-                  accessibilityLabel="Add selected text to snippet bag"
-                >
-                  <Text className="text-xs font-bold text-primary-foreground">+ Add to Bag 🛍️</Text>
-                </Pressable>
-              </View>
+        {/* 4. Post-Confirmation "Added to bag" Toast Card (Image 2) */}
+        {isAddedToastVisible && (
+          <View
+            style={{
+              position: 'absolute',
+              bottom: bottomNavOffset + 12,
+              left: 16,
+              right: 140, // Sits side-by-side with the Bag button
+              zIndex: 50,
+              borderRadius: 16,
+              backgroundColor: isDark ? '#111A17' : '#FFFFFF',
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+              padding: 14,
+              gap: 4,
+              shadowColor: '#000000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.12,
+              shadowRadius: 12,
+              elevation: 6,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <CheckIcon color={isDark ? '#A6C2B5' : '#052E24'} size={15} />
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: '700',
+                  color: isDark ? '#FFFFFF' : '#052E24',
+                }}
+              >
+                Added to bag
+              </Text>
             </View>
+            <Text
+              style={{
+                fontSize: 11,
+                lineHeight: 15,
+                color: isDark ? '#889591' : '#4C5854',
+              }}
+            >
+              Your note has been saved to the bag for later review.
+            </Text>
           </View>
         )}
 
-        {/* Bagged / Highlight Confirmation Toast */}
+        {/* 5. Bagged / Highlight Temporary Notice (Top) */}
         {baggedNotice && (
-          <View className="absolute top-4 left-4 right-4 z-50 items-center">
-            <View className="flex-row items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 shadow-md">
-              <ShoppingBagIcon color="#ffffff" size={16} />
-              <Text numberOfLines={1} className="text-xs font-semibold text-white">
+          <View
+            style={{
+              position: 'absolute',
+              top: 12,
+              left: 20,
+              right: 20,
+              zIndex: 60,
+              alignItems: 'center',
+            }}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                borderRadius: 20,
+                backgroundColor: '#317054',
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                shadowColor: '#000000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 6,
+                elevation: 4,
+              }}
+            >
+              <ShoppingBagIcon color="#FFFFFF" size={16} />
+              <Text
+                numberOfLines={1}
+                style={{
+                  fontSize: 12,
+                  fontWeight: '600',
+                  color: '#FFFFFF',
+                }}
+              >
                 {baggedNotice}
               </Text>
             </View>
           </View>
         )}
 
-        {/* Floating Bag FAB (Bottom Right, Positioned Safely Above Bottom Nav Tab) */}
-        {snippets.length > 0 && !currentSelection && (
-          <Pressable
-            onPress={() => setIsBagModalOpen(true)}
-            style={{ bottom: bottomNavOffset, right: 20, zIndex: 9999, elevation: 10 }}
-            className="absolute h-13 px-4 rounded-full bg-primary flex-row items-center gap-2 shadow-xl active:opacity-85"
-            accessibilityLabel="Open Bag Modal"
-          >
-            <ShoppingBagIcon color="#ffffff" size={20} />
-            <Text className="text-sm font-bold text-primary-foreground">
-              Bag ({snippets.length})
-            </Text>
-          </Pressable>
+        {/* 6. Text Selection Action Sheet & Dimmed Backdrop (Image 3) */}
+        {currentSelection && (
+          <>
+            {/* Dimmed Backdrop */}
+            <Pressable
+              onPress={() => {
+                setCurrentSelection(null)
+                webViewRef.current?.injectJavaScript('window.clearPdfSelection?.(); true;')
+              }}
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  backgroundColor: 'rgba(5, 46, 36, 0.45)',
+                  zIndex: 90,
+                },
+              ]}
+            />
+
+            {/* Bottom Action Sheet Card */}
+            <View
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                zIndex: 100,
+                backgroundColor: isDark ? '#111A17' : '#FFFFFF',
+                borderTopLeftRadius: 24,
+                borderTopRightRadius: 24,
+                borderTopWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+                paddingHorizontal: 20,
+                paddingTop: 12,
+                paddingBottom: Math.max(insets.bottom + 12, 24),
+                shadowColor: '#000000',
+                shadowOffset: { width: 0, height: -4 },
+                shadowOpacity: 0.15,
+                shadowRadius: 16,
+                elevation: 16,
+                gap: 12,
+              }}
+            >
+              {/* Drag Handle Indicator */}
+              <View
+                style={{
+                  alignSelf: 'center',
+                  width: 36,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : '#E0ECE5',
+                }}
+              />
+
+              {/* Header Row: SELECTED TEXT & Close Button */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: '800',
+                    letterSpacing: 0.8,
+                    color: isDark ? '#A6C2B5' : '#052E24',
+                  }}
+                >
+                  SELECTED TEXT
+                </Text>
+
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Close selection"
+                  onPress={() => {
+                    setCurrentSelection(null)
+                    webViewRef.current?.injectJavaScript('window.clearPdfSelection?.(); true;')
+                  }}
+                  activeOpacity={0.7}
+                  style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 13,
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#F0F4F2',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <CloseIcon color={isDark ? '#FFFFFF' : '#4C5854'} size={12} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Selected Text Preview */}
+              <Text
+                numberOfLines={2}
+                style={{
+                  fontSize: 13,
+                  lineHeight: 19,
+                  color: isDark ? '#C5D4CD' : '#4C5854',
+                }}
+              >
+                “{currentSelection.text}”
+              </Text>
+
+              {/* 3 Action Buttons Row */}
+              <View style={{ flexDirection: 'row', gap: 10, paddingTop: 4 }}>
+                {/* Highlight Button */}
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Highlight selected text"
+                  onPress={() => void handleHighlightSelected()}
+                  activeOpacity={0.8}
+                  style={{
+                    flex: 1,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: isDark ? '#1C2B25' : '#FAFBF9',
+                    borderWidth: 1,
+                    borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: '700',
+                      color: isDark ? '#FFFFFF' : '#052E24',
+                    }}
+                  >
+                    Highlight 📌
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Card Button */}
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Create flashcard from selected text"
+                  onPress={() => setIsQuickCardOpen(true)}
+                  activeOpacity={0.8}
+                  style={{
+                    flex: 1,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: isDark ? '#1C2B25' : '#FAFBF9',
+                    borderWidth: 1,
+                    borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: '700',
+                      color: isDark ? '#FFFFFF' : '#052E24',
+                    }}
+                  >
+                    Card ✨
+                  </Text>
+                </TouchableOpacity>
+
+                {/* + Bag Button */}
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Add selected text to bag"
+                  onPress={handleAddSelectedToBag}
+                  activeOpacity={0.85}
+                  style={{
+                    flex: 1.2,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: '#052E24',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    shadowColor: '#052E24',
+                    shadowOffset: { width: 0, height: 3 },
+                    shadowOpacity: 0.25,
+                    shadowRadius: 6,
+                    elevation: 4,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: '800',
+                      color: '#FFFFFF',
+                    }}
+                  >
+                    + Bag 🛍️
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
         )}
       </View>
+
+      {/* 7. Document Options Modal (...) */}
+      {isMoreMenuOpen && (
+        <Modal
+          visible={isMoreMenuOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setIsMoreMenuOpen(false)}
+        >
+          <Pressable
+            onPress={() => setIsMoreMenuOpen(false)}
+            style={{
+              flex: 1,
+              backgroundColor: 'rgba(5, 46, 36, 0.45)',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: 20,
+            }}
+          >
+            <Pressable
+              onPress={(e) => e.stopPropagation()}
+              style={{
+                width: '100%',
+                maxWidth: 340,
+                borderRadius: 24,
+                backgroundColor: isDark ? '#111A17' : '#FFFFFF',
+                padding: 20,
+                gap: 14,
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: '700',
+                  color: isDark ? '#FFFFFF' : '#111A17',
+                }}
+              >
+                Document Options
+              </Text>
+
+              {/* Share */}
+              <TouchableOpacity
+                onPress={() => {
+                  setIsMoreMenuOpen(false)
+                  void handleShare()
+                }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                  paddingVertical: 12,
+                  borderBottomWidth: 1,
+                  borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : '#EEF2EE',
+                }}
+              >
+                <ShareIcon color={isDark ? '#A6C2B5' : '#052E24'} size={18} />
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: '600',
+                    color: isDark ? '#FFFFFF' : '#111A17',
+                  }}
+                >
+                  Share Document
+                </Text>
+              </TouchableOpacity>
+
+              {/* Zoom Fit Toggle (for PDFs) */}
+              {file.fileType === 'pdf' && (
+                <TouchableOpacity
+                  onPress={() => {
+                    toggleZoom()
+                    setIsMoreMenuOpen(false)
+                  }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingVertical: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : '#EEF2EE',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      fontWeight: '600',
+                      color: isDark ? '#FFFFFF' : '#111A17',
+                    }}
+                  >
+                    Zoom Scale
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: '700',
+                      color: isDark ? '#A6C2B5' : '#317054',
+                    }}
+                  >
+                    {zoomScale === 1.0 ? 'Fit ↔' : `${Math.round(zoomScale * 100)}%`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Reader / Visual Mode Toggle (if available) */}
+              {file.fileType === 'pdf' && content.hasReaderMode && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setViewMode(viewMode === 'visual' ? 'reader' : 'visual')
+                    setIsMoreMenuOpen(false)
+                  }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingVertical: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : '#EEF2EE',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      fontWeight: '600',
+                      color: isDark ? '#FFFFFF' : '#111A17',
+                    }}
+                  >
+                    Display Mode
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: '700',
+                      color: isDark ? '#A6C2B5' : '#317054',
+                    }}
+                  >
+                    {viewMode === 'visual' ? 'Visual' : 'Reader'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Close Button */}
+              <TouchableOpacity
+                onPress={() => setIsMoreMenuOpen(false)}
+                style={{
+                  height: 42,
+                  borderRadius: 12,
+                  backgroundColor: isDark ? '#1C2B25' : '#E8F3EE',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginTop: 4,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '700',
+                    color: isDark ? '#FFFFFF' : '#052E24',
+                  }}
+                >
+                  Close
+                </Text>
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
 
       {/* Snippet Bag Review Modal */}
       <SnippetBagModal visible={isBagModalOpen} onClose={() => setIsBagModalOpen(false)} />
