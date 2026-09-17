@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import vm from 'node:vm'
 import JSZip from 'jszip'
 import {
   parseDocxContent,
@@ -164,6 +165,22 @@ describe('document-viewer service', () => {
       expect(html).toContain('storedHighlights')
       expect(html).toContain('#3B82F6')
       expect(html).toContain('hexToRgba')
+    })
+
+    it('generates valid JavaScript syntax inside the PDF viewer and reader script tags', () => {
+      const pdfHtml = generatePdfViewerHtml({
+        pdfBase64: 'JVBERi0xLjQK',
+        fileId: 'test-file-1',
+        title: 'Sample PDF',
+        isDark: false,
+      })
+      const scripts = [...pdfHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+      expect(scripts.length).toBeGreaterThan(0)
+      for (const match of scripts) {
+        const code = match[1]
+        if (!code || code.includes('document.write')) continue
+        expect(() => new vm.Script(code)).not.toThrow()
+      }
     })
   })
 

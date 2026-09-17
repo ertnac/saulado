@@ -835,23 +835,6 @@ export function generatePdfViewerHtml({
       }
     };
 
-    function formatDocumentTextLayout(raw) {
-      if (!raw) return '';
-      var text = String(raw).trim();
-      text = text.replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n');
-      text = text.replace(/([.!?])([A-Z])/g, '$1 $2');
-      text = text.replace(/([)\\]])([A-Za-z0-9])/g, '$1 $2');
-      text = text.replace(/\\b(and|or|in|to|of|the|with|for|by|from|is|are|on|at|as|between|into)([A-Z][a-z]+)\\b/g, '$1 $2');
-      text = text.replace(/\\b([A-Z]{2,})([a-z]{3,})\\b/g, '$1 $2');
-      text = text.replace(/\\b(Introduction|Overview|Summary|Objectives|Conclusion|Background|Definitions?|Chapter\\s*\\d+|Section\\s*\\d+)([A-Z][a-z]+)\\b/g, '$1\\n\\n$2');
-      var bulletPattern = /(?<=[^\\n])\\s+([•\\u2022\\u25cf\\u25cb\\u25a0]|\\(?\\d{1,2}[.)]|\\([a-zA-Z]\\)|[a-zA-Z][.)]|[-*–—])\\s+(?=[A-Za-z0-9"'\\x60\\u201c\\u2018])/g;
-      text = text.replace(bulletPattern, '\\n$1 ');
-      text = text.replace(/(:)\\s*([•\\u2022\\u25cf\\u25cb\\u25a0]|\\(?\\d{1,2}[.)]|\\([a-zA-Z]\\)|[a-zA-Z][.)]|[-*–—])\\s+/g, '$1\\n$2 ');
-      return text.split('\\n').map(function(l) { return l.replace(/[ \\t]+/g, ' ').trim(); }).filter(function(l, i, arr) {
-        return l.length > 0 || (i > 0 && arr[i-1].length > 0);
-      }).join('\\n').trim();
-    }
-
     function getFormattedSelectedText(sel, range) {
       try {
         if (!sel || sel.isCollapsed) return '';
@@ -879,6 +862,7 @@ export function generatePdfViewerHtml({
               var lastTop = null;
               var lastBottom = null;
               var lastRight = null;
+              var newlineChar = String.fromCharCode(10);
 
               for (var j = 0; j < selectedSpans.length; j++) {
                 var s = selectedSpans[j];
@@ -901,9 +885,9 @@ export function generatePdfViewerHtml({
                   var isParagraphBreak = (rect.top - (lastBottom || rect.top)) > height * 0.7;
 
                   if (isParagraphBreak) {
-                    built = built.trimEnd() + '\n\n';
+                    built = built.trimEnd() + newlineChar + newlineChar;
                   } else if (isNewLine) {
-                    built = built.trimEnd() + '\n';
+                    built = built.trimEnd() + newlineChar;
                   } else {
                     var gap = rect.left - (lastRight || rect.left);
                     if (gap > 2 && !built.endsWith(' ') && !spanText.startsWith(' ')) {
@@ -918,15 +902,14 @@ export function generatePdfViewerHtml({
                 lastRight = rect.right;
               }
 
-              var formatted = formatDocumentTextLayout(built);
-              if (formatted.length > 0) return formatted;
+              if (built.trim().length > 0) return built.trim();
             }
           }
         }
       } catch (e) {
         console.warn('DOM range extraction error:', e);
       }
-      return formatDocumentTextLayout(sel ? sel.toString() : '');
+      return sel ? sel.toString().trim() : '';
     }
 
     // Contextual selection detection across multi-page layout
