@@ -37,6 +37,10 @@ import { loadDocumentContent, type DocumentContentResult } from '../../../servic
 import { getFileHighlights, saveFileHighlight } from '../../../services/highlights'
 import { resolveUserId } from '../../../hooks/cards'
 import { useSnippetBagStore } from '../../../stores/snippet-bag'
+import {
+  useHighlightPreferencesStore,
+  getHighlightHex,
+} from '../../../stores/highlight-preferences'
 import { useTheme } from '../../../stores/theme'
 
 interface CurrentSelection {
@@ -55,6 +59,7 @@ export default function DocumentViewerScreen(): ReactElement {
 
   const snippets = useSnippetBagStore((s) => s.snippets)
   const addSnippet = useSnippetBagStore((s) => s.addSnippet)
+  const highlightColor = useHighlightPreferencesStore((s) => s.highlightColor)
 
   const [file, setFile] = useState<RepositoryFile | null>(null)
   const [content, setContent] = useState<DocumentContentResult | null>(null)
@@ -200,13 +205,14 @@ export default function DocumentViewerScreen(): ReactElement {
 
     try {
       const userId = await resolveUserId()
+      const activeColor = highlightColor || 'yellow'
       const saved = await saveFileHighlight(userId, {
         fileId: file.id,
         pageNumber: currentSelection.pageNumber || 1,
         text: currentSelection.text,
         startOffset: currentSelection.startOffset,
         endOffset: currentSelection.endOffset,
-        color: 'yellow',
+        color: activeColor,
       })
 
       setHighlights((prev) => [...prev, saved])
@@ -698,7 +704,7 @@ export default function DocumentViewerScreen(): ReactElement {
 
               {/* 3 Action Buttons Row */}
               <View style={{ flexDirection: 'row', gap: 10, paddingTop: 4 }}>
-                {/* Highlight Button */}
+                {/* Highlight Button with Color Indicator */}
                 <TouchableOpacity
                   accessibilityRole="button"
                   accessibilityLabel="Highlight selected text"
@@ -711,10 +717,20 @@ export default function DocumentViewerScreen(): ReactElement {
                     backgroundColor: isDark ? '#1C2B25' : '#FAFBF9',
                     borderWidth: 1,
                     borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+                    flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    gap: 6,
                   }}
                 >
+                  <View
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 5,
+                      backgroundColor: getHighlightHex(highlightColor),
+                    }}
+                  />
                   <Text
                     style={{
                       fontSize: 13,

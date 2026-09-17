@@ -300,17 +300,33 @@ export function generatePdfViewerHtml({
       background-color: rgba(250, 204, 21, 0.45) !important;
       border-radius: 2px;
     }
+    .pdf-highlight {
+      background-color: rgba(250, 204, 21, 0.45) !important;
+      border-radius: 2px;
+    }
     .pdf-highlight-yellow {
       background-color: rgba(250, 204, 21, 0.45) !important;
     }
+    .pdf-highlight-blue {
+      background-color: rgba(59, 130, 246, 0.45) !important;
+    }
     .pdf-highlight-emerald {
-      background-color: rgba(16, 185, 129, 0.4) !important;
+      background-color: rgba(16, 185, 129, 0.45) !important;
     }
     .pdf-highlight-green {
-      background-color: rgba(34, 197, 94, 0.4) !important;
+      background-color: rgba(16, 185, 129, 0.45) !important;
     }
     .pdf-highlight-rose {
-      background-color: rgba(244, 63, 94, 0.35) !important;
+      background-color: rgba(244, 63, 94, 0.40) !important;
+    }
+    .pdf-highlight-purple {
+      background-color: rgba(139, 92, 246, 0.40) !important;
+    }
+    .pdf-highlight-amber {
+      background-color: rgba(249, 115, 22, 0.45) !important;
+    }
+    .pdf-highlight-orange {
+      background-color: rgba(249, 115, 22, 0.45) !important;
     }
     #loading {
       padding: 40px 20px;
@@ -353,6 +369,18 @@ export function generatePdfViewerHtml({
     const renderingPages = new Set();
     const pageViewports = {};
 
+    function hexToRgba(hex, alpha) {
+      try {
+        var c = hex.replace('#', '').trim();
+        if (c.length === 3) c = c.split('').map(function(x) { return x + x; }).join('');
+        if (c.length !== 6) return 'rgba(59, 130, 246, ' + (alpha || 0.45) + ')';
+        var num = parseInt(c, 16);
+        return 'rgba(' + (num >> 16) + ',' + ((num >> 8) & 255) + ',' + (num & 255) + ',' + (alpha || 0.45) + ')';
+      } catch (e) {
+        return 'rgba(59, 130, 246, ' + (alpha || 0.45) + ')';
+      }
+    }
+
     function getAvailableWidth() {
       const container = document.getElementById('pdf-container');
       const clientW = container ? container.clientWidth : 0;
@@ -394,13 +422,20 @@ export function generatePdfViewerHtml({
       pageHighlights.forEach(function(hl) {
         const targetText = (hl.text || '').trim();
         if (!targetText) return;
-        const colorClass = 'pdf-highlight-' + (hl.color || 'yellow');
+        const rawColor = (hl.color || 'yellow').trim();
+        const colorClass = 'pdf-highlight-' + rawColor.toLowerCase();
 
         spans.forEach(function(span) {
           const spanText = (span.textContent || '').trim();
           if (spanText.length > 0 && (targetText.includes(spanText) || spanText.includes(targetText))) {
             span.classList.add('pdf-highlight');
-            span.classList.add(colorClass);
+            if (rawColor.startsWith('#')) {
+              span.style.backgroundColor = hexToRgba(rawColor, 0.45);
+            } else if (rawColor.startsWith('rgb')) {
+              span.style.backgroundColor = rawColor;
+            } else {
+              span.classList.add(colorClass);
+            }
           }
         });
       });

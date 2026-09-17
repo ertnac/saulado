@@ -12,6 +12,7 @@ import {
 import { Card } from '../../components/card'
 import {
   ChoiceSetting,
+  HighlightColorSetting,
   NumberSetting,
   Section,
   TimezoneSetting,
@@ -140,6 +141,10 @@ export default function SettingsScreen(): ReactElement {
           value={settings.darkMode}
           onChange={onDarkModeChange}
         />
+      </Section>
+
+      <Section title="Document Highlights">
+        <HighlightColorSetting />
       </Section>
 
       <Section title="Study">

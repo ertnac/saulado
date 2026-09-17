@@ -1,6 +1,12 @@
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react'
 import { Pressable, Switch, Text, TextInput, View } from 'react-native'
-import { useTokenColor } from '../stores/theme'
+import { CheckIcon } from './icons'
+import { useTheme, useTokenColor } from '../stores/theme'
+import {
+  HIGHLIGHT_COLOR_PRESETS,
+  getHighlightRgba,
+  useHighlightPreferencesStore,
+} from '../stores/highlight-preferences'
 
 /**
  * The controls the settings screen is built from — a port of
@@ -284,6 +290,293 @@ export function ChoiceSetting<T extends string>({
       </View>
 
       {hint !== undefined && <Text className="text-xs text-muted-foreground">{hint}</Text>}
+    </View>
+  )
+}
+
+/**
+ * Custom Highlight Color control for documents and PDF files.
+ */
+export function HighlightColorSetting(): ReactElement {
+  const { isDark } = useTheme()
+  const highlightColor = useHighlightPreferencesStore((s) => s.highlightColor)
+  const customHex = useHighlightPreferencesStore((s) => s.customHex)
+  const setHighlightColor = useHighlightPreferencesStore((s) => s.setHighlightColor)
+  const setCustomHex = useHighlightPreferencesStore((s) => s.setCustomHex)
+
+  const [inputHex, setInputHex] = useState(customHex || '#3B82F6')
+  const [showCustomInput, setShowCustomInput] = useState(
+    highlightColor.startsWith('#') || !HIGHLIGHT_COLOR_PRESETS.some((p) => p.id === highlightColor),
+  )
+
+  const activeRgba = getHighlightRgba(highlightColor, 0.45)
+
+  const handleApplyCustomHex = (): void => {
+    let clean = inputHex.trim()
+    if (!clean.startsWith('#')) clean = '#' + clean
+    if (/^#[0-9A-Fa-f]{6}$/.test(clean) || /^#[0-9A-Fa-f]{3}$/.test(clean)) {
+      setCustomHex(clean)
+    }
+  }
+
+  return (
+    <View style={{ gap: 14 }}>
+      <View style={{ gap: 2 }}>
+        <Text style={{ fontSize: 14, fontWeight: '600', color: isDark ? '#FFFFFF' : '#111A17' }}>
+          Highlight Color
+        </Text>
+        <Text style={{ fontSize: 12, color: isDark ? '#889591' : '#4C5854' }}>
+          Choose your default color for highlighting text inside documents and PDFs.
+        </Text>
+      </View>
+
+      {/* Preset Color Swatches */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        {HIGHLIGHT_COLOR_PRESETS.map((preset) => {
+          const isSelected = highlightColor.toLowerCase() === preset.id.toLowerCase()
+          return (
+            <Pressable
+              key={preset.id}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: isSelected }}
+              accessibilityLabel={`${preset.name} highlight color`}
+              onPress={() => {
+                setHighlightColor(preset.id)
+                setShowCustomInput(false)
+              }}
+              style={{
+                alignItems: 'center',
+                gap: 6,
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderRadius: 16,
+                borderWidth: 1.5,
+                borderColor: isSelected
+                  ? preset.border
+                  : isDark
+                    ? 'rgba(255,255,255,0.08)'
+                    : '#EEF2EE',
+                backgroundColor: isSelected
+                  ? isDark
+                    ? '#1C2B25'
+                    : '#E8F3EE'
+                  : isDark
+                    ? '#111A17'
+                    : '#FFFFFF',
+              }}
+            >
+              <View
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 14,
+                  backgroundColor: preset.hex,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  shadowColor: '#000000',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.15,
+                  shadowRadius: 2,
+                  elevation: 2,
+                }}
+              >
+                {isSelected && <CheckIcon color="#FFFFFF" size={16} />}
+              </View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: isSelected ? '700' : '500',
+                  color: isSelected
+                    ? isDark
+                      ? '#FFFFFF'
+                      : '#052E24'
+                    : isDark
+                      ? '#889591'
+                      : '#4C5854',
+                }}
+              >
+                {preset.name}
+              </Text>
+            </Pressable>
+          )
+        })}
+
+        {/* Custom Hex Option Button */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Custom highlight color"
+          onPress={() => {
+            setShowCustomInput(!showCustomInput)
+            if (!showCustomInput && inputHex) {
+              handleApplyCustomHex()
+            }
+          }}
+          style={{
+            alignItems: 'center',
+            gap: 6,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            borderRadius: 16,
+            borderWidth: 1.5,
+            borderColor: highlightColor.startsWith('#')
+              ? '#052E24'
+              : isDark
+                ? 'rgba(255,255,255,0.08)'
+                : '#EEF2EE',
+            backgroundColor: highlightColor.startsWith('#')
+              ? isDark
+                ? '#1C2B25'
+                : '#E8F3EE'
+              : isDark
+                ? '#111A17'
+                : '#FFFFFF',
+          }}
+        >
+          <View
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 14,
+              backgroundColor: highlightColor.startsWith('#') ? highlightColor : '#A855F7',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.4)',
+            }}
+          >
+            {highlightColor.startsWith('#') ? (
+              <CheckIcon color="#FFFFFF" size={16} />
+            ) : (
+              <Text style={{ fontSize: 12 }}>🎨</Text>
+            )}
+          </View>
+          <Text
+            style={{
+              fontSize: 11,
+              fontWeight: highlightColor.startsWith('#') ? '700' : '500',
+              color: highlightColor.startsWith('#')
+                ? isDark
+                  ? '#FFFFFF'
+                  : '#052E24'
+                : isDark
+                  ? '#889591'
+                  : '#4C5854',
+            }}
+          >
+            Custom
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* Custom Hex Input Form */}
+      {showCustomInput && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            padding: 12,
+            borderRadius: 14,
+            backgroundColor: isDark ? '#1C2B25' : '#FAFBF9',
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+          }}
+        >
+          <View
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: 12,
+              backgroundColor: inputHex.startsWith('#') ? inputHex : '#3B82F6',
+              borderWidth: 1,
+              borderColor: 'rgba(0,0,0,0.1)',
+            }}
+          />
+          <TextInput
+            value={inputHex}
+            onChangeText={(val) => {
+              setInputHex(val)
+              let clean = val.trim()
+              if (!clean.startsWith('#')) clean = '#' + clean
+              if (/^#[0-9A-Fa-f]{6}$/.test(clean) || /^#[0-9A-Fa-f]{3}$/.test(clean)) {
+                setCustomHex(clean)
+              }
+            }}
+            placeholder="#3B82F6"
+            placeholderTextColor={isDark ? '#6B9985' : '#889591'}
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={7}
+            style={{
+              flex: 1,
+              height: 38,
+              fontSize: 14,
+              fontWeight: '600',
+              color: isDark ? '#FFFFFF' : '#111A17',
+              fontFamily: 'monospace',
+            }}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Apply custom color"
+            onPress={handleApplyCustomHex}
+            style={{
+              backgroundColor: '#052E24',
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              borderRadius: 14,
+            }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFFFFF' }}>Apply</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* Live Highlight Preview Card */}
+      <View
+        style={{
+          marginTop: 2,
+          padding: 14,
+          borderRadius: 16,
+          backgroundColor: isDark ? '#111A17' : '#FFFFFF',
+          borderWidth: 1,
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+          gap: 6,
+        }}
+      >
+        <Text
+          style={{
+            fontSize: 11,
+            fontWeight: '700',
+            letterSpacing: 0.6,
+            color: isDark ? '#A6C2B5' : '#317054',
+            textTransform: 'uppercase',
+          }}
+        >
+          Preview in Document
+        </Text>
+        <Text
+          style={{
+            fontSize: 13,
+            lineHeight: 20,
+            color: isDark ? '#C5D4CD' : '#111A17',
+          }}
+        >
+          Adult humans have{' '}
+          <Text
+            style={{
+              backgroundColor: activeRgba,
+              color: isDark ? '#FFFFFF' : '#111A17',
+              fontWeight: '600',
+              paddingHorizontal: 2,
+              borderRadius: 2,
+            }}
+          >
+            206 bones arranged into the axial
+          </Text>{' '}
+          and appendicular skeletons.
+        </Text>
+      </View>
     </View>
   )
 }

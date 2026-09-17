@@ -25,6 +25,9 @@ export interface PdfTextSelection {
   source?: 'pdf'
 }
 
+export type HighlightColor =
+  'yellow' | 'blue' | 'green' | 'emerald' | 'rose' | 'purple' | 'amber' | 'orange' | (string & {})
+
 export interface PdfHighlight {
   id: string
   fileId: string
@@ -32,7 +35,7 @@ export interface PdfHighlight {
   text: string
   startOffset?: number
   endOffset?: number
-  color: 'yellow' | 'green' | 'emerald' | 'rose'
+  color: HighlightColor
   createdAt: string
 }
 
