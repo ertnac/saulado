@@ -322,7 +322,12 @@ export function generatePdfViewerHtml({
   const bg = isDark ? '#031a14' : '#f0f4f2'
   const text = isDark ? '#ffffff' : '#052e24'
   const borderColor = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'
-  const safeHighlightsJson = JSON.stringify(highlights || []).replace(/</g, '\\u003c')
+  const cleanPdfBase64 = (pdfBase64 || '').replace(/[\r\n\s]/g, '')
+  const safeHighlightsJson = JSON.stringify(highlights || [])
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029')
 
   return `<!DOCTYPE html>
 <html>
@@ -503,14 +508,20 @@ export function generatePdfViewerHtml({
       } catch (e) {}
     }
 
-    const pdfData = atob("${pdfBase64}");
+    const pdfData = atob("${cleanPdfBase64}");
     const uint8Array = new Uint8Array(pdfData.length);
     for (let i = 0; i < pdfData.length; i++) {
       uint8Array[i] = pdfData.charCodeAt(i);
     }
 
     let pdfDoc = null;
-    let storedHighlights = ${safeHighlightsJson};
+    let storedHighlights = [];
+    try {
+      storedHighlights = ${safeHighlightsJson};
+      if (!Array.isArray(storedHighlights)) storedHighlights = [];
+    } catch (e) {
+      storedHighlights = [];
+    }
     let currentZoomScale = ${zoomScale};
     let currentPage = 1;
     const renderedPages = new Set();
@@ -556,37 +567,41 @@ export function generatePdfViewerHtml({
     }
 
     function applyHighlightsForPage(num) {
-      const pageHighlights = storedHighlights.filter(function(h) {
-        return h.pageNumber === num;
-      });
-      if (!pageHighlights || pageHighlights.length === 0) return;
-
-      const textLayer = document.getElementById('text-layer-' + num);
-      if (!textLayer) return;
-
-      const spans = textLayer.querySelectorAll('span');
-      if (!spans || spans.length === 0) return;
-
-      pageHighlights.forEach(function(hl) {
-        const targetText = (hl.text || '').trim();
-        if (!targetText) return;
-        const rawColor = (hl.color || 'yellow').trim();
-        const colorClass = 'pdf-highlight-' + rawColor.toLowerCase();
-
-        spans.forEach(function(span) {
-          const spanText = (span.textContent || '').trim();
-          if (spanText.length > 0 && (targetText.includes(spanText) || spanText.includes(targetText))) {
-            span.classList.add('pdf-highlight');
-            if (rawColor.startsWith('#')) {
-              span.style.backgroundColor = hexToRgba(rawColor, 0.45);
-            } else if (rawColor.startsWith('rgb')) {
-              span.style.backgroundColor = rawColor;
-            } else {
-              span.classList.add(colorClass);
-            }
-          }
+      try {
+        const pageHighlights = storedHighlights.filter(function(h) {
+          return h.pageNumber === num;
         });
-      });
+        if (!pageHighlights || pageHighlights.length === 0) return;
+
+        const textLayer = document.getElementById('text-layer-' + num);
+        if (!textLayer) return;
+
+        const spans = textLayer.querySelectorAll('span');
+        if (!spans || spans.length === 0) return;
+
+        pageHighlights.forEach(function(hl) {
+          const targetText = (hl.text || '').trim();
+          if (!targetText) return;
+          const rawColor = (hl.color || 'yellow').trim();
+          const colorClass = 'pdf-highlight-' + rawColor.toLowerCase();
+
+          spans.forEach(function(span) {
+            const spanText = (span.textContent || '').trim();
+            if (spanText.length > 0 && (targetText.includes(spanText) || spanText.includes(targetText))) {
+              span.classList.add('pdf-highlight');
+              if (rawColor.startsWith('#')) {
+                span.style.backgroundColor = hexToRgba(rawColor, 0.45);
+              } else if (rawColor.startsWith('rgb')) {
+                span.style.backgroundColor = rawColor;
+              } else {
+                span.classList.add(colorClass);
+              }
+            }
+          });
+        });
+      } catch (hlErr) {
+        console.warn('Highlight application error on page ' + num + ':', hlErr);
+      }
     }
 
     function renderPage(num) {
@@ -811,9 +826,13 @@ export function generatePdfViewerHtml({
     };
 
     window.addPdfHighlight = function(highlight) {
-      if (!highlight) return;
-      storedHighlights.push(highlight);
-      applyHighlightsForPage(highlight.pageNumber);
+      try {
+        if (!highlight) return;
+        storedHighlights.push(highlight);
+        applyHighlightsForPage(highlight.pageNumber || currentPage);
+      } catch (e) {
+        console.warn('addPdfHighlight error:', e);
+      }
     };
 
     function formatDocumentTextLayout(raw) {
@@ -1123,18 +1142,17 @@ export async function loadDocumentContent(
 
   // 2. PDF
   if (file.fileType === 'pdf') {
-    const binary = atob(base64)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i)
-    }
-
-    // Extract text for reader mode & card creation completely offline
     let extractedText = ''
     try {
+      const clean = base64.replace(/[\r\n\s]/g, '')
+      const binary = atob(clean)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i)
+      }
       extractedText = extractTextFromPdfStream(bytes)
-    } catch {
-      // Fallback
+    } catch (extractErr) {
+      console.warn('[document-viewer] offline stream text extract error:', extractErr)
     }
 
     // Generate formatted reader HTML for offline reading

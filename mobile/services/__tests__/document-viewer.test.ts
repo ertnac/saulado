@@ -200,9 +200,9 @@ describe('document-viewer service', () => {
         fileUri: 'file:///data/sample.docx',
         fileType: 'docx',
         mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        fileSize: 1024,
         createdAt: '2026-09-17T00:00:00.000Z',
         updatedAt: '2026-09-17T00:00:00.000Z',
-        syncStatus: 'synced',
       }
 
       const result = await loadDocumentContent(file, false)

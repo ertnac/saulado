@@ -30,6 +30,8 @@ import { QuickCardModal } from '../../../components/quick-card-modal'
 import { SnippetBagModal } from '../../../components/snippet-bag-modal'
 import type { RepositoryFile } from '../../../lib/offline/types'
 import {
+  downloadCloudFile,
+  fetchCloudFiles,
   formatFileSize,
   getRepositoryFile,
   updateFileLastViewed,
@@ -87,16 +89,36 @@ export default function DocumentViewerScreen(): ReactElement {
       try {
         setLoading(true)
         setError(null)
-        const item = await getRepositoryFile(fileId)
+        let item = await getRepositoryFile(fileId)
+
+        // If not found in local SQLite, attempt on-the-fly download for cloud file
+        if (!item) {
+          try {
+            const currentUserId = await resolveUserId()
+            const cloudFiles = await fetchCloudFiles()
+            const matched = cloudFiles.find((c) => c.id === fileId)
+            if (matched) {
+              item = await downloadCloudFile(matched, currentUserId)
+            }
+          } catch (cloudErr) {
+            console.warn('[document-viewer] cloud download fallback failed:', cloudErr)
+          }
+        }
+
         if (!item) {
           setError('Document not found in repository.')
           return
         }
         setFile(item)
-        void updateFileLastViewed(fileId)
+        void updateFileLastViewed(item.id)
 
-        const userHighlights = await getFileHighlights(fileId)
-        setHighlights(userHighlights)
+        let userHighlights: PdfHighlight[] = []
+        try {
+          userHighlights = await getFileHighlights(item.id)
+          setHighlights(userHighlights)
+        } catch (hlErr) {
+          console.warn('[document-viewer] highlight fetch error (non-fatal):', hlErr)
+        }
 
         const docContent = await loadDocumentContent(item, isDark, userHighlights)
         setContent(docContent)
@@ -222,8 +244,9 @@ export default function DocumentViewerScreen(): ReactElement {
       })
 
       setHighlights((prev) => [...prev, saved])
+      const safePayload = JSON.stringify(saved).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
       webViewRef.current?.injectJavaScript(
-        `window.addPdfHighlight?.(${JSON.stringify(saved)}); window.clearPdfSelection?.(); true;`,
+        `try { window.addPdfHighlight?.(JSON.parse('${safePayload}')); } catch(e) {} window.clearPdfSelection?.(); true;`,
       )
 
       setCurrentSelection(null)

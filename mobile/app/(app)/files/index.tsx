@@ -170,13 +170,20 @@ export default function FileRepositoryScreen(): ReactElement {
     }
   }
 
-  const handleDownloadCloud = async (cloudFile: CloudFileSummary): Promise<void> => {
+  const handleDownloadCloud = async (
+    cloudFile: CloudFileSummary,
+    openAfter = false,
+  ): Promise<void> => {
     try {
       setDownloadingIds((prev) => new Set(prev).add(cloudFile.id))
-      await downloadCloudFile(cloudFile, userId)
+      const downloaded = await downloadCloudFile(cloudFile, userId)
       await loadData()
+      if (openAfter) {
+        router.push(`/files/${downloaded.id}`)
+      }
     } catch (err) {
       console.warn('[file-repository] download error:', err)
+      Alert.alert('Download Failed', 'Could not download document from cloud.')
     } finally {
       setDownloadingIds((prev) => {
         const next = new Set(prev)
@@ -219,20 +226,24 @@ export default function FileRepositoryScreen(): ReactElement {
 
   const displayFiles =
     tabScope === 'cloud'
-      ? cloudFiles.map((cf) => ({
-          id: cf.id,
-          name: cf.name,
-          type: cf.fileType.toUpperCase(),
-          size: formatFileSize(cf.fileSize),
-          time: downloadedMap.has(cf.id) ? 'Downloaded' : 'In Cloud',
-          color: '#E8F3EE',
-          badgeColor: '#317054',
-          isCloud: true,
-          isDownloaded: downloadedMap.has(cf.id),
-          isDownloading: downloadingIds.has(cf.id),
-          rawCloud: cf,
-          rawFile: undefined as RepositoryFile | undefined,
-        }))
+      ? cloudFiles.map((cf) => {
+          const localId = downloadedMap.get(cf.id)
+          const matchedLocal = localId ? files.find((f) => f.id === localId) : undefined
+          return {
+            id: localId || cf.id,
+            name: cf.name,
+            type: cf.fileType.toUpperCase(),
+            size: formatFileSize(cf.fileSize),
+            time: downloadedMap.has(cf.id) ? 'Downloaded' : 'In Cloud',
+            color: '#E8F3EE',
+            badgeColor: '#317054',
+            isCloud: true,
+            isDownloaded: downloadedMap.has(cf.id),
+            isDownloading: downloadingIds.has(cf.id),
+            rawCloud: cf,
+            rawFile: matchedLocal,
+          }
+        })
       : files.length > 0
         ? files.map((f, i) => ({
             id: f.id,
@@ -555,7 +566,9 @@ export default function FileRepositoryScreen(): ReactElement {
               accessibilityRole="button"
               accessibilityLabel={`${item.name}, ${item.type} document, ${item.size}`}
               onPress={() => {
-                if (!item.id.startsWith('mock-') && item.rawFile) {
+                if (item.isCloud && !item.isDownloaded && item.rawCloud) {
+                  void handleDownloadCloud(item.rawCloud, true)
+                } else if (!item.id.startsWith('mock-')) {
                   router.push(`/files/${item.id}`)
                 }
               }}
@@ -643,7 +656,7 @@ export default function FileRepositoryScreen(): ReactElement {
                 }
                 onPress={() => {
                   if (item.isCloud && !item.isDownloaded && item.rawCloud) {
-                    void handleDownloadCloud(item.rawCloud)
+                    void handleDownloadCloud(item.rawCloud, true)
                   } else if (!item.id.startsWith('mock-')) {
                     router.push(`/files/${item.id}`)
                   }

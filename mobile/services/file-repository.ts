@@ -384,8 +384,8 @@ export async function getRepositoryFile(fileId: string): Promise<RepositoryFile 
   if (!fileId) return null
   const db = await getDatabase()
   const row = await db.getFirstAsync<SQLiteRepositoryFile>(
-    'SELECT * FROM repository_files WHERE id = ?',
-    [fileId],
+    'SELECT * FROM repository_files WHERE id = ? OR cloud_file_id = ? LIMIT 1',
+    [fileId, fileId],
   )
   return row ? mapRowToRepositoryFile(row) : null
 }
