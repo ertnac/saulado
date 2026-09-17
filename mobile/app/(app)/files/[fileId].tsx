@@ -72,7 +72,7 @@ export default function DocumentViewerScreen(): ReactElement {
   const [isAddedToastVisible, setIsAddedToastVisible] = useState(false)
   const [baggedNotice, setBaggedNotice] = useState<string | null>(null)
 
-  const bottomNavOffset = Math.max(insets.bottom, 16) + 72
+  const bottomNavOffset = Math.max(insets.bottom, 16) + 64 + 14
 
   useEffect(() => {
     async function load() {
@@ -354,30 +354,66 @@ export default function DocumentViewerScreen(): ReactElement {
             </Text>
           </View>
 
-          {/* Circular More Options Button */}
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="More options"
-            onPress={() => setIsMoreMenuOpen(true)}
-            activeOpacity={0.7}
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: isDark ? '#111A17' : '#FFFFFF',
-              borderWidth: 1,
-              borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
-              alignItems: 'center',
-              justifyContent: 'center',
-              shadowColor: '#000000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.04,
-              shadowRadius: 4,
-              elevation: 2,
-            }}
-          >
-            <MoreHorizontalIcon color={isDark ? '#FFFFFF' : '#111A17'} size={20} />
-          </TouchableOpacity>
+          {/* Right Header Actions: Bag Pill Button + More Options Button */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {/* Bag Pill Button in Upper Right */}
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={`Open Study Bag (${snippets.length} items)`}
+              onPress={() => setIsBagModalOpen(true)}
+              activeOpacity={0.85}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                paddingHorizontal: 12,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: '#052E24',
+                shadowColor: '#052E24',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.25,
+                shadowRadius: 6,
+                elevation: 4,
+              }}
+            >
+              <ShoppingBagIcon color="#FFFFFF" size={16} />
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: '700',
+                  color: '#FFFFFF',
+                }}
+              >
+                Bag ({snippets.length})
+              </Text>
+            </TouchableOpacity>
+
+            {/* Circular More Options Button */}
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="More options"
+              onPress={() => setIsMoreMenuOpen(true)}
+              activeOpacity={0.7}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: isDark ? '#111A17' : '#FFFFFF',
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#000000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.04,
+                shadowRadius: 4,
+                elevation: 2,
+              }}
+            >
+              <MoreHorizontalIcon color={isDark ? '#FFFFFF' : '#111A17'} size={20} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Page Progress Badge Pill (Image 1, 2, 3) */}
@@ -439,60 +475,24 @@ export default function DocumentViewerScreen(): ReactElement {
           onMessage={handleWebViewMessage}
         />
 
-        {/* 3. Floating Bag Button (Image 1 & 2) */}
-        {!currentSelection && (
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel={`Open Study Bag (${snippets.length} items)`}
-            onPress={() => setIsBagModalOpen(true)}
-            activeOpacity={0.85}
-            style={{
-              position: 'absolute',
-              bottom: bottomNavOffset + 12,
-              right: 20,
-              zIndex: 40,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 8,
-              paddingHorizontal: 18,
-              height: 46,
-              borderRadius: 23,
-              backgroundColor: '#052E24',
-              shadowColor: '#052E24',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 10,
-              elevation: 8,
-            }}
-          >
-            <ShoppingBagIcon color="#FFFFFF" size={18} />
-            <Text
-              style={{
-                fontSize: 14,
-                fontWeight: '700',
-                color: '#FFFFFF',
-              }}
-            >
-              Bag ({snippets.length})
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {/* 4. Post-Confirmation "Added to bag" Toast Card (Image 2) */}
+        {/* 3. Post-Confirmation "Added to bag" Toast Card */}
         {isAddedToastVisible && (
           <View
             style={{
               position: 'absolute',
-              bottom: bottomNavOffset + 12,
-              left: 16,
-              right: 140, // Sits side-by-side with the Bag button
+              bottom: bottomNavOffset,
+              left: 14,
+              right: 14,
               zIndex: 50,
-              borderRadius: 16,
+              borderRadius: 20,
               backgroundColor: isDark ? '#111A17' : '#FFFFFF',
               borderWidth: 1,
               borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
-              padding: 14,
-              gap: 4,
+              paddingHorizontal: 16,
+              paddingVertical: 14,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
               shadowColor: '#000000',
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: 0.12,
@@ -500,31 +500,56 @@ export default function DocumentViewerScreen(): ReactElement {
               elevation: 6,
             }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <CheckIcon color={isDark ? '#A6C2B5' : '#052E24'} size={15} />
+            <View style={{ flex: 1, gap: 4, marginRight: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <CheckIcon color={isDark ? '#A6C2B5' : '#052E24'} size={16} />
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: '700',
+                    color: isDark ? '#FFFFFF' : '#052E24',
+                  }}
+                >
+                  Added to bag
+                </Text>
+              </View>
               <Text
                 style={{
-                  fontSize: 13,
-                  fontWeight: '700',
-                  color: isDark ? '#FFFFFF' : '#052E24',
+                  fontSize: 12,
+                  lineHeight: 16,
+                  color: isDark ? '#889591' : '#4C5854',
                 }}
               >
-                Added to bag
+                Your note has been saved to the bag for later review.
               </Text>
             </View>
-            <Text
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="View bag"
+              onPress={() => {
+                setIsAddedToastVisible(false)
+                setIsBagModalOpen(true)
+              }}
+              activeOpacity={0.8}
               style={{
-                fontSize: 11,
-                lineHeight: 15,
-                color: isDark ? '#889591' : '#4C5854',
+                backgroundColor: '#052E24',
+                paddingHorizontal: 14,
+                paddingVertical: 9,
+                borderRadius: 18,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
               }}
             >
-              Your note has been saved to the bag for later review.
-            </Text>
+              <ShoppingBagIcon color="#FFFFFF" size={14} />
+              <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700' }}>
+                View ({snippets.length})
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* 5. Bagged / Highlight Temporary Notice (Top) */}
+        {/* 4. Bagged / Highlight Temporary Notice (Top) */}
         {baggedNotice && (
           <View
             style={{
@@ -567,7 +592,7 @@ export default function DocumentViewerScreen(): ReactElement {
           </View>
         )}
 
-        {/* 6. Text Selection Action Sheet & Dimmed Backdrop (Image 3) */}
+        {/* 5. Text Selection Action Card & Dimmed Backdrop (Floats above bottom nav tab) */}
         {currentSelection && (
           <>
             {/* Dimmed Backdrop */}
@@ -585,26 +610,25 @@ export default function DocumentViewerScreen(): ReactElement {
               ]}
             />
 
-            {/* Bottom Action Sheet Card */}
+            {/* Floating Action Sheet Card above bottom nav */}
             <View
               style={{
                 position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
+                bottom: bottomNavOffset,
+                left: 14,
+                right: 14,
                 zIndex: 100,
                 backgroundColor: isDark ? '#111A17' : '#FFFFFF',
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
-                borderTopWidth: 1,
+                borderRadius: 24,
+                borderWidth: 1,
                 borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
-                paddingHorizontal: 20,
-                paddingTop: 12,
-                paddingBottom: Math.max(insets.bottom + 12, 24),
+                paddingHorizontal: 18,
+                paddingTop: 14,
+                paddingBottom: 16,
                 shadowColor: '#000000',
-                shadowOffset: { width: 0, height: -4 },
-                shadowOpacity: 0.15,
-                shadowRadius: 16,
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: isDark ? 0.35 : 0.16,
+                shadowRadius: 18,
                 elevation: 16,
                 gap: 12,
               }}
