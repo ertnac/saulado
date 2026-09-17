@@ -42,6 +42,7 @@ import {
   getHighlightHex,
 } from '../../../stores/highlight-preferences'
 import { useTheme } from '../../../stores/theme'
+import { formatDocumentTextLayout } from '../../../lib/text-formatting'
 
 interface CurrentSelection {
   text: string
@@ -147,10 +148,10 @@ export default function DocumentViewerScreen(): ReactElement {
         }
 
         if (payload.type === 'PDF_TEXT_SELECTION' && typeof payload.text === 'string') {
-          const trimmed = payload.text.trim()
-          if (trimmed.length > 0) {
+          const formatted = formatDocumentTextLayout(payload.text) || payload.text.trim()
+          if (formatted.length > 0) {
             setCurrentSelection({
-              text: trimmed,
+              text: formatted,
               pageNumber: typeof payload.pageNumber === 'number' ? payload.pageNumber : undefined,
               startOffset:
                 typeof payload.startOffset === 'number' ? payload.startOffset : undefined,
@@ -158,8 +159,8 @@ export default function DocumentViewerScreen(): ReactElement {
             })
           }
         } else if (payload.type === 'TEXT_SELECTION' && typeof payload.text === 'string') {
-          const trimmed = payload.text.trim()
-          setCurrentSelection(trimmed.length > 0 ? { text: trimmed } : null)
+          const formatted = formatDocumentTextLayout(payload.text) || payload.text.trim()
+          setCurrentSelection(formatted.length > 0 ? { text: formatted } : null)
         } else if (payload.type === 'PDF_SELECTION_CLEARED') {
           setCurrentSelection(null)
         } else if (payload.type === 'PDF_SCANNED_PAGE') {
@@ -179,12 +180,14 @@ export default function DocumentViewerScreen(): ReactElement {
   const handleAddSelectedToBag = (): void => {
     if (!currentSelection || !file) return
 
+    const formattedText = formatDocumentTextLayout(currentSelection.text) || currentSelection.text
+
     addSnippet({
       fileId: file.id,
       fileName: file.name,
       fileType: file.fileType,
       source: file.fileType,
-      text: currentSelection.text,
+      text: formattedText,
       pageNumber: currentSelection.pageNumber,
       startOffset: currentSelection.startOffset,
       endOffset: currentSelection.endOffset,

@@ -668,6 +668,100 @@ export function generatePdfViewerHtml({
       applyHighlightsForPage(highlight.pageNumber);
     };
 
+    function formatDocumentTextLayout(raw) {
+      if (!raw) return '';
+      var text = String(raw).trim();
+      text = text.replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n');
+      text = text.replace(/([.!?])([A-Z])/g, '$1 $2');
+      text = text.replace(/([)\\]])([A-Za-z0-9])/g, '$1 $2');
+      text = text.replace(/\\b(and|or|in|to|of|the|with|for|by|from|is|are|on|at|as|between|into)([A-Z][a-z]+)\\b/g, '$1 $2');
+      text = text.replace(/\\b([A-Z]{2,})([a-z]{3,})\\b/g, '$1 $2');
+      text = text.replace(/\\b(Introduction|Overview|Summary|Objectives|Conclusion|Background|Definitions?|Chapter\\s*\\d+|Section\\s*\\d+)([A-Z][a-z]+)\\b/g, '$1\\n\\n$2');
+      var bulletPattern = /(?<=[^\\n])\\s+([•\\u2022\\u25cf\\u25cb\\u25a0]|\\(?\\d{1,2}[.)]|\\([a-zA-Z]\\)|[a-zA-Z][.)]|[-*–—])\\s+(?=[A-Za-z0-9"'\\x60\\u201c\\u2018])/g;
+      text = text.replace(bulletPattern, '\\n$1 ');
+      text = text.replace(/(:)\\s*([•\\u2022\\u25cf\\u25cb\\u25a0]|\\(?\\d{1,2}[.)]|\\([a-zA-Z]\\)|[a-zA-Z][.)]|[-*–—])\\s+/g, '$1\\n$2 ');
+      return text.split('\\n').map(function(l) { return l.replace(/[ \\t]+/g, ' ').trim(); }).filter(function(l, i, arr) {
+        return l.length > 0 || (i > 0 && arr[i-1].length > 0);
+      }).join('\\n').trim();
+    }
+
+    function getFormattedSelectedText(sel, range) {
+      try {
+        if (!sel || sel.isCollapsed) return '';
+        if (range) {
+          var common = range.commonAncestorContainer;
+          var textLayer = (common.nodeType === 1 && common.classList.contains('textLayer'))
+            ? common
+            : (common.parentElement ? common.parentElement.closest('.textLayer') : null);
+
+          if (textLayer) {
+            var spans = Array.from(textLayer.querySelectorAll('span'));
+            var selectedSpans = [];
+
+            for (var i = 0; i < spans.length; i++) {
+              var span = spans[i];
+              try {
+                if (range.intersectsNode(span)) {
+                  selectedSpans.push(span);
+                }
+              } catch (re) {}
+            }
+
+            if (selectedSpans.length > 0) {
+              var built = '';
+              var lastTop = null;
+              var lastBottom = null;
+              var lastRight = null;
+
+              for (var j = 0; j < selectedSpans.length; j++) {
+                var s = selectedSpans[j];
+                var spanText = s.textContent || '';
+                if (!spanText) continue;
+
+                if (s === range.startContainer.parentElement || s === range.startContainer) {
+                  spanText = spanText.substring(range.startOffset);
+                }
+                if (s === range.endContainer.parentElement || s === range.endContainer) {
+                  spanText = spanText.substring(0, range.endOffset);
+                }
+                if (!spanText) continue;
+
+                var rect = s.getBoundingClientRect();
+
+                if (lastTop !== null) {
+                  var height = rect.height || 14;
+                  var isNewLine = Math.abs(rect.top - lastTop) > height * 0.45;
+                  var isParagraphBreak = (rect.top - (lastBottom || rect.top)) > height * 0.7;
+
+                  if (isParagraphBreak) {
+                    built = built.trimEnd() + '\n\n';
+                  } else if (isNewLine) {
+                    built = built.trimEnd() + '\n';
+                  } else {
+                    var gap = rect.left - (lastRight || rect.left);
+                    if (gap > 2 && !built.endsWith(' ') && !spanText.startsWith(' ')) {
+                      built += ' ';
+                    }
+                  }
+                }
+
+                built += spanText;
+                lastTop = rect.top;
+                lastBottom = rect.bottom;
+                lastRight = rect.right;
+              }
+
+              var formatted = formatDocumentTextLayout(built);
+              if (formatted.length > 0) return formatted;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('DOM range extraction error:', e);
+      }
+      return formatDocumentTextLayout(sel ? sel.toString() : '');
+    }
+
     // Contextual selection detection across multi-page layout
     let lastSelectedText = '';
     function checkSelection() {
@@ -685,7 +779,8 @@ export function generatePdfViewerHtml({
           return;
         }
 
-        const text = sel.toString().trim();
+        const range = sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+        const text = getFormattedSelectedText(sel, range);
         if (!text || text === lastSelectedText) return;
         lastSelectedText = text;
 
@@ -694,24 +789,25 @@ export function generatePdfViewerHtml({
         let selPageNumber = currentPage;
 
         try {
-          const range = sel.getRangeAt(0);
-          const startSpan = range.startContainer.nodeType === 3
-            ? range.startContainer.parentElement
-            : range.startContainer;
-          const endSpan = range.endContainer.nodeType === 3
-            ? range.endContainer.parentElement
-            : range.endContainer;
+          if (range) {
+            const startSpan = range.startContainer.nodeType === 3
+              ? range.startContainer.parentElement
+              : range.startContainer;
+            const endSpan = range.endContainer.nodeType === 3
+              ? range.endContainer.parentElement
+              : range.endContainer;
 
-          if (startSpan && startSpan.dataset && startSpan.dataset.startOffset) {
-            startOffset = parseInt(startSpan.dataset.startOffset, 10) + range.startOffset;
-          }
-          if (endSpan && endSpan.dataset && endSpan.dataset.startOffset) {
-            endOffset = parseInt(endSpan.dataset.startOffset, 10) + range.endOffset;
-          }
+            if (startSpan && startSpan.dataset && startSpan.dataset.startOffset) {
+              startOffset = parseInt(startSpan.dataset.startOffset, 10) + range.startOffset;
+            }
+            if (endSpan && endSpan.dataset && endSpan.dataset.startOffset) {
+              endOffset = parseInt(endSpan.dataset.startOffset, 10) + range.endOffset;
+            }
 
-          const wrapper = startSpan ? startSpan.closest('.page-wrapper') : null;
-          if (wrapper && wrapper.dataset && wrapper.dataset.pageNumber) {
-            selPageNumber = parseInt(wrapper.dataset.pageNumber, 10);
+            const wrapper = startSpan ? startSpan.closest('.page-wrapper') : null;
+            if (wrapper && wrapper.dataset && wrapper.dataset.pageNumber) {
+              selPageNumber = parseInt(wrapper.dataset.pageNumber, 10);
+            }
           }
         } catch (re) {}
 

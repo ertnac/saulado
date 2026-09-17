@@ -1,4 +1,5 @@
 import { codePointLength } from '@saulado/shared'
+import { formatDocumentTextLayout } from './text-formatting'
 
 /**
  * Formats plain or pasted text into a structured enumeration study template.
@@ -104,7 +105,8 @@ export interface ParsedEnumeration {
  * with a list marker (e.g. "1. ", "1) ", "- ", "• ", "* ").
  */
 export function isEnumeratedQuestion(text: string): boolean {
-  const lines = text
+  const formatted = formatDocumentTextLayout(text)
+  const lines = (formatted || text)
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l.length > 0)
@@ -122,7 +124,8 @@ export function isEnumeratedQuestion(text: string): boolean {
  * Parses raw or pasted text into a structured enumeration of title and items.
  */
 export function parseEnumeration(rawText: string): ParsedEnumeration {
-  const text = rawText.trim()
+  const formatted = formatDocumentTextLayout(rawText)
+  const text = (formatted || rawText).trim()
   if (!text) {
     return { title: '', items: ['', '', ''] }
   }

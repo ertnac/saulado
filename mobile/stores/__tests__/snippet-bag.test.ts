@@ -175,4 +175,20 @@ describe('useSnippetBagStore', () => {
     expect(duplicatePage1.id).toBe(itemPage1.id)
     expect(useSnippetBagStore.getState().snippets).toHaveLength(2)
   })
+
+  it('formats document layout with line breaks for bullet points and separates glued words', () => {
+    const raw =
+      'Lesson Objectives: • Explain IA concepts andCyber Security. • Differentiate CIA Triad.'
+
+    const item = useSnippetBagStore.getState().addSnippet({
+      fileId: 'pdf-1',
+      fileName: 'Security.pdf',
+      fileType: 'pdf',
+      source: 'pdf',
+      text: raw,
+    })
+
+    expect(item.text).toContain('Lesson Objectives:\n• Explain IA concepts and Cyber Security.')
+    expect(item.text).toContain('\n• Differentiate CIA Triad.')
+  })
 })

@@ -21,6 +21,7 @@ import { cardKeys, createCardOfflineAware, setKeys, useAllSets } from '../hooks/
 import { studyKeys } from '../hooks/study'
 import { useCardDraft } from '../hooks/useCardDraft'
 import { useTokenColor } from '../stores/theme'
+import { formatDocumentTextLayout } from '../lib/text-formatting'
 
 interface QuickCardModalProps {
   visible: boolean
@@ -52,8 +53,9 @@ export function QuickCardModal({
   const { data: allSets } = useAllSets()
   const activeSet = allSets?.find((s) => s.id === targetSetId)
 
+  const formattedParagraph = formatDocumentTextLayout(initialParagraph) || initialParagraph
   const draft = useCardDraft({
-    paragraph: initialParagraph,
+    paragraph: formattedParagraph,
     mode: 'highlight',
   })
 

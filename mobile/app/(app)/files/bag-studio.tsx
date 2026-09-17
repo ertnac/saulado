@@ -22,6 +22,7 @@ import { studyKeys } from '../../../hooks/study'
 import { useCardDraft } from '../../../hooks/useCardDraft'
 import { useSnippetBagStore, type BaggedSnippet } from '../../../stores/snippet-bag'
 import { useTokenColor } from '../../../stores/theme'
+import { formatDocumentTextLayout } from '../../../lib/text-formatting'
 
 interface PreparedCard {
   snippetId: string
@@ -325,8 +326,9 @@ function BagWizardStep({
   onSkip: () => void
   onPrevious: () => void
 }): ReactElement {
+  const formattedText = formatDocumentTextLayout(snippet.text) || snippet.text
   const draft = useCardDraft({
-    paragraph: snippet.text,
+    paragraph: formattedText,
     answers: existingAnswers,
     mode: existingAnswers && existingAnswers.length > 0 ? 'highlight' : 'compose',
   })

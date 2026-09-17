@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { BaggedSnippet, SnippetSource } from '@saulado/shared'
+import { formatDocumentTextLayout } from '../lib/text-formatting'
 
 export type { BaggedSnippet, SnippetSource }
 
@@ -31,11 +32,11 @@ export const useSnippetBagStore = create<SnippetBagState>()(
       snippets: [],
 
       addSnippet: (input) => {
-        const trimmed = input.text.trim()
+        const formatted = formatDocumentTextLayout(input.text) || input.text.trim()
         const existing = get().snippets.find(
           (s) =>
             s.fileId === input.fileId &&
-            s.text.trim() === trimmed &&
+            s.text.trim() === formatted &&
             (input.pageNumber === undefined || s.pageNumber === input.pageNumber),
         )
         if (existing) {
@@ -47,7 +48,7 @@ export const useSnippetBagStore = create<SnippetBagState>()(
         const newSnippet: BaggedSnippet = {
           ...input,
           source,
-          text: trimmed,
+          text: formatted,
           id: generateSnippetId(),
           createdAt: new Date().toISOString(),
         }
@@ -66,8 +67,9 @@ export const useSnippetBagStore = create<SnippetBagState>()(
       },
 
       updateSnippetText: (id, text) => {
+        const formatted = formatDocumentTextLayout(text) || text.trim()
         set((state) => ({
-          snippets: state.snippets.map((s) => (s.id === id ? { ...s, text: text.trim() } : s)),
+          snippets: state.snippets.map((s) => (s.id === id ? { ...s, text: formatted } : s)),
         }))
       },
 
@@ -76,11 +78,12 @@ export const useSnippetBagStore = create<SnippetBagState>()(
       },
 
       hasSnippet: (fileId, text, pageNumber) => {
-        const trimmed = text.trim()
+        const formatted = formatDocumentTextLayout(text) || text.trim()
+        const rawTrimmed = text.trim()
         return get().snippets.some(
           (s) =>
             s.fileId === fileId &&
-            s.text.trim() === trimmed &&
+            (s.text.trim() === formatted || s.text.trim() === rawTrimmed) &&
             (pageNumber === undefined || s.pageNumber === pageNumber),
         )
       },

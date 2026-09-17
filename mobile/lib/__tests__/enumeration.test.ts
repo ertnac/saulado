@@ -232,6 +232,19 @@ Plants convert sunlight, water, and carbon dioxide into sugars.
 Oxygen is released as a byproduct into the atmosphere.`
       expect(isEnumeratedQuestion(p2)).toBe(false)
     })
+
+    it('returns true for single-line glued bullet lists extracted from PDFs', () => {
+      const raw =
+        'Lesson Objectives: • Explain IA concepts. • Differentiate CIA Triad. • Map security controls.'
+      expect(isEnumeratedQuestion(raw)).toBe(true)
+
+      const parsed = parseEnumeration(raw)
+      expect(parsed.title).toBe('Lesson Objectives')
+      expect(parsed.items).toHaveLength(3)
+      expect(parsed.items[0]).toBe('Explain IA concepts.')
+      expect(parsed.items[1]).toBe('Differentiate CIA Triad.')
+      expect(parsed.items[2]).toBe('Map security controls.')
+    })
   })
 
   describe('formatAsEnumeration', () => {
