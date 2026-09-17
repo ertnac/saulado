@@ -69,6 +69,23 @@ describe('file-repository service', () => {
       expect(detectFileType('file', 'application/msword')).toBe('doc')
     })
 
+    it('detects PPTX by extension and MIME', () => {
+      expect(detectFileType('presentation.pptx')).toBe('pptx')
+      expect(detectFileType('slides.PPTX')).toBe('pptx')
+      expect(
+        detectFileType(
+          'file',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        ),
+      ).toBe('pptx')
+    })
+
+    it('detects PPT by extension and MIME', () => {
+      expect(detectFileType('lecture.ppt')).toBe('ppt')
+      expect(detectFileType('deck.PPT')).toBe('ppt')
+      expect(detectFileType('file', 'application/vnd.ms-powerpoint')).toBe('ppt')
+    })
+
     it('rejects unsupported extensions and MIME types', () => {
       expect(detectFileType('image.png')).toBeNull()
       expect(detectFileType('archive.zip')).toBeNull()
@@ -103,12 +120,26 @@ describe('file-repository service', () => {
       expect(result).toBe(true)
     })
 
+    it('verifies valid PPTX header (PK\\x03\\x04)', async () => {
+      vi.mocked(FileSystem.readAsStringAsync).mockResolvedValueOnce('UEsDBA==')
+      const result = await verifyMagicBytes('file:///test.pptx', 'pptx')
+      expect(result).toBe(true)
+    })
+
     it('verifies valid DOC header (0xD0CF11E0)', async () => {
       // 0xD0, 0xCF, 0x11, 0xE0 base64 = 0M8R4A==
       const bytes = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])
       const base64 = btoa(String.fromCharCode(...bytes))
       vi.mocked(FileSystem.readAsStringAsync).mockResolvedValueOnce(base64)
       const result = await verifyMagicBytes('file:///test.doc', 'doc')
+      expect(result).toBe(true)
+    })
+
+    it('verifies valid PPT header (0xD0CF11E0)', async () => {
+      const bytes = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])
+      const base64 = btoa(String.fromCharCode(...bytes))
+      vi.mocked(FileSystem.readAsStringAsync).mockResolvedValueOnce(base64)
+      const result = await verifyMagicBytes('file:///test.ppt', 'ppt')
       expect(result).toBe(true)
     })
 

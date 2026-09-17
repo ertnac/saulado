@@ -193,7 +193,7 @@ export interface OfflineSetPayload {
   cards: StudyCard[]
 }
 
-export type RepositoryFileType = 'pdf' | 'doc' | 'docx'
+export type RepositoryFileType = 'pdf' | 'doc' | 'docx' | 'pptx' | 'ppt'
 
 export interface SQLiteRepositoryFile {
   id: string

@@ -1,6 +1,6 @@
-export type RepositoryFileType = 'pdf' | 'docx' | 'doc'
+export type RepositoryFileType = 'pdf' | 'docx' | 'doc' | 'pptx' | 'ppt'
 
-export type SnippetSource = 'pdf' | 'docx' | 'doc' | 'ocr' | 'typed'
+export type SnippetSource = 'pdf' | 'docx' | 'doc' | 'pptx' | 'ppt' | 'ocr' | 'typed'
 
 export interface BaggedSnippet {
   id: string
@@ -62,4 +62,20 @@ export interface UploadCloudFileRequest {
 
 export interface UploadCloudFileResponse {
   file: CloudFileSummary
+}
+
+export interface ConvertPptRequest {
+  name: string
+  mimeType?: string
+  dataBase64: string
+}
+
+export interface ConvertPptResponse {
+  file: {
+    name: string
+    fileType: 'pdf'
+    mimeType: 'application/pdf'
+    fileSize: number
+    dataBase64: string
+  }
 }

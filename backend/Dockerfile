@@ -40,6 +40,9 @@ RUN pnpm --filter @saulado/backend --prod deploy --legacy --node-linker=hoisted 
 FROM base AS runtime
 ENV NODE_ENV=production
 
+# Install LibreOffice and fonts for headless presentation-to-PDF vector conversion
+RUN apk add --no-cache libreoffice font-dejavu font-noto font-noto-cjk
+
 COPY --from=build /app/pruned/node_modules ./node_modules
 COPY --from=build /app/pruned/package.json ./package.json
 COPY --from=build /app/backend/dist ./dist

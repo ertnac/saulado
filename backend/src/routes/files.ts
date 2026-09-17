@@ -5,6 +5,7 @@
 import express, { Router, type Request, type Response } from 'express'
 import type {
   CloudFileListResponse,
+  ConvertPptResponse,
   RepositoryFileType,
   UploadCloudFileResponse,
 } from '@saulado/shared'
@@ -12,6 +13,7 @@ import { prisma } from '../db/client.js'
 import { sendError } from '../http/errors.js'
 import { requireAuth } from '../http/require-auth.js'
 import { asyncHandler } from '../http/validate.js'
+import { convertPresentationToPdf } from '../services/ppt-converter.js'
 import {
   deleteDocumentFromCloudinary,
   isCloudinaryConfigured,
@@ -39,18 +41,89 @@ function verifyMagicBytes(buffer: Buffer, fileType: RepositoryFileType): boolean
     return buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
   }
 
-  if (fileType === 'docx') {
+  if (fileType === 'docx' || fileType === 'pptx') {
     // 'PK\x03\x04' = 0x50 0x4B 0x03 0x04
     return buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04
   }
 
-  if (fileType === 'doc') {
+  if (fileType === 'doc' || fileType === 'ppt') {
     // Compound Document = 0xD0 0xCF 0x11 0xE0
     return buffer[0] === 0xd0 && buffer[1] === 0xcf && buffer[2] === 0x11 && buffer[3] === 0xe0
   }
 
   return false
 }
+
+/**
+ * POST /api/files/convert-ppt — converts a PPT or PPTX presentation into a vector PDF
+ */
+filesRouter.post(
+  '/convert-ppt',
+  asyncHandler(async (req: Request, res: Response<ConvertPptResponse>) => {
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const name = typeof body.name === 'string' ? body.name.trim() : ''
+    const dataBase64 = typeof body.dataBase64 === 'string' ? body.dataBase64 : ''
+
+    if (!name) {
+      sendError(res, 'VALIDATION_ERROR', 'Presentation file name is required')
+      return
+    }
+
+    const lower = name.toLowerCase()
+    const isPptx = lower.endsWith('.pptx')
+    const isPpt = lower.endsWith('.ppt')
+    if (!isPptx && !isPpt) {
+      sendError(
+        res,
+        'VALIDATION_ERROR',
+        'Only .pptx and .ppt presentation files are supported for conversion',
+      )
+      return
+    }
+
+    if (!dataBase64) {
+      sendError(res, 'VALIDATION_ERROR', 'File binary data is required')
+      return
+    }
+
+    const buffer = Buffer.from(dataBase64, 'base64')
+    if (buffer.length === 0) {
+      sendError(res, 'VALIDATION_ERROR', 'Uploaded presentation cannot be empty')
+      return
+    }
+
+    const detectedType: RepositoryFileType = isPptx ? 'pptx' : 'ppt'
+    const isValid = verifyMagicBytes(buffer, detectedType)
+    if (!isValid) {
+      sendError(
+        res,
+        'VALIDATION_ERROR',
+        `File header did not match standard ${detectedType.toUpperCase()} format.`,
+      )
+      return
+    }
+
+    try {
+      const result = await convertPresentationToPdf(buffer, name)
+      res.status(200).json({
+        file: {
+          name: result.fileName,
+          fileType: 'pdf',
+          mimeType: 'application/pdf',
+          fileSize: result.buffer.length,
+          dataBase64: result.buffer.toString('base64'),
+        },
+      })
+    } catch (err) {
+      console.error('[files] convert-ppt error:', err)
+      sendError(
+        res,
+        'INTERNAL_ERROR',
+        'Failed to convert PowerPoint presentation to PDF. Please try again.',
+      )
+    }
+  }),
+)
 
 /**
  * GET /api/files — list cloud files for the authenticated user

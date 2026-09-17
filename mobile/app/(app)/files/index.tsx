@@ -112,7 +112,11 @@ export default function FileRepositoryScreen(): ReactElement {
       }
     } catch (error) {
       console.warn('[file-repository] import error:', error)
-      Alert.alert('Import Failed', 'Could not import the selected file(s). Please try again.')
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Could not import the selected file(s). Please try again.'
+      Alert.alert('Import Failed', message)
     } finally {
       setImporting(false)
     }

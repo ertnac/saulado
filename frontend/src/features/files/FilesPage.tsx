@@ -14,6 +14,7 @@ import {
   verifyMagicBytes,
 } from '@/services/file-repository/file-validation'
 import {
+  convertPptToPdf,
   deleteCloudFile,
   downloadCloudFileBlob,
   fetchCloudFiles,
@@ -149,9 +150,11 @@ export function FilesPage(): ReactElement {
 
   // Handle upload
   const handleUploadFile = async (file: File) => {
-    const fileType = detectFileType(file.name, file.type)
+    let fileType = detectFileType(file.name, file.type)
     if (!fileType) {
-      toast.error('Unsupported file. Only PDF, DOCX, and DOC files are allowed.')
+      toast.error(
+        'Unsupported file. Only PDF, PowerPoint (PPTX/PPT), and DOCX/DOC files are allowed.',
+      )
       return
     }
 
@@ -163,11 +166,28 @@ export function FilesPage(): ReactElement {
 
     try {
       setUploading(true)
+      let uploadFile = file
+
+      // If presentation, automatically convert into vector PDF for 100% fidelity & selectable text
+      if (fileType === 'pptx' || fileType === 'ppt') {
+        toast.info('Converting presentation into vector PDF with selectable text…')
+        try {
+          const converted = await convertPptToPdf(file)
+          uploadFile = new File([converted.blob], converted.fileName, {
+            type: 'application/pdf',
+          })
+          fileType = 'pdf'
+        } catch (convErr) {
+          console.error('[files] PPT conversion error:', convErr)
+          toast.error('Failed to convert presentation to PDF. Please check server connection.')
+          return
+        }
+      }
 
       // Upload to cloud account
       let uploadedCloudId: string | undefined
       try {
-        const cloudResult = await uploadCloudFile(file, fileType)
+        const cloudResult = await uploadCloudFile(uploadFile, fileType)
         uploadedCloudId = cloudResult.id
       } catch (cloudErr) {
         console.warn('[files] cloud upload failed, caching locally only:', cloudErr)
@@ -182,20 +202,20 @@ export function FilesPage(): ReactElement {
         id: localId,
         userId,
         cloudFileId: uploadedCloudId,
-        name: file.name,
+        name: uploadFile.name,
         fileType,
-        mimeType: file.type || 'application/octet-stream',
-        fileSize: file.size,
-        blob: file,
+        mimeType: uploadFile.type || 'application/octet-stream',
+        fileSize: uploadFile.size,
+        blob: uploadFile,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         lastViewedAt: null,
       })
 
       if (uploadedCloudId) {
-        toast.success(`Uploaded "${file.name}" to Cloud & saved for offline!`)
+        toast.success(`Imported "${uploadFile.name}" & saved for offline reading!`)
       } else {
-        toast.info(`"${file.name}" saved to device.`)
+        toast.info(`"${uploadFile.name}" saved to device.`)
       }
       await loadFiles()
     } catch (err) {
@@ -344,14 +364,14 @@ export function FilesPage(): ReactElement {
     >
       <PageHeader
         title="File Repository"
-        description="Access and read your PDF, DOCX, and DOC documents with offline viewing and flashcard conversion."
+        description="Access and read your PDF, PowerPoint (PPTX/PPT), and Word documents with offline viewing and flashcard conversion."
         actions={
           <div className="flex items-center gap-2">
             <input
               type="file"
               ref={fileInputRef}
               onChange={handleFileInputChange}
-              accept=".pdf,.docx,.doc,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              accept=".pdf,.docx,.doc,.pptx,.ppt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
               className="hidden"
             />
             <Button
@@ -368,7 +388,7 @@ export function FilesPage(): ReactElement {
       {/* Drag overlay notice */}
       {isDragging && (
         <div className="rounded-2xl border-2 border-dashed border-primary bg-primary/10 p-8 text-center text-primary font-semibold animate-pulse">
-          Drop PDF or Word document here to import
+          Drop PDF, PowerPoint, or Word document here to import
         </div>
       )}
 
@@ -459,7 +479,7 @@ export function FilesPage(): ReactElement {
           </div>
 
           <div className="flex items-center gap-1">
-            {(['all', 'pdf', 'docx', 'doc'] as const).map((type) => (
+            {(['all', 'pdf', 'docx', 'doc', 'pptx', 'ppt'] as const).map((type) => (
               <button
                 key={type}
                 onClick={() => setTypeFilter(type)}
@@ -494,7 +514,7 @@ export function FilesPage(): ReactElement {
             <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1">
               {searchQuery || typeFilter !== 'all' || sourceFilter !== 'all'
                 ? 'No documents match your current filter settings. Try resetting search filters.'
-                : 'Upload PDFs, Word documents (.docx), or legacy Word (.doc) files to read and turn into flashcards.'}
+                : 'Upload PDFs, PowerPoint presentations (.pptx/.ppt), or Word documents (.docx/.doc) to read and turn into flashcards.'}
             </p>
           </div>
           <Button
@@ -514,7 +534,9 @@ export function FilesPage(): ReactElement {
                 ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
                 : item.fileType === 'docx'
                   ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
-                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                  : item.fileType === 'doc'
+                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                    : 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30'
 
             return (
               <Card

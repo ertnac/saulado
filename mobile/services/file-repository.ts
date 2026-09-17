@@ -1,6 +1,12 @@
 import * as DocumentPicker from 'expo-document-picker'
 import * as FileSystem from 'expo-file-system/legacy'
-import type { CloudFileListResponse, CloudFileSummary } from '@saulado/shared'
+import type {
+  CloudFileListResponse,
+  CloudFileSummary,
+  ConvertPptRequest,
+  ConvertPptResponse,
+} from '@saulado/shared'
+import { onlineManager } from '@tanstack/react-query'
 import { getDatabase } from '../lib/offline/db'
 import type { RepositoryFile, RepositoryFileType, SQLiteRepositoryFile } from '../lib/offline/types'
 import { authorizedRequest, getAccessToken } from './api'
@@ -10,11 +16,16 @@ export const ALLOWED_MIME_TYPES = [
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 ]
 
-export const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx'] as const
+export const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.ppt', '.pptx'] as const
 
-const REPOSITORY_DIR = `${FileSystem.documentDirectory ?? ''}repository/`
+export function getRepositoryDir(): string {
+  const base = FileSystem.documentDirectory || FileSystem.cacheDirectory || ''
+  return `${base.replace(/\/$/, '')}/repository/`
+}
 
 function generateUUID(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') {
@@ -49,6 +60,15 @@ export function detectFileType(fileName: string, mimeType?: string): RepositoryF
   if (lowerName.endsWith('.doc') || lowerMime === 'application/msword') {
     return 'doc'
   }
+  if (
+    lowerName.endsWith('.pptx') ||
+    lowerMime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  ) {
+    return 'pptx'
+  }
+  if (lowerName.endsWith('.ppt') || lowerMime === 'application/vnd.ms-powerpoint') {
+    return 'ppt'
+  }
   return null
 }
 
@@ -80,12 +100,12 @@ export async function verifyMagicBytes(
       return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46
     }
 
-    if (expectedType === 'docx') {
+    if (expectedType === 'docx' || expectedType === 'pptx') {
       // Zip standard PK header = 0x50, 0x4B, 0x03, 0x04
       return bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04
     }
 
-    if (expectedType === 'doc') {
+    if (expectedType === 'doc' || expectedType === 'ppt') {
       // Compound Document header = 0xD0, 0xCF, 0x11, 0xE0
       return bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0
     }
@@ -99,11 +119,12 @@ export async function verifyMagicBytes(
 }
 
 export async function ensureRepositoryDirectory(): Promise<string> {
-  const info = await FileSystem.getInfoAsync(REPOSITORY_DIR)
+  const dir = getRepositoryDir()
+  const info = await FileSystem.getInfoAsync(dir)
   if (!info.exists) {
-    await FileSystem.makeDirectoryAsync(REPOSITORY_DIR, { intermediates: true })
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true })
   }
-  return REPOSITORY_DIR
+  return dir
 }
 
 function mapRowToRepositoryFile(row: SQLiteRepositoryFile): RepositoryFile {
@@ -140,7 +161,7 @@ export async function pickAndImportFiles(userId: string): Promise<RepositoryFile
     return []
   }
 
-  await ensureRepositoryDirectory()
+  const repoDir = await ensureRepositoryDirectory()
   const db = await getDatabase()
   const importedFiles: RepositoryFile[] = []
 
@@ -160,46 +181,112 @@ export async function pickAndImportFiles(userId: string): Promise<RepositoryFile
     }
 
     const fileId = generateUUID()
-    const sanitizedName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_')
-    const destinationPath = `${REPOSITORY_DIR}${fileId}_${sanitizedName}`
+    let finalFileType: RepositoryFileType = detectedType
+    let finalName = rawName
+    let finalMime = asset.mimeType || 'application/octet-stream'
+    let destinationPath = ''
+    let fileSize = 0
 
-    // Copy to persistent sandboxed directory
-    await FileSystem.copyAsync({
-      from: asset.uri,
-      to: destinationPath,
-    })
-
-    // Get true size
-    let fileSize = asset.size ?? 0
-    if (fileSize <= 0) {
-      const info = await FileSystem.getInfoAsync(destinationPath)
-      if (info.exists && 'size' in info) {
-        fileSize = info.size
+    if (detectedType === 'pptx' || detectedType === 'ppt') {
+      if (!onlineManager.isOnline()) {
+        throw new Error(
+          'PowerPoint presentation conversion requires an active internet connection to preserve slide layout. Please connect to the internet to import.',
+        )
       }
+
+      const token = getAccessToken()
+      if (!token) {
+        throw new Error(
+          'Please sign in to your account first so the presentation can be converted into a study PDF.',
+        )
+      }
+
+      const dataBase64 = await FileSystem.readAsStringAsync(asset.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      })
+
+      let converted: ConvertPptResponse
+      try {
+        converted = await authorizedRequest<ConvertPptResponse>('/api/files/convert-ppt', {
+          method: 'POST',
+          body: {
+            name: rawName,
+            mimeType: asset.mimeType,
+            dataBase64,
+          } satisfies ConvertPptRequest,
+        })
+      } catch (convErr: unknown) {
+        const anyErr = convErr as { status?: number; message?: string }
+        if (anyErr?.status === 404) {
+          throw new Error(
+            'The presentation conversion service is not available on this server yet. Please ensure the backend is updated and deployed.',
+          )
+        }
+        if (
+          anyErr?.message?.includes('Network request failed') ||
+          anyErr?.status === 502 ||
+          anyErr?.status === 504
+        ) {
+          throw new Error(
+            'Could not reach the conversion server. Please check your internet connection and verify the server is running.',
+          )
+        }
+        throw new Error(`Presentation conversion failed: ${anyErr?.message || 'Server error'}.`)
+      }
+
+      finalFileType = 'pdf'
+      finalName = converted.file.name
+      finalMime = 'application/pdf'
+      fileSize = converted.file.fileSize
+
+      const sanitizedName = finalName.replace(/[^a-zA-Z0-9._-]/g, '_')
+      destinationPath = `${repoDir}${fileId}_${sanitizedName}`
+
+      await FileSystem.writeAsStringAsync(destinationPath, converted.file.dataBase64, {
+        encoding: FileSystem.EncodingType.Base64,
+      })
+    } else {
+      const sanitizedName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_')
+      destinationPath = `${repoDir}${fileId}_${sanitizedName}`
+
+      // Copy to persistent sandboxed directory
+      await FileSystem.copyAsync({
+        from: asset.uri,
+        to: destinationPath,
+      })
+
+      fileSize = asset.size ?? 0
+      if (fileSize <= 0) {
+        const info = await FileSystem.getInfoAsync(destinationPath)
+        if (info.exists && 'size' in info) {
+          fileSize = info.size
+        }
+      }
+
+      finalMime =
+        asset.mimeType ||
+        (detectedType === 'pdf'
+          ? 'application/pdf'
+          : detectedType === 'docx'
+            ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            : 'application/msword')
     }
 
     const now = new Date().toISOString()
-    const mime =
-      asset.mimeType ||
-      (detectedType === 'pdf'
-        ? 'application/pdf'
-        : detectedType === 'docx'
-          ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-          : 'application/msword')
 
     await db.runAsync(
       `INSERT INTO repository_files (
         id, user_id, name, file_type, mime_type, file_uri, file_size, page_count, created_at, updated_at, last_viewed_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL)`,
-      [fileId, userId, rawName, detectedType, mime, destinationPath, fileSize, now, now],
+      [fileId, userId, finalName, finalFileType, finalMime, destinationPath, fileSize, now, now],
     )
 
     importedFiles.push({
       id: fileId,
       userId,
-      name: rawName,
-      fileType: detectedType,
-      mimeType: mime,
+      name: finalName,
+      fileType: finalFileType,
+      mimeType: finalMime,
       fileUri: destinationPath,
       fileSize,
       pageCount: null,
@@ -207,6 +294,12 @@ export async function pickAndImportFiles(userId: string): Promise<RepositoryFile
       updatedAt: now,
       lastViewedAt: null,
     })
+  }
+
+  if (pickResult.assets.length > 0 && importedFiles.length === 0) {
+    throw new Error(
+      'None of the selected files could be imported. Please verify that the files are valid PDF, Word (.docx/.doc), or PowerPoint (.pptx/.ppt) documents.',
+    )
   }
 
   return importedFiles
@@ -343,11 +436,11 @@ export async function downloadCloudFile(
 ): Promise<RepositoryFile> {
   if (!userId) throw new Error('User must be authenticated to download cloud files.')
 
-  await ensureRepositoryDirectory()
+  const repoDir = await ensureRepositoryDirectory()
   const db = await getDatabase()
 
   const sanitizedName = cloudFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const destinationPath = `${REPOSITORY_DIR}${cloudFile.id}_${sanitizedName}`
+  const destinationPath = `${repoDir}${cloudFile.id}_${sanitizedName}`
 
   const downloadUrl = apiUrl(`/api/files/${cloudFile.id}/download`)
   const token = getAccessToken()
