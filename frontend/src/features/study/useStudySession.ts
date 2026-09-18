@@ -1,8 +1,12 @@
 import { useCallback, useRef, useState } from 'react'
 import {
+  checkAnswers,
+  gradeCard,
   requeuePosition,
+  shouldRequeue,
   type AnswerResponse,
   type SessionCard,
+  type SessionMode,
   type SessionProgress,
   type StudySession,
 } from '@saulado/shared'
@@ -53,10 +57,16 @@ export interface StudySessionController {
   /** Loads a session's queue, replacing anything in progress. */
   load: (session: StudySession) => void
   /** Records a graded answer and stops accepting input for this card. */
-  accept: (answer: AnswerResponse) => void
+  accept: (answer: AnswerResponse, forCardId?: string) => void
   /** Advances past the graded card. Returns `true` when the session is spent. */
   advance: () => boolean
   reset: () => void
+  evaluateLocally: (
+    submittedValues: Record<number, string>,
+    revealed: boolean,
+    sessionMode?: SessionMode,
+  ) => AnswerResponse | null
+  syncProgress: (serverProgress: SessionProgress) => void
 }
 
 export function useStudySession(): StudySessionController {
@@ -82,6 +92,7 @@ export function useStudySession(): StudySessionController {
    */
   const queueRef = useRef<SessionCard[]>([])
   const answerRef = useRef<AnswerResponse | null>(null)
+  const attemptsRef = useRef<Record<string, number>>({})
 
   const setQueueBoth = useCallback((next: SessionCard[]) => {
     queueRef.current = next
@@ -100,20 +111,26 @@ export function useStudySession(): StudySessionController {
       setValues({})
       setAnswerBoth(null)
       setIdempotencyKey(newIdempotencyKey())
+      attemptsRef.current = {}
     },
     [setQueueBoth, setAnswerBoth],
   )
 
   const accept = useCallback(
-    (graded: AnswerResponse) => {
-      setAnswerBoth(graded)
-      // Trusted over any local tally: a re-queued card counts once per attempt,
-      // and a replayed idempotency key must not advance the count at all. The
-      // server is the only place that knows which of those just happened.
+    (graded: AnswerResponse, forCardId?: string) => {
+      // Only set the answer if the user is STILL looking at this card!
+      // This prevents delayed background network responses from flashing previous card answers.
+      if (!forCardId || queueRef.current[0]?.cardId === forCardId) {
+        setAnswerBoth(graded)
+      }
       setProgress(graded.progress)
     },
     [setAnswerBoth],
   )
+
+  const syncProgress = useCallback((serverProgress: SessionProgress) => {
+    setProgress(serverProgress)
+  }, [])
 
   const advance = useCallback((): boolean => {
     const [head, ...rest] = queueRef.current
@@ -133,6 +150,67 @@ export function useStudySession(): StudySessionController {
     return next.length === 0
   }, [setQueueBoth, setAnswerBoth])
 
+  const evaluateLocally = useCallback(
+    (
+      submittedValues: Record<number, string>,
+      revealed: boolean,
+      sessionMode?: SessionMode,
+    ): AnswerResponse | null => {
+      const currentCard = queueRef.current[0]
+      if (!currentCard) return null
+
+      // Use cardAnswers if provided (containing altAnswers), fallback to blankAnswers
+      const answersForEval =
+        currentCard.cardAnswers ??
+        (currentCard.blankAnswers ?? []).map((text: string) => ({
+          answerText: text,
+          altAnswers: [],
+        }))
+
+      // Prepare inputs array (e.g. index 0 -> submittedValues[0])
+      const inputs = answersForEval.map((_: unknown, i: number) =>
+        revealed ? '' : (submittedValues[i] ?? ''),
+      )
+
+      const rawResults = checkAnswers(inputs, answersForEval, { typoTolerance: true })
+      const results = rawResults.map((result, i) => ({
+        ...result,
+        ordinal: i,
+        submitted: inputs[i] ?? '',
+      }))
+
+      const grade = revealed ? 'again' : gradeCard(results)
+      const correct = !revealed && grade !== 'again' && grade !== 'hard'
+      const hadEmptyBlank = !revealed && results.some((r) => r.submitted.trim() === '')
+
+      attemptsRef.current[currentCard.cardId] = (attemptsRef.current[currentCard.cardId] ?? 0) + 1
+      const attempts = attemptsRef.current[currentCard.cardId] ?? 1
+
+      const requeued =
+        sessionMode === 'retake'
+          ? false
+          : sessionMode === 'spaced'
+            ? shouldRequeue(grade, attempts)
+            : !hadEmptyBlank && shouldRequeue(grade, attempts)
+
+      return {
+        results,
+        grade,
+        correct,
+        dueAt: '',
+        intervalDays: 0,
+        isLeech: false,
+        requeued,
+        progress: {
+          ...progress,
+          answered: progress.answered + (requeued ? 0 : 1),
+          correct: progress.correct + (correct ? 1 : 0),
+        },
+      }
+    },
+    [progress],
+  )
+
   const setValue = useCallback((ordinal: number, value: string) => {
     setValues((current) => ({ ...current, [ordinal]: value }))
   }, [])
@@ -142,6 +220,7 @@ export function useStudySession(): StudySessionController {
     setValues({})
     setAnswerBoth(null)
     setProgress({ answered: 0, total: 0, correct: 0 })
+    attemptsRef.current = {}
   }, [setQueueBoth, setAnswerBoth])
 
   return {
@@ -155,6 +234,8 @@ export function useStudySession(): StudySessionController {
     setValue,
     load,
     accept,
+    syncProgress,
+    evaluateLocally,
     advance,
     reset,
   }
