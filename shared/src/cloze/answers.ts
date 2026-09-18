@@ -275,12 +275,47 @@ export function answerAtOffset<T extends AnswerRange>(
   return answers.find((answer) => offset >= answer.startOffset && offset < answer.endOffset)
 }
 
+export const BOUNDARY_PUNCTUATION_REGEX = /[.,;:!?'"“”‘’«»()[\]{}<>—–\-_/\\|`~@#$%^&*+=]/
+
 /**
- * Expands a range outward to the nearest word boundaries.
+ * Trims leading and trailing punctuation marks from a candidate answer range.
  *
- * Touch selection is imprecise — a long-press typically lands mid-word. Without
- * snapping, the user gets "Perte" from "HyperText" and has to fight the handles.
- * The editor calls this before {@link createAnswer}.
+ * Punctuation marks directly attached to words without a space (e.g. colons in
+ * "Autonomous Navigation:", trailing commas, sentence periods) should not be
+ * swallowed into the blank. Leaving punctuation in the surrounding sentence context
+ * preserves readability and prevents giving away clues or requiring users to type
+ * punctuation during study sessions.
+ */
+export function trimBoundaryPunctuation(
+  paragraph: string,
+  startOffset: number,
+  endOffset: number,
+): { startOffset: number; endOffset: number } {
+  const points = toCodePoints(paragraph)
+  let start = Math.max(0, Math.min(startOffset, points.length))
+  let end = Math.max(start, Math.min(endOffset, points.length))
+
+  while (
+    start < end &&
+    points[start] !== undefined &&
+    (BOUNDARY_PUNCTUATION_REGEX.test(points[start]!) || /\s/.test(points[start]!))
+  ) {
+    start += 1
+  }
+
+  while (
+    end > start &&
+    points[end - 1] !== undefined &&
+    (BOUNDARY_PUNCTUATION_REGEX.test(points[end - 1]!) || /\s/.test(points[end - 1]!))
+  ) {
+    end -= 1
+  }
+
+  return { startOffset: start, endOffset: end }
+}
+
+/**
+ * Expands a selection to word boundaries and trims boundary punctuation.
  *
  * Whitespace-only selections are returned unchanged, so the caller still gets a
  * `WHITESPACE_ONLY` rejection rather than having a neighbouring word silently
@@ -304,5 +339,5 @@ export function snapToWordBoundaries(
   while (start > 0 && isWordChar(points[start - 1])) start -= 1
   while (end < points.length && isWordChar(points[end])) end += 1
 
-  return { startOffset: start, endOffset: end }
+  return trimBoundaryPunctuation(paragraph, start, end)
 }

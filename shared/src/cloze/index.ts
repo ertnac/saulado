@@ -39,6 +39,8 @@ export {
   rangesOverlap,
   refreshAnswerText,
   snapToWordBoundaries,
+  trimBoundaryPunctuation,
+  BOUNDARY_PUNCTUATION_REGEX,
   validateAnswers,
 } from './answers.js'
 

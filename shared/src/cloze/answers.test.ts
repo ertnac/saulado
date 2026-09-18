@@ -9,6 +9,7 @@ import {
   rangesOverlap,
   refreshAnswerText,
   snapToWordBoundaries,
+  trimBoundaryPunctuation,
   validateAnswers,
 } from './answers.js'
 import { sliceCodePoints } from './codepoints.js'
@@ -245,6 +246,56 @@ describe('snapToWordBoundaries', () => {
     const text = 'word1 word2'
     const result = snapToWordBoundaries(text, 5, 6) // the space
     expect(result).toEqual({ startOffset: 5, endOffset: 6 })
+  })
+
+  it('excludes punctuation directly attached to the word without space', () => {
+    const text = 'Autonomous Navigation: AI assists robots, sensors.'
+    // Click inside "Navigation:"
+    const res1 = snapToWordBoundaries(text, 12, 15)
+    expect(sliceCodePoints(text, res1.startOffset, res1.endOffset)).toBe('Navigation')
+
+    // Click inside "robots,"
+    const res2 = snapToWordBoundaries(text, 35, 38)
+    expect(sliceCodePoints(text, res2.startOffset, res2.endOffset)).toBe('robots')
+  })
+})
+
+describe('trimBoundaryPunctuation', () => {
+  it('trims trailing punctuation attached to words without space', () => {
+    const text = 'Autonomous Navigation: AI assists robots, sensors, and cameras.'
+    // "Autonomous Navigation:" from 0 to 22
+    const trimmed = trimBoundaryPunctuation(text, 0, 22)
+    expect(sliceCodePoints(text, trimmed.startOffset, trimmed.endOffset)).toBe(
+      'Autonomous Navigation',
+    )
+    expect(trimmed).toEqual({ startOffset: 0, endOffset: 21 })
+  })
+
+  it('trims trailing commas, periods, quotes, and parens', () => {
+    const text = 'robots, "sensors", and (cameras).'
+    // "robots," -> "robots"
+    const r1 = trimBoundaryPunctuation(text, 0, 7)
+    expect(sliceCodePoints(text, r1.startOffset, r1.endOffset)).toBe('robots')
+
+    // '"sensors",' -> 'sensors'
+    const r2 = trimBoundaryPunctuation(text, 8, 17)
+    expect(sliceCodePoints(text, r2.startOffset, r2.endOffset)).toBe('sensors')
+
+    // '(cameras).' -> 'cameras'
+    const r3 = trimBoundaryPunctuation(text, 23, 33)
+    expect(sliceCodePoints(text, r3.startOffset, r3.endOffset)).toBe('cameras')
+  })
+
+  it('preserves internal punctuation', () => {
+    const text = "state-of-the-art don't 3.14"
+    const r1 = trimBoundaryPunctuation(text, 0, 16)
+    expect(sliceCodePoints(text, r1.startOffset, r1.endOffset)).toBe('state-of-the-art')
+
+    const r2 = trimBoundaryPunctuation(text, 17, 22)
+    expect(sliceCodePoints(text, r2.startOffset, r2.endOffset)).toBe("don't")
+
+    const r3 = trimBoundaryPunctuation(text, 23, 27)
+    expect(sliceCodePoints(text, r3.startOffset, r3.endOffset)).toBe('3.14')
   })
 })
 
