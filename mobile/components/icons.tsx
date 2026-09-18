@@ -141,6 +141,14 @@ export function ChevronLeftIcon(props: IconProps): ReactElement {
   )
 }
 
+export function ChevronUpIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="m18 15-6-6-6 6" />
+    </Icon>
+  )
+}
+
 export function SearchIcon(props: IconProps): ReactElement {
   return (
     <Icon {...props}>
@@ -639,6 +647,31 @@ export function MoreHorizontalIcon(props: IconProps): ReactElement {
       <Circle cx={12} cy={12} r={1.5} fill={props.color} />
       <Circle cx={19} cy={12} r={1.5} fill={props.color} />
       <Circle cx={5} cy={12} r={1.5} fill={props.color} />
+    </Icon>
+  )
+}
+
+export function FolderOpenIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="m6 14 1.45-6.55A2 2 0 0 1 9.4 6H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18" />
+    </Icon>
+  )
+}
+
+export function CheckSquareIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="m9 11 3 3L22 4" />
+      <Path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </Icon>
+  )
+}
+
+export function SquareIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <Path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z" />
     </Icon>
   )
 }

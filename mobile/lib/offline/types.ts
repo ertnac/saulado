@@ -195,10 +195,30 @@ export interface OfflineSetPayload {
 
 export type RepositoryFileType = 'pdf' | 'doc' | 'docx' | 'pptx' | 'ppt'
 
+export interface SQLiteRepositoryFolder {
+  id: string
+  user_id: string
+  name: string
+  color: string
+  created_at: string
+  updated_at: string
+}
+
+export interface RepositoryFolder {
+  id: string
+  userId: string
+  name: string
+  color: string
+  fileCount?: number
+  createdAt: string
+  updatedAt: string
+}
+
 export interface SQLiteRepositoryFile {
   id: string
   user_id: string
   cloud_file_id?: string | null
+  folder_id?: string | null
   name: string
   file_type: RepositoryFileType
   mime_type: string
@@ -214,6 +234,7 @@ export interface RepositoryFile {
   id: string
   userId: string
   cloudFileId?: string | null
+  folderId?: string | null
   name: string
   fileType: RepositoryFileType
   mimeType: string

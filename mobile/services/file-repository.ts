@@ -8,7 +8,13 @@ import type {
 } from '@saulado/shared'
 import { onlineManager } from '@tanstack/react-query'
 import { getDatabase } from '../lib/offline/db'
-import type { RepositoryFile, RepositoryFileType, SQLiteRepositoryFile } from '../lib/offline/types'
+import type {
+  RepositoryFile,
+  RepositoryFileType,
+  RepositoryFolder,
+  SQLiteRepositoryFile,
+  SQLiteRepositoryFolder,
+} from '../lib/offline/types'
 import { authorizedRequest, getAccessToken } from './api'
 import { apiUrl } from './config'
 
@@ -132,6 +138,7 @@ function mapRowToRepositoryFile(row: SQLiteRepositoryFile): RepositoryFile {
     id: row.id,
     userId: row.user_id,
     cloudFileId: row.cloud_file_id ?? null,
+    folderId: row.folder_id ?? null,
     name: row.name,
     fileType: row.file_type,
     mimeType: row.mime_type,
@@ -160,6 +167,7 @@ export type ImportProgressCallback = (update: ImportProgressUpdate) => void
 export async function pickAndImportFiles(
   userId: string,
   onProgress?: ImportProgressCallback,
+  folderId?: string | null,
 ): Promise<RepositoryFile[]> {
   if (!userId) throw new Error('User must be authenticated to import repository files.')
 
@@ -324,14 +332,26 @@ export async function pickAndImportFiles(
 
     await db.runAsync(
       `INSERT INTO repository_files (
-        id, user_id, name, file_type, mime_type, file_uri, file_size, page_count, created_at, updated_at, last_viewed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL)`,
-      [fileId, userId, finalName, finalFileType, finalMime, destinationPath, fileSize, now, now],
+        id, user_id, cloud_file_id, folder_id, name, file_type, mime_type, file_uri, file_size, page_count, created_at, updated_at, last_viewed_at
+      ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL)`,
+      [
+        fileId,
+        userId,
+        folderId ?? null,
+        finalName,
+        finalFileType,
+        finalMime,
+        destinationPath,
+        fileSize,
+        now,
+        now,
+      ],
     )
 
     importedFiles.push({
       id: fileId,
       userId,
+      folderId: folderId ?? null,
       name: finalName,
       fileType: finalFileType,
       mimeType: finalMime,
@@ -357,6 +377,7 @@ export async function getRepositoryFiles(
   userId: string,
   filterType?: RepositoryFileType | 'all',
   searchQuery?: string,
+  folderId?: null | (string & {}),
 ): Promise<RepositoryFile[]> {
   if (!userId) return []
   const db = await getDatabase()
@@ -372,6 +393,15 @@ export async function getRepositoryFiles(
   if (searchQuery && searchQuery.trim().length > 0) {
     sql += ' AND name LIKE ?'
     params.push(`%${searchQuery.trim()}%`)
+  }
+
+  if (folderId !== undefined && folderId !== 'all') {
+    if (folderId === null) {
+      sql += ' AND folder_id IS NULL'
+    } else {
+      sql += ' AND folder_id = ?'
+      params.push(folderId)
+    }
   }
 
   sql += ' ORDER BY updated_at DESC'
@@ -464,6 +494,109 @@ export async function getRepositoryStats(userId: string): Promise<RepositoryStat
   }
 
   return { totalFiles, totalSizeBytes, pdfCount, docxCount, docCount }
+}
+
+export async function createRepositoryFolder(
+  userId: string,
+  name: string,
+  color = '#317054',
+): Promise<RepositoryFolder> {
+  if (!userId) throw new Error('User must be authenticated to create a folder.')
+  const trimmed = name.trim()
+  if (!trimmed) throw new Error('Folder name cannot be empty.')
+
+  const db = await getDatabase()
+  const id = generateUUID()
+  const now = new Date().toISOString()
+
+  await db.runAsync(
+    `INSERT INTO repository_folders (id, user_id, name, color, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [id, userId, trimmed, color, now, now],
+  )
+
+  return {
+    id,
+    userId,
+    name: trimmed,
+    color,
+    fileCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+export async function getRepositoryFolders(userId: string): Promise<RepositoryFolder[]> {
+  if (!userId) return []
+  const db = await getDatabase()
+
+  const rows = await db.getAllAsync<SQLiteRepositoryFolder & { file_count: number }>(
+    `SELECT f.*, COUNT(rf.id) as file_count
+     FROM repository_folders f
+     LEFT JOIN repository_files rf ON rf.folder_id = f.id
+     WHERE f.user_id = ?
+     GROUP BY f.id
+     ORDER BY f.name COLLATE NOCASE ASC`,
+    [userId],
+  )
+
+  return rows.map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    name: r.name,
+    color: r.color || '#317054',
+    fileCount: Number(r.file_count) || 0,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }))
+}
+
+export async function updateRepositoryFolder(
+  folderId: string,
+  name: string,
+  color?: string,
+): Promise<void> {
+  if (!folderId || !name.trim()) return
+  const db = await getDatabase()
+  const now = new Date().toISOString()
+
+  if (color) {
+    await db.runAsync(
+      'UPDATE repository_folders SET name = ?, color = ?, updated_at = ? WHERE id = ?',
+      [name.trim(), color, now, folderId],
+    )
+  } else {
+    await db.runAsync('UPDATE repository_folders SET name = ?, updated_at = ? WHERE id = ?', [
+      name.trim(),
+      now,
+      folderId,
+    ])
+  }
+}
+
+export async function deleteRepositoryFolder(folderId: string): Promise<void> {
+  if (!folderId) return
+  const db = await getDatabase()
+
+  await db.withTransactionAsync(async () => {
+    // Safely unassign files from this folder so documents are never lost
+    await db.runAsync('UPDATE repository_files SET folder_id = NULL WHERE folder_id = ?', [
+      folderId,
+    ])
+    await db.runAsync('DELETE FROM repository_folders WHERE id = ?', [folderId])
+  })
+}
+
+export async function moveFilesToFolder(fileIds: string[], folderId: string | null): Promise<void> {
+  if (!fileIds || fileIds.length === 0) return
+  const db = await getDatabase()
+  const now = new Date().toISOString()
+
+  const placeholders = fileIds.map(() => '?').join(', ')
+  await db.runAsync(
+    `UPDATE repository_files SET folder_id = ?, updated_at = ? WHERE id IN (${placeholders})`,
+    [folderId, now, ...fileIds],
+  )
 }
 
 /**
