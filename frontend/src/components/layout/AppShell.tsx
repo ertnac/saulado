@@ -13,6 +13,7 @@ import {
   MoonIcon,
   SearchIcon,
   ShieldIcon,
+  ShoppingBagIcon,
   SparklesIcon,
   SunIcon,
   UserIcon,
@@ -24,8 +25,10 @@ import { useSearchShortcut } from '@/features/search/useSearchShortcut'
 import { useAdminCheck } from '@/features/admin/queries'
 import { useTheme } from '@/hooks/useTheme'
 import { useAuthStore } from '@/stores/auth'
+import { useSnippetBagStore } from '@/stores/snippet-bag'
 import { useDashboard } from '@/features/dashboard/queries'
 import { QuickLearnDialog } from '@/features/study/QuickLearnDialog'
+import { SnippetBagModal } from '@/features/files/SnippetBagModal'
 import { DUR, EASE, SPRING } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
@@ -154,14 +157,23 @@ export function AppShell(): ReactElement {
   const { data: adminCheck } = useAdminCheck()
   const { data: dashboardData } = useDashboard()
 
+  const bagSnippets = useSnippetBagStore((s) => s.snippets)
+  const [snippetBagOpen, setSnippetBagOpen] = useState(false)
   const [quickLearnOpen, setQuickLearnOpen] = useState(false)
 
   const points =
     (dashboardData?.today?.reviews ?? 0) * 10 + (dashboardData?.streak?.current ?? 0) * 20 + 50
   const streakDays = dashboardData?.streak?.current ?? 0
 
+  const isFileViewer = location.pathname.startsWith('/files/') && location.pathname !== '/files'
+
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
+    <div
+      className={cn(
+        'bg-background text-foreground flex flex-col font-sans',
+        isFileViewer ? 'h-screen overflow-hidden' : 'min-h-screen',
+      )}
+    >
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-surface focus:px-4 focus:py-2 focus:shadow-lift"
@@ -170,7 +182,12 @@ export function AppShell(): ReactElement {
       </a>
 
       {/* Top Header Navigation Bar (Trenning Inspo) */}
-      <header className="sticky top-0 z-30 border-b border-border/60 bg-surface/85 backdrop-blur-md">
+      <header
+        className={cn(
+          'z-30 border-b border-border/60 bg-surface/85 backdrop-blur-md shrink-0',
+          !isFileViewer && 'sticky top-0',
+        )}
+      >
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
           {/* Left: Brand Logo & Ask AI */}
           <div className="flex items-center gap-3 shrink-0">
@@ -241,6 +258,29 @@ export function AppShell(): ReactElement {
               </NavLink>
             )}
 
+            {/* Study Bag Trigger */}
+            <button
+              type="button"
+              onClick={() => setSnippetBagOpen(true)}
+              title={
+                bagSnippets.length > 0
+                  ? `Study Bag (${bagSnippets.length} ${bagSnippets.length === 1 ? 'note' : 'notes'})`
+                  : 'Study Bag (empty)'
+              }
+              aria-label="Open study bag"
+              className={cn(
+                'relative flex h-10 w-10 items-center justify-center rounded-full border border-border/80 bg-surface/80 text-foreground transition-all duration-150 hover:border-primary/40 hover:bg-surface shadow-xs active:scale-95',
+                bagSnippets.length > 0 && 'text-primary border-primary/40 bg-primary/10',
+              )}
+            >
+              <ShoppingBagIcon className="h-4 w-4" />
+              {bagSnippets.length > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-xs">
+                  {bagSnippets.length > 99 ? '99+' : bagSnippets.length}
+                </span>
+              )}
+            </button>
+
             <ThemeToggle />
 
             {/* User Profile */}
@@ -279,20 +319,28 @@ export function AppShell(): ReactElement {
       </header>
 
       {/* Mobile Bottom Navigation Rail */}
-      <div className="md:hidden">
+      <div className="md:hidden shrink-0">
         <MainNav />
       </div>
 
       {/* Main Content Area */}
       <main
         id="main"
-        className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 pb-24 md:pb-12 flex-1"
+        className={cn(
+          'w-full flex-1 transition-all',
+          isFileViewer
+            ? 'px-2 sm:px-3 py-1 pb-1 max-w-none overflow-hidden flex flex-col min-h-0'
+            : 'mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 pb-24 md:pb-12',
+        )}
       >
         <motion.div
           key={location.pathname}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: DUR.page, ease: EASE }}
+          className={
+            isFileViewer ? 'w-full h-full flex flex-col min-h-0 overflow-hidden' : undefined
+          }
         >
           <Outlet />
         </motion.div>
@@ -301,6 +349,7 @@ export function AppShell(): ReactElement {
       {/* Global Modals */}
       <CommandPalette open={palette.open} onClose={palette.onClose} />
       <QuickLearnDialog open={quickLearnOpen} onClose={() => setQuickLearnOpen(false)} />
+      <SnippetBagModal open={snippetBagOpen} onClose={() => setSnippetBagOpen(false)} />
     </div>
   )
 }

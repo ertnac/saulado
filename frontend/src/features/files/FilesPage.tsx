@@ -4,10 +4,12 @@ import type { CloudFileSummary, RepositoryFileType } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/dialog'
-import { FolderIcon, SearchIcon, XIcon } from '@/components/ui/icons'
+import { FolderIcon, SearchIcon, ShoppingBagIcon, SparklesIcon, XIcon } from '@/components/ui/icons'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { toast } from '@/stores/toast'
 import { useAuthStore } from '@/stores/auth'
+import { useSnippetBagStore } from '@/stores/snippet-bag'
+import { SnippetBagModal } from './SnippetBagModal'
 import {
   detectFileType,
   formatFileSize,
@@ -63,6 +65,8 @@ export function FilesPage(): ReactElement {
   const [searchQuery, setSearchQuery] = useState('')
 
   const [deleteTarget, setDeleteTarget] = useState<UnifiedFileItem | null>(null)
+  const [snippetBagOpen, setSnippetBagOpen] = useState(false)
+  const bagSnippets = useSnippetBagStore((s) => s.snippets)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Load cloud & local files
@@ -367,6 +371,14 @@ export function FilesPage(): ReactElement {
         description="Access and read your PDF, PowerPoint (PPTX/PPT), and Word documents with offline viewing and flashcard conversion."
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setSnippetBagOpen(true)}
+              className="flex items-center gap-1.5"
+            >
+              <ShoppingBagIcon className="h-4 w-4 text-primary" />
+              <span>Study Bag ({bagSnippets.length})</span>
+            </Button>
             <input
               type="file"
               ref={fileInputRef}
@@ -593,17 +605,31 @@ export function FilesPage(): ReactElement {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-border/50 pt-3 mt-4">
-                  <Button
-                    variant="soft"
-                    size="sm"
-                    onClick={() => {
-                      void navigate(`/files/${item.id}`)
-                    }}
-                    className="text-xs"
-                  >
-                    Open Document
-                  </Button>
+                <div className="flex flex-wrap items-center justify-between border-t border-border/50 pt-3 mt-4 gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="soft"
+                      size="sm"
+                      onClick={() => {
+                        void navigate(`/files/${item.id}`)
+                      }}
+                      className="text-xs"
+                    >
+                      Open
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        void navigate(`/files/${item.id}?split=true`)
+                      }}
+                      title="Open side-by-side with Card Creation Studio"
+                      className="text-xs flex items-center gap-1 hover:border-primary/50 font-semibold"
+                    >
+                      <SparklesIcon className="h-3 w-3 text-primary" />
+                      <span>Split Studio</span>
+                    </Button>
+                  </div>
 
                   <div className="flex items-center gap-1">
                     {item.isLocal && !item.isCloud && item.blob && (
@@ -654,6 +680,9 @@ export function FilesPage(): ReactElement {
           void confirmDelete()
         }}
       />
+
+      {/* Study Bag Modal */}
+      <SnippetBagModal open={snippetBagOpen} onClose={() => setSnippetBagOpen(false)} />
     </div>
   )
 }

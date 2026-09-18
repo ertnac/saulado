@@ -64,7 +64,14 @@ export async function parseDocumentContent(
     const paragraphs = extractedText
       .split(/\n\s*\n/)
       .map((p) => p.trim())
-      .filter((p) => p.length > 0)
+      .filter((p) => {
+        if (/^(\d+\s+0\s+R\s*)+$/.test(p)) return false
+        if (/^XYZ\s+[\d.]+/i.test(p)) return false
+        if (/^(FEFF[0-9A-Fa-f\s]+)$/i.test(p)) return false
+        if (/^ParentTreeNextKey/i.test(p)) return false
+        if (/^PDF m\d+\s+Google Docs/i.test(p)) return false
+        return p.length > 0
+      })
 
     const readerBody =
       paragraphs.length > 0

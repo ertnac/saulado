@@ -1,11 +1,13 @@
-import { useEffect, useState, type ReactElement } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { RepositoryFileType } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/dialog'
+import { ShoppingBagIcon, SparklesIcon } from '@/components/ui/icons'
 import { toast } from '@/stores/toast'
 import { useAuthStore } from '@/stores/auth'
+import { useSnippetBagStore } from '@/stores/snippet-bag'
 import { formatFileSize, detectFileType } from '@/services/file-repository/file-validation'
 import {
   deleteCloudFile,
@@ -23,13 +25,21 @@ import {
   type DocumentParsedContent,
 } from '@/services/file-repository/document-parser'
 import { MakeCardsDialog } from './MakeCardsDialog'
+import { DocumentSelectionMenu, type SelectionPosition } from './DocumentSelectionMenu'
+import { SplitCardStudio } from './SplitCardStudio'
+import { SnippetBagModal } from './SnippetBagModal'
+import { InteractivePdfViewer } from './InteractivePdfViewer'
 import { cn } from '@/lib/utils'
 
 export function FileViewerPage(): ReactElement {
   const { fileId } = useParams<{ fileId: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const userId = user?.id || 'guest'
+
+  const addSnippet = useSnippetBagStore((s) => s.addSnippet)
+  const bagSnippets = useSnippetBagStore((s) => s.snippets)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -39,10 +49,17 @@ export function FileViewerPage(): ReactElement {
   const [blob, setBlob] = useState<Blob | null>(null)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [content, setContent] = useState<DocumentParsedContent | null>(null)
+  const [isSplitMode, setIsSplitMode] = useState<boolean>(
+    () => searchParams.get('split') === 'true',
+  )
+  const [incomingNoteText, setIncomingNoteText] = useState<string | null>(null)
+  const [selectedText, setSelectedText] = useState('')
+  const [selectionPos, setSelectionPos] = useState<SelectionPosition | null>(null)
 
-  const [viewMode, setViewMode] = useState<'visual' | 'reader'>('visual')
   const [makeCardsOpen, setMakeCardsOpen] = useState(false)
+  const [snippetBagOpen, setSnippetBagOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const readerContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!fileId) return
@@ -103,11 +120,6 @@ export function FileViewerPage(): ReactElement {
         const parsed = await parseDocumentContent(currentBlob, currentName, currentType)
         if (!active) return
         setContent(parsed)
-
-        // If docx or doc without visual embed, default to reader mode
-        if (currentType !== 'pdf') {
-          setViewMode('reader')
-        }
       } catch (err) {
         console.warn('[viewer] load failed:', err)
         if (active) {
@@ -124,7 +136,145 @@ export function FileViewerPage(): ReactElement {
       active = false
       if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
-  }, [fileId, userId])
+  }, [fileId, userId, searchParams])
+
+  // Sync isSplitMode with URL searchParams
+  const toggleSplitMode = (active: boolean) => {
+    setIsSplitMode(active)
+    const next = new URLSearchParams(searchParams)
+    if (active) {
+      next.set('split', 'true')
+    } else {
+      next.delete('split')
+      next.delete('snippetId')
+    }
+    setSearchParams(next, { replace: true })
+  }
+
+  // Handle document text selection
+  const handleMouseUp = () => {
+    const selection = window.getSelection()
+    const text = selection?.toString()?.trim()
+
+    if (text && text.length > 0) {
+      try {
+        const range = selection?.getRangeAt(0)
+        const rect = range?.getBoundingClientRect()
+        if (rect) {
+          setSelectedText(text)
+          setSelectionPos({
+            x: rect.left + rect.width / 2,
+            y: rect.top,
+          })
+          return
+        }
+      } catch {
+        // Range get failed
+      }
+    }
+
+    // Delay clearing so clicks on toolbar aren't lost
+    setTimeout(() => {
+      if (!window.getSelection()?.toString()?.trim()) {
+        setSelectedText('')
+        setSelectionPos(null)
+      }
+    }, 250)
+  }
+
+  const isDark =
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+
+  const handlePdfTextSelected = (
+    text: string,
+    _pageNumber?: number,
+    coords?: { x: number; y: number } | null,
+  ) => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+
+    setSelectedText(trimmed)
+    if (coords) {
+      setSelectionPos(coords)
+    }
+
+    // In split mode: automatically populate the card creation module on the left!
+    if (isSplitMode) {
+      setIncomingNoteText(trimmed)
+    }
+  }
+
+  const handlePdfSelectionCleared = () => {
+    setTimeout(() => {
+      if (!window.getSelection()?.toString()?.trim()) {
+        setSelectedText('')
+        setSelectionPos(null)
+      }
+    }, 250)
+  }
+
+  const handleAddToBag = (explicitText?: string) => {
+    const textToBag = (explicitText || selectedText || '').trim()
+    if (!textToBag || !fileId) return
+
+    addSnippet({
+      fileId,
+      fileName,
+      fileType,
+      text: textToBag,
+      source: fileType,
+    })
+
+    toast.success('Added note to Study Bag! 🛍️')
+    setSelectedText('')
+    setSelectionPos(null)
+    window.getSelection()?.removeAllRanges()
+  }
+
+  const handleSendToCardStudio = (explicitText?: string) => {
+    const textToSend = (explicitText || selectedText || '').trim()
+    if (!textToSend) return
+
+    setIncomingNoteText(textToSend)
+    if (!isSplitMode) {
+      toggleSplitMode(true)
+    }
+    setSelectedText('')
+    setSelectionPos(null)
+    window.getSelection()?.removeAllRanges()
+  }
+
+  const handleShortcut = (key: string, explicitText?: string) => {
+    const upper = key.toUpperCase()
+    if (upper === 'Q') {
+      handleAddToBag(explicitText)
+    } else if (upper === 'W') {
+      handleSendToCardStudio(explicitText)
+    }
+  }
+
+  // Keyboard shortcut listener on parent window (Q = Add to Bag, W = Highlight / Card Studio)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement ? document.activeElement.tagName : ''
+      const isContentEditable = (document.activeElement as HTMLElement)?.isContentEditable
+      if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || isContentEditable) {
+        return
+      }
+
+      const key = (e.key || '').toUpperCase()
+      if (key === 'Q' || key === 'W') {
+        const selText = selectedText.trim() || window.getSelection()?.toString()?.trim() || ''
+        if (selText) {
+          e.preventDefault()
+          handleShortcut(key, selText)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedText, fileId, fileName, fileType, isSplitMode])
 
   const handleDownload = () => {
     if (blob) {
@@ -179,9 +329,19 @@ export function FileViewerPage(): ReactElement {
   }
 
   return (
-    <div className="space-y-4 pb-12">
+    <div
+      className={cn(
+        'w-full transition-all',
+        isSplitMode ? 'h-full flex flex-col min-h-0 overflow-hidden pb-1' : 'space-y-4 pb-12',
+      )}
+    >
       {/* Top Document Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/70 pb-4 bg-surface/50 backdrop-blur-xs sticky top-0 z-20 pt-1">
+      <div
+        className={cn(
+          'flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/70 bg-surface/50 backdrop-blur-xs',
+          isSplitMode ? 'pb-2 pt-0 shrink-0' : 'pb-4 pt-1 sticky top-0 z-20',
+        )}
+      >
         <div className="flex items-center gap-3 min-w-0">
           <Button
             variant="ghost"
@@ -200,36 +360,36 @@ export function FileViewerPage(): ReactElement {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* PDF Visual vs Reader mode toggle */}
-          {fileType === 'pdf' && (
-            <div className="flex items-center rounded-full bg-surface-muted p-0.5 border border-border/70">
-              <button
-                onClick={() => setViewMode('visual')}
-                className={cn(
-                  'px-3 py-1 text-xs font-bold rounded-full transition-all',
-                  viewMode === 'visual'
-                    ? 'bg-surface text-foreground shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                Visual
-              </button>
-              <button
-                onClick={() => setViewMode('reader')}
-                className={cn(
-                  'px-3 py-1 text-xs font-bold rounded-full transition-all',
-                  viewMode === 'reader'
-                    ? 'bg-surface text-foreground shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                Reader
-              </button>
-            </div>
-          )}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Split Mode Toggle Button */}
+          <Button
+            variant={isSplitMode ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => toggleSplitMode(!isSplitMode)}
+            title="Toggle Split View for creating cards while reading"
+            className={cn(
+              'flex items-center gap-1.5 transition-all text-xs font-semibold',
+              isSplitMode
+                ? 'bg-primary text-primary-foreground shadow-xs ring-2 ring-primary/30'
+                : 'hover:border-primary/50 text-foreground',
+            )}
+          >
+            <SparklesIcon className="h-3.5 w-3.5" />
+            <span>{isSplitMode ? 'Close Split View' : '🔀 Split View: Create Cards'}</span>
+          </Button>
 
-          {content.extractedText.trim().length > 0 && (
+          {/* Study Bag Quick Trigger */}
+          <button
+            type="button"
+            onClick={() => setSnippetBagOpen(true)}
+            className="relative flex h-8 items-center gap-1.5 rounded-lg border border-border/80 bg-surface px-2.5 text-xs font-semibold text-foreground hover:bg-surface-muted hover:border-primary/40 transition-colors"
+            title="View Study Bag"
+          >
+            <ShoppingBagIcon className="h-3.5 w-3.5 text-primary" />
+            <span>Bag ({bagSnippets.length})</span>
+          </button>
+
+          {content.extractedText.trim().length > 0 && !isSplitMode && (
             <Button variant="default" size="sm" onClick={() => setMakeCardsOpen(true)}>
               Make Cards
             </Button>
@@ -250,21 +410,128 @@ export function FileViewerPage(): ReactElement {
         </div>
       </div>
 
-      {/* Viewer Content Area */}
-      {viewMode === 'visual' && fileType === 'pdf' && blobUrl ? (
-        <div className="w-full h-[82vh] rounded-2xl overflow-hidden border border-border/70 shadow-sm bg-surface-muted/20">
-          <object data={blobUrl} type="application/pdf" className="w-full h-full" title={fileName}>
-            <iframe src={blobUrl} className="w-full h-full border-0" title={fileName} />
-          </object>
+      {/* Main Workspace: Split View vs Standard View */}
+      {isSplitMode ? (
+        <div className="flex flex-col lg:flex-row items-stretch gap-3 w-full flex-1 min-h-0 overflow-hidden">
+          {/* Left + Middle: SplitCardStudio (55% = 20% Bag Drawer + 35% Card Studio) */}
+          <div
+            className={cn(
+              'shrink-0 h-full overflow-hidden transition-all duration-300 min-h-0',
+              bagSnippets.length > 0 ? 'w-full lg:w-[55%]' : 'w-full lg:w-[38%]',
+            )}
+          >
+            <SplitCardStudio
+              documentName={fileName}
+              incomingNoteText={incomingNoteText}
+              onClearIncomingNote={() => setIncomingNoteText(null)}
+              activeSnippetId={searchParams.get('snippetId')}
+              onCloseSplit={() => toggleSplitMode(false)}
+            />
+          </div>
+
+          {/* Right Panel: Document & Notes Viewer (45% for PDF Reader when drawer is open, or 62% when no drawer) */}
+          <div
+            className={cn(
+              'h-full rounded-2xl border border-border/80 shadow-xs bg-surface overflow-hidden flex flex-col transition-all duration-300 min-h-0',
+              bagSnippets.length > 0 ? 'w-full lg:w-[45%]' : 'w-full lg:w-[62%]',
+            )}
+          >
+            {/* Header sub-bar */}
+            <div className="flex items-center justify-between border-b border-border/60 px-4 py-2.5 bg-surface/95 backdrop-blur-xs shrink-0">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-bold text-foreground truncate max-w-[240px] sm:max-w-md">
+                  {fileName}
+                </span>
+                <span className="text-muted-foreground">•</span>
+                <span className="text-muted-foreground font-medium">
+                  {fileType === 'pdf' ? 'PDF Visual Document' : 'Document Notes'}
+                </span>
+              </div>
+            </div>
+
+            {/* Document display area */}
+            {fileType === 'pdf' && blobUrl ? (
+              <div className="flex-1 w-full h-full bg-surface-muted/10 relative overflow-hidden min-h-0">
+                <InteractivePdfViewer
+                  blob={blob}
+                  blobUrl={blobUrl}
+                  fileId={fileId}
+                  fileName={fileName}
+                  isDark={isDark}
+                  onTextSelected={handlePdfTextSelected}
+                  onSelectionCleared={handlePdfSelectionCleared}
+                  onShortcutKey={handleShortcut}
+                />
+              </div>
+            ) : (
+              <div
+                ref={readerContainerRef}
+                onMouseUp={handleMouseUp}
+                className="flex-1 overflow-y-auto min-h-0 p-6 sm:p-8 select-text"
+              >
+                <div
+                  className="reader-view leading-relaxed text-foreground select-text max-w-3xl mx-auto"
+                  dangerouslySetInnerHTML={{ __html: content.html }}
+                />
+              </div>
+            )}
+          </div>
         </div>
       ) : (
-        <Card className="max-w-4xl mx-auto p-8 sm:p-12 shadow-sm min-h-[75vh]">
-          <div
-            className="reader-view leading-relaxed text-foreground"
-            dangerouslySetInnerHTML={{ __html: content.html }}
-          />
-        </Card>
+        /* Standard Single-Column Document View */
+        <div onMouseUp={handleMouseUp}>
+          {fileType === 'pdf' && blobUrl ? (
+            <div className="w-full h-[82vh] rounded-2xl overflow-hidden border border-border/70 shadow-sm bg-surface-muted/20">
+              <InteractivePdfViewer
+                blob={blob}
+                blobUrl={blobUrl}
+                fileId={fileId}
+                fileName={fileName}
+                isDark={isDark}
+                onTextSelected={handlePdfTextSelected}
+                onSelectionCleared={handlePdfSelectionCleared}
+                onShortcutKey={handleShortcut}
+              />
+            </div>
+          ) : (
+            <Card className="max-w-4xl mx-auto p-8 sm:p-12 shadow-sm min-h-[75vh] select-text">
+              <div
+                className="reader-view leading-relaxed text-foreground select-text"
+                dangerouslySetInnerHTML={{ __html: content.html }}
+              />
+            </Card>
+          )}
+        </div>
       )}
+
+      {/* Floating Selection Action Menu */}
+      <DocumentSelectionMenu
+        selectedText={selectedText}
+        position={selectionPos}
+        isSplitMode={isSplitMode}
+        onAddToBag={handleAddToBag}
+        onSendToCardStudio={handleSendToCardStudio}
+        onClose={() => {
+          setSelectedText('')
+          setSelectionPos(null)
+        }}
+      />
+
+      {/* Study Bag Modal */}
+      <SnippetBagModal
+        open={snippetBagOpen}
+        onClose={() => setSnippetBagOpen(false)}
+        onOpenSplitView={(_fileId, snippetId) => {
+          setSnippetBagOpen(false)
+          toggleSplitMode(true)
+          if (snippetId) {
+            const next = new URLSearchParams(searchParams)
+            next.set('split', 'true')
+            next.set('snippetId', snippetId)
+            setSearchParams(next, { replace: true })
+          }
+        }}
+      />
 
       {/* Make Cards Dialog */}
       <MakeCardsDialog
