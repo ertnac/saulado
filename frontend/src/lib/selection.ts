@@ -4,6 +4,7 @@ import {
   rangesOverlap,
   sliceCodePoints,
   snapToWordBoundaries,
+  trimBoundaryPunctuation,
 } from '@saulado/shared'
 
 /**
@@ -287,9 +288,14 @@ export function resolveHighlight(
   const read = readSelectionOffsets(root, paragraph)
   if (!read.ok) return read
 
-  const range = options.snap
+  const snapped = options.snap
     ? snapToWordBoundaries(paragraph, read.range.startOffset, read.range.endOffset)
     : read.range
+
+  const range = trimBoundaryPunctuation(paragraph, snapped.startOffset, snapped.endOffset)
+  if (range.startOffset >= range.endOffset) {
+    return { ok: false, reason: 'whitespace' }
+  }
 
   const ordinals = findOverlaps(range, existing)
   if (ordinals.length > 0) return { ok: false, reason: 'overlap', ordinals }

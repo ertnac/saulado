@@ -52,9 +52,10 @@ function explainRejection(result: Extract<SelectionResult, { ok: false }>): stri
 
 interface HighlightEditorProps {
   draft: CardDraftState & CardDraftActions
+  showPreview?: boolean
 }
 
-export function HighlightEditor({ draft }: HighlightEditorProps): ReactElement {
+export function HighlightEditor({ draft, showPreview = true }: HighlightEditorProps): ReactElement {
   const {
     mode,
     paragraph,
@@ -204,7 +205,7 @@ export function HighlightEditor({ draft }: HighlightEditorProps): ReactElement {
               // showing a different blank than the one the user was editing.
               setOpenOrdinal(null)
             }}
-            snap={isTouch()}
+            snap={true}
           />
 
           <div aria-live="polite" className="min-h-5">
@@ -294,17 +295,19 @@ export function HighlightEditor({ draft }: HighlightEditorProps): ReactElement {
         />
       )}
 
-      <section className="space-y-2">
-        <h3 className="text-sm font-medium">
-          Preview
-          <span className="ml-2 font-normal text-muted-foreground">
-            {answers.length === 0
-              ? 'no blanks yet'
-              : `${String(answers.length)} ${answers.length === 1 ? 'blank' : 'blanks'}`}
-          </span>
-        </h3>
-        <ClozePreview paragraph={paragraph} answers={answers} />
-      </section>
+      {showPreview && (
+        <section className="space-y-2">
+          <h3 className="text-sm font-medium">
+            Preview
+            <span className="ml-2 font-normal text-muted-foreground">
+              {answers.length === 0
+                ? 'no blanks yet'
+                : `${String(answers.length)} ${answers.length === 1 ? 'blank' : 'blanks'}`}
+            </span>
+          </h3>
+          <ClozePreview paragraph={paragraph} answers={answers} />
+        </section>
+      )}
     </div>
   )
 }
@@ -329,16 +332,4 @@ function ModeTab({ active, disabled, onClick, children }: ModeTabProps): ReactEl
       {children}
     </Button>
   )
-}
-
-/**
- * Whether to snap selections to word boundaries.
- *
- * Touch only. A long-press lands mid-word and dragging handles onto an exact
- * boundary is fiddly, so snapping saves real effort there — but applying it to a
- * mouse or keyboard selection would fight a user who deliberately highlighted a
- * prefix, and "bio" in "biology" is a legitimate answer.
- */
-function isTouch(): boolean {
-  return typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 }
