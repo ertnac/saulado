@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import type {
@@ -299,6 +299,38 @@ describe('answering', () => {
     expect(first).toBeDefined()
     expect(second).toBe(first)
   })
+
+  it('provides instant 0ms feedback on submit without waiting for server response', async () => {
+    const user = userEvent.setup()
+    let resolveSubmit!: (val: AnswerResponse) => void
+    const pendingSubmit = new Promise<AnswerResponse>((resolve) => {
+      resolveSubmit = resolve
+    })
+    mocked.submitAnswer.mockReturnValue(pendingSubmit)
+
+    mocked.startSession.mockResolvedValue({
+      session: session({
+        queue: [
+          card({
+            cardAnswers: [{ answerText: 'CPU', altAnswers: [] }],
+            blankAnswers: ['CPU'],
+          }),
+        ],
+      }),
+    })
+
+    render(renderPage())
+    await user.type(await screen.findByRole('textbox', { name: 'Blank 1 of 1' }), 'CPU')
+    await user.click(screen.getByRole('button', { name: 'Check answer' }))
+
+    // Verdict "Correct" is displayed immediately without waiting for server response
+    expect(screen.getByText('Correct')).toBeInTheDocument()
+
+    // Resolve server response
+    act(() => {
+      resolveSubmit(graded())
+    })
+  })
 })
 
 describe('walking the queue', () => {
@@ -421,6 +453,78 @@ describe('walking the queue', () => {
     await user.click(screen.getByRole('button', { name: 'End session' }))
 
     expect(await screen.findByRole('heading', { name: 'Session complete' })).toBeInTheDocument()
+  })
+
+  it('handles rapid advance without server response overwriting or corrupting the next card', async () => {
+    const user = userEvent.setup()
+    const TWO_WITH_ANSWERS = session({
+      queue: [
+        card({
+          cardAnswers: [{ answerText: 'CPU', altAnswers: [] }],
+          blankAnswers: ['CPU'],
+        }),
+        card({
+          cardId: 'card-2',
+          segments: [
+            { kind: 'text', text: 'The GPU ' },
+            { kind: 'blank', ordinal: 0, answerLength: 5 },
+            { kind: 'text', text: ' is graphic' },
+          ],
+          cardAnswers: [{ answerText: 'GPU', altAnswers: [] }],
+          blankAnswers: ['GPU'],
+        }),
+      ],
+      progress: { answered: 0, total: 2, correct: 0 },
+    })
+    mocked.startSession.mockResolvedValue({ session: TWO_WITH_ANSWERS })
+
+    let resolveCard1!: (val: AnswerResponse) => void
+    const pendingCard1 = new Promise<AnswerResponse>((resolve) => {
+      resolveCard1 = resolve
+    })
+    mocked.submitAnswer.mockReturnValueOnce(pendingCard1)
+    mocked.submitAnswer.mockResolvedValueOnce(
+      graded({
+        results: [
+          { ordinal: 0, submitted: 'GPU', correct: true, matchType: 'exact', canonical: 'GPU' },
+        ],
+        progress: { answered: 2, total: 2, correct: 2 },
+      }),
+    )
+
+    render(renderPage())
+    // 1. Answer card 1
+    await user.type(await screen.findByRole('textbox', { name: 'Blank 1 of 1' }), 'CPU')
+    await user.click(screen.getByRole('button', { name: 'Check answer' }))
+
+    // Instant verdict appears
+    expect(screen.getByText('Correct')).toBeInTheDocument()
+
+    // 2. Rapidly advance to card 2 before card 1 sync resolves
+    await user.click(screen.getByRole('button', { name: 'Next card' }))
+
+    // Card 2 is now displayed and ready
+    expect(await screen.findByText(/is graphic/)).toBeInTheDocument()
+    const inputCard2 = screen.getByRole('textbox', { name: 'Blank 1 of 1' })
+    expect(inputCard2).toHaveValue('')
+    expect(inputCard2).not.toBeDisabled()
+
+    // 3. Card 1 server sync resolves in background while user is on card 2
+    act(() => {
+      resolveCard1(graded({ progress: { answered: 1, total: 2, correct: 1 } }))
+    })
+
+    // Card 2 must remain intact, not overwritten by card 1's resolved answer
+    expect(screen.getByText(/is graphic/)).toBeInTheDocument()
+    expect(inputCard2).toHaveValue('')
+    expect(inputCard2).not.toBeDisabled()
+    expect(screen.queryByText('Correct')).not.toBeInTheDocument()
+
+    // 4. User answers card 2
+    await user.type(inputCard2, 'GPU')
+    await user.click(screen.getByRole('button', { name: 'Check answer' }))
+
+    expect(screen.getByText('Correct')).toBeInTheDocument()
   })
 })
 

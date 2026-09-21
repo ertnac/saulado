@@ -72,7 +72,7 @@ export function StudySessionPage(): ReactElement {
   )
 
   const handleAnsweringTypeChange = (nextType: AnsweringType): void => {
-    if (session.answer !== null || submit.isPending) return
+    if (session.answer !== null) return
     setAnsweringType(nextType)
     setParams(
       (prev) => {
@@ -175,8 +175,26 @@ export function StudySessionPage(): ReactElement {
     if (!session.card || !sessionId || session.answer) return
 
     const valuesToSubmit = overrideValues ?? session.values
+    const activeCardId = session.card.cardId
+
+    // 1. Instant 0ms local evaluation
+    const hasAnswers = Boolean(
+      (session.card.cardAnswers && session.card.cardAnswers.length > 0) ||
+      (session.card.blankAnswers && session.card.blankAnswers.length > 0),
+    )
+    const localVerdict = hasAnswers ? session.evaluateLocally(valuesToSubmit, revealed, mode) : null
+
+    if (localVerdict) {
+      session.accept(localVerdict, activeCardId)
+      if (answeringType === 'flashcard') {
+        const spent = session.advance()
+        if (spent && sessionId) finish(sessionId)
+      }
+    }
+
+    // 2. Non-blocking background sync
     const body: SubmitAnswerRequest = {
-      cardId: session.card.cardId,
+      cardId: activeCardId,
       blanks: Object.entries(valuesToSubmit).map(([ordinal, submitted]) => ({
         ordinal: Number(ordinal),
         submitted,
@@ -186,7 +204,14 @@ export function StudySessionPage(): ReactElement {
       ...(revealed ? { revealed: true } : {}),
     }
 
-    submit.mutate({ sessionId, body }, { onSuccess: session.accept })
+    submit.mutate(
+      { sessionId, body },
+      {
+        onSuccess: (data) => {
+          session.accept(data, activeCardId)
+        },
+      },
+    )
   }
 
   const next = (): void => {
@@ -394,7 +419,7 @@ export function StudySessionPage(): ReactElement {
             <StudyModeSwitcher
               value={answeringType}
               onChange={handleAnsweringTypeChange}
-              disabled={session.answer !== null || submit.isPending}
+              disabled={session.answer !== null}
             />
 
             <Button
@@ -426,7 +451,7 @@ export function StudySessionPage(): ReactElement {
         card={session.card}
         values={session.values}
         results={session.answer?.results ?? null}
-        disabled={session.answer !== null || submit.isPending}
+        disabled={session.answer !== null}
         answeringType={answeringType}
         onChange={session.setValue}
         onSubmit={(overrideValues) => {
@@ -444,12 +469,12 @@ export function StudySessionPage(): ReactElement {
       ) : answeringType === 'identification' ? (
         <div className="flex flex-wrap items-center gap-3">
           <Button
-            disabled={submit.isPending}
+            disabled={session.answer !== null}
             onClick={() => {
               send(false)
             }}
           >
-            {submit.isPending ? 'Checking…' : 'Check answer'}
+            Check answer
           </Button>
           {/*
             Reveal is not a shortcut to a good grade — it books `again` server-side
@@ -458,7 +483,7 @@ export function StudySessionPage(): ReactElement {
           */}
           <Button
             variant="ghost"
-            disabled={submit.isPending}
+            disabled={session.answer !== null}
             onClick={() => {
               send(true)
             }}
@@ -473,7 +498,7 @@ export function StudySessionPage(): ReactElement {
         <div className="flex flex-wrap items-center gap-3">
           <Button
             variant="ghost"
-            disabled={submit.isPending}
+            disabled={session.answer !== null}
             onClick={() => {
               send(true)
             }}
