@@ -200,7 +200,11 @@ export function SettingsPage(): ReactElement {
 
 function SettingsSkeleton(): ReactElement {
   return (
-    <div className="py-12" aria-busy="true" aria-label="Loading settings">
+    <div
+      className="min-h-[60vh] flex flex-col items-center justify-center py-12"
+      aria-busy="true"
+      aria-label="Loading settings"
+    >
       <SauladoLoader
         size={84}
         starAnimation="star-gyro"

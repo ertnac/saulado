@@ -26,7 +26,7 @@ export function ProtectedRoute({
 
   if (status === 'restoring') {
     return (
-      <div className="mx-auto w-full max-w-5xl px-4 py-12" aria-busy="true">
+      <div className="fixed inset-0 flex flex-col items-center justify-center p-4" aria-busy="true">
         <SauladoLoader
           starAnimation="star-gyro"
           showBrand
@@ -92,7 +92,7 @@ function AdminGuard({ children }: { children: ReactElement }): ReactElement {
 
   if (isLoading) {
     return (
-      <div className="mx-auto w-full max-w-5xl px-4 py-12" aria-busy="true">
+      <div className="fixed inset-0 flex flex-col items-center justify-center p-4" aria-busy="true">
         <SauladoLoader
           starAnimation="star-gyro"
           showBrand

@@ -390,7 +390,10 @@ export function StudySessionPage(): ReactElement {
 
   if (!session.card) {
     return (
-      <div className="py-12" aria-busy="true">
+      <div
+        className="min-h-[60vh] flex flex-col items-center justify-center py-12"
+        aria-busy="true"
+      >
         <SauladoLoader
           size={84}
           starAnimation="star-gyro"
