@@ -1,7 +1,16 @@
 import { useId, type ReactElement, type SVGProps } from 'react'
+import { cn } from '@/lib/utils'
 
 export type StarAnimation =
-  'none' | 'glow' | 'loading' | 'loading-spin' | 'bounce-spin' | 'coin-flip' | 'spin' | 'bounce'
+  | 'none'
+  | 'glow'
+  | 'loading'
+  | 'loading-spin'
+  | 'star-gyro'
+  | 'bounce-spin'
+  | 'coin-flip'
+  | 'spin'
+  | 'bounce'
 
 export interface SauladoLogoProps extends Omit<SVGProps<SVGSVGElement>, 'children'> {
   /**
@@ -884,7 +893,7 @@ export function SauladoLogo({
             }
           `}</style>
         )}
-        {starAnimation === 'loading-spin' && (
+        {(starAnimation === 'loading-spin' || starAnimation === 'star-gyro') && (
           <style>{`
             @keyframes saulado-star-loading-spin-${clipId} {
               0% {
@@ -992,14 +1001,22 @@ export function SauladoIcon({
 }
 
 export interface SauladoLoaderProps {
-  /** Size of the logo inside the loader. Default 80. */
+  /** Size of the logo inside the loader. Default 88. */
   size?: number | string
-  /** Message displayed beneath the logo (e.g. "Loading Saulado...") */
+  /** Message displayed beneath the tagline (e.g. "Restoring your session...") */
   message?: string
   /** Optional secondary subtitle text */
   submessage?: string
-  /** Loading animation preset for the star. Default 'loading'. */
-  starAnimation?: 'loading' | 'loading-spin' | 'glow'
+  /** Loading animation preset for the star. Default 'star-gyro'. */
+  starAnimation?: StarAnimation
+  /** Whether to show the Saulado brand wordmark below the spinner. Default true. */
+  showBrand?: boolean
+  /** Whether to show the tagline below the logo. Default true. */
+  showTagline?: boolean
+  /** Custom brand title. Default "Saulado". */
+  brandName?: string
+  /** Custom tagline text. Default "Learn in Context. Remember for Life.". */
+  tagline?: string
   /** Optional container class name */
   className?: string
   /** Whether to render as a full-screen fixed overlay. Default false. */
@@ -1008,40 +1025,67 @@ export interface SauladoLoaderProps {
 
 /**
  * Saulado Loader & Loading Screen component.
- * Features the signature brain vector mark with a pulsing or spinning star core.
+ * Features the signature star gyro spinning mark, followed by the "Saulado" logo
+ * and the "Learn in Context. Remember for Life." tagline.
  */
 export function SauladoLoader({
-  size = 80,
+  size = 88,
   message,
   submessage,
-  starAnimation = 'loading',
+  starAnimation = 'star-gyro',
+  showBrand = true,
+  showTagline = true,
+  brandName = 'Saulado',
+  tagline = 'Learn in Context. Remember for Life.',
   className = '',
   fullScreen = false,
 }: SauladoLoaderProps): ReactElement {
   const content = (
     <div
-      className={`flex flex-col items-center justify-center gap-4 select-none ${className}`}
+      className={cn(
+        'flex flex-col items-center justify-center text-center select-none transition-all duration-300',
+        fullScreen ? 'min-h-screen' : 'py-6 px-4 w-full',
+        className,
+      )}
       role="status"
       aria-busy="true"
       aria-live="polite"
     >
+      {/* ── 1. Star Gyro Loading Spinner ── */}
       <div className="relative flex items-center justify-center">
         {/* Ambient atmospheric aura ring behind the mark */}
         <div
           aria-hidden="true"
-          className="absolute -inset-4 rounded-full bg-gradient-to-tr from-emerald-600/15 via-amber-400/20 to-emerald-400/10 blur-2xl animate-pulse"
+          className="absolute -inset-6 rounded-full bg-gradient-to-tr from-emerald-600/20 via-amber-400/25 to-emerald-400/15 blur-2xl animate-pulse pointer-events-none"
         />
         <SauladoLogo size={size} starAnimation={starAnimation} />
       </div>
 
+      {/* ── 2. "Saulado" brand mark below spinner ── */}
+      {showBrand && (
+        <h2 className="mt-4 text-2xl sm:text-3xl font-bold tracking-tight text-foreground transition-colors">
+          {brandName}
+        </h2>
+      )}
+
+      {/* ── 3. Tagline below logo ── */}
+      {showTagline && (
+        <p className="mt-1 text-xs sm:text-sm font-medium text-muted-foreground/80 tracking-wide max-w-xs transition-colors">
+          {tagline}
+        </p>
+      )}
+
+      {/* ── Contextual status message/submessage ── */}
       {(message || submessage) && (
-        <div className="flex flex-col items-center gap-1.5 text-center px-4 max-w-sm">
+        <div className="mt-3.5 flex flex-col items-center gap-1 text-center max-w-sm">
           {message && (
-            <p className="text-sm font-semibold tracking-tight text-slate-100 animate-pulse">
+            <p className="text-xs font-semibold tracking-wide text-foreground/90 animate-pulse">
               {message}
             </p>
           )}
-          {submessage && <p className="text-xs text-slate-400 leading-relaxed">{submessage}</p>}
+          {submessage && (
+            <p className="text-xs text-muted-foreground leading-relaxed">{submessage}</p>
+          )}
         </div>
       )}
     </div>
@@ -1049,7 +1093,7 @@ export function SauladoLoader({
 
   if (fullScreen) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07130e]/95 backdrop-blur-md p-6">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-md p-6">
         {content}
       </div>
     )

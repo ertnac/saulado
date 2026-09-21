@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { Skeleton } from '@/components/ui/skeleton'
+import { SauladoLoader } from '@/components/ui/saulado-logo'
 import { useAdminCheck } from '@/features/admin/queries'
 import { useAuthStore } from '@/stores/auth'
 
@@ -26,13 +26,13 @@ export function ProtectedRoute({
 
   if (status === 'restoring') {
     return (
-      <div className="mx-auto w-full max-w-5xl px-4 py-8" aria-busy="true">
-        <span className="sr-only">Restoring your session</span>
-        <Skeleton className="h-8 w-48" />
-        <div className="mt-6 space-y-3">
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-24 w-full" />
-        </div>
+      <div className="mx-auto w-full max-w-5xl px-4 py-12" aria-busy="true">
+        <SauladoLoader
+          starAnimation="star-gyro"
+          showBrand
+          showTagline
+          message="Restoring your session"
+        />
       </div>
     )
   }
@@ -92,13 +92,13 @@ function AdminGuard({ children }: { children: ReactElement }): ReactElement {
 
   if (isLoading) {
     return (
-      <div className="mx-auto w-full max-w-5xl px-4 py-8" aria-busy="true">
-        <span className="sr-only">Checking administrator privileges</span>
-        <Skeleton className="h-8 w-48" />
-        <div className="mt-6 space-y-3">
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-24 w-full" />
-        </div>
+      <div className="mx-auto w-full max-w-5xl px-4 py-12" aria-busy="true">
+        <SauladoLoader
+          starAnimation="star-gyro"
+          showBrand
+          showTagline
+          message="Checking administrator privileges"
+        />
       </div>
     )
   }

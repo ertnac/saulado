@@ -8,7 +8,7 @@ import type {
 } from '@saulado/shared'
 import { Button, buttonClass } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
+import { SauladoLoader } from '@/components/ui/saulado-logo'
 import { AlertIcon, CheckIcon } from '@/components/ui/icons'
 import { ApiError } from '@/services/api'
 import { FeedbackPanel } from './FeedbackPanel'
@@ -390,14 +390,14 @@ export function StudySessionPage(): ReactElement {
 
   if (!session.card) {
     return (
-      <div className="space-y-4" aria-busy="true">
-        <Skeleton className="h-6 w-40" />
-        <Card className="p-8">
-          <Skeleton className="h-6 w-52" />
-          <Skeleton className="mt-6 h-5 w-full" />
-          <Skeleton className="mt-3 h-5 w-full" />
-          <Skeleton className="mt-3 h-5 w-3/4" />
-        </Card>
+      <div className="py-12" aria-busy="true">
+        <SauladoLoader
+          size={84}
+          starAnimation="star-gyro"
+          showBrand
+          showTagline
+          message="Loading your study card"
+        />
       </div>
     )
   }

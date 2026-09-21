@@ -11,7 +11,7 @@ import {
 import { Link } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
+import { SauladoLoader } from '@/components/ui/saulado-logo'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { hasStoredTheme, useTheme } from '@/hooks/useTheme'
 import { toast } from '@/stores/toast'
@@ -200,15 +200,14 @@ export function SettingsPage(): ReactElement {
 
 function SettingsSkeleton(): ReactElement {
   return (
-    <div className="space-y-6" aria-busy="true" aria-label="Loading settings">
-      <Skeleton className="h-9 w-40" />
-      {[0, 1, 2].map((i) => (
-        <Card key={i} className="space-y-3 p-5 sm:p-6">
-          <Skeleton className="h-6 w-28" />
-          <Skeleton className="h-11 w-full" />
-          <Skeleton className="h-11 w-full" />
-        </Card>
-      ))}
+    <div className="py-12" aria-busy="true" aria-label="Loading settings">
+      <SauladoLoader
+        size={84}
+        starAnimation="star-gyro"
+        showBrand
+        showTagline
+        message="Loading your settings"
+      />
     </div>
   )
 }
