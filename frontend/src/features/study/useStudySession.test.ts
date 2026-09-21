@@ -93,4 +93,29 @@ describe('useStudySession - evaluateLocally & safe accept', () => {
     // Answered count is unchanged when requeued
     expect(verdict?.progress.answered).toBe(0)
   })
+
+  it('does not decrease progress when accept is called with a lower answered count', () => {
+    const { result } = renderHook(() => useStudySession())
+    act(() => {
+      result.current.load(mockSession)
+    })
+
+    const initialVerdict = result.current.evaluateLocally({ 0: 'CPU' }, false, 'spaced')!
+    act(() => {
+      result.current.accept({
+        ...initialVerdict,
+        progress: { answered: 2, total: 3, correct: 2 },
+      })
+    })
+    expect(result.current.progress.answered).toBe(2)
+
+    // Delayed response arriving from an earlier card with lower answered count
+    act(() => {
+      result.current.accept({
+        ...initialVerdict,
+        progress: { answered: 1, total: 3, correct: 1 },
+      })
+    })
+    expect(result.current.progress.answered).toBe(2)
+  })
 })

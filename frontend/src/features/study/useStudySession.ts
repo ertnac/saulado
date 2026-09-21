@@ -123,7 +123,7 @@ export function useStudySession(): StudySessionController {
       if (!forCardId || queueRef.current[0]?.cardId === forCardId) {
         setAnswerBoth(graded)
       }
-      setProgress(graded.progress)
+      setProgress((prev) => (graded.progress.answered >= prev.answered ? graded.progress : prev))
     },
     [setAnswerBoth],
   )

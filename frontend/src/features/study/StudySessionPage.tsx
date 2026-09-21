@@ -419,7 +419,7 @@ export function StudySessionPage(): ReactElement {
             <StudyModeSwitcher
               value={answeringType}
               onChange={handleAnsweringTypeChange}
-              disabled={session.answer !== null}
+              disabled={session.answer !== null || submit.isPending}
             />
 
             <Button
@@ -469,7 +469,7 @@ export function StudySessionPage(): ReactElement {
       ) : answeringType === 'identification' ? (
         <div className="flex flex-wrap items-center gap-3">
           <Button
-            disabled={session.answer !== null}
+            disabled={session.answer !== null || submit.isPending}
             onClick={() => {
               send(false)
             }}
@@ -483,7 +483,7 @@ export function StudySessionPage(): ReactElement {
           */}
           <Button
             variant="ghost"
-            disabled={session.answer !== null}
+            disabled={session.answer !== null || submit.isPending}
             onClick={() => {
               send(true)
             }}
@@ -498,7 +498,7 @@ export function StudySessionPage(): ReactElement {
         <div className="flex flex-wrap items-center gap-3">
           <Button
             variant="ghost"
-            disabled={session.answer !== null}
+            disabled={session.answer !== null || submit.isPending}
             onClick={() => {
               send(true)
             }}
