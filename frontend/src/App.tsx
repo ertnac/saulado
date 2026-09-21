@@ -82,17 +82,6 @@ export function App(): ReactElement {
                 <Route path="/logo-lab" element={<LogoAnimationLabPage />} />
                 <Route path="/logo-animation-lab" element={<LogoAnimationLabPage />} />
 
-                {/* ── Root Route: Dashboard if logged in, LandingPage if logged out ── */}
-                <Route
-                  element={
-                    <ProtectedRoute fallback={<LandingPage />}>
-                      <AppShell />
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route path="/" element={<DashboardPage />} />
-                </Route>
-
                 {/* ── Auth Routes ── */}
                 <Route
                   path="/login"
@@ -135,14 +124,15 @@ export function App(): ReactElement {
                 */}
                 <Route path="/account/email/confirm" element={<ConfirmEmailChangePage />} />
 
-                {/* ── Authenticated App Routes ── */}
+                {/* ── Authenticated App Routes (LandingPage fallback for root when anonymous) ── */}
                 <Route
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute fallback={<LandingPage />}>
                       <AppShell />
                     </ProtectedRoute>
                   }
                 >
+                  <Route path="/" element={<DashboardPage />} />
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/sets" element={<SetsPage />} />
                   <Route path="/files" element={<FilesPage />} />

@@ -14,7 +14,6 @@ import {
   SearchIcon,
   ShieldIcon,
   ShoppingBagIcon,
-  SparklesIcon,
   SunIcon,
   UserIcon,
   type IconProps,
@@ -27,7 +26,6 @@ import { useTheme } from '@/hooks/useTheme'
 import { useAuthStore } from '@/stores/auth'
 import { useSnippetBagStore } from '@/stores/snippet-bag'
 import { useDashboard } from '@/features/dashboard/queries'
-import { QuickLearnDialog } from '@/features/study/QuickLearnDialog'
 import { SnippetBagModal } from '@/features/files/SnippetBagModal'
 import { DUR, EASE, SPRING } from '@/lib/motion'
 import { cn } from '@/lib/utils'
@@ -40,18 +38,14 @@ const NAV: { to: string; label: string; end: boolean; icon: ComponentType<IconPr
 ]
 
 /**
- * Main navigation matching the horizontal tab navigation from modern learning platforms.
- * Displays as an integrated top tab bar on desktop and a bottom bar on mobile.
+ * Main navigation displaying the primary tabs: Home, Study Sets, Files, and Account.
+ * Displayed in a secondary navigation bar directly below the main navigation bar.
  */
 function MainNav(): ReactElement {
   return (
     <nav
-      aria-label="Main"
-      className={cn(
-        'fixed inset-x-0 bottom-0 z-40 flex items-center justify-around gap-1 border-t border-border',
-        'bg-surface/90 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-md',
-        'md:static md:z-auto md:flex md:items-center md:gap-1 md:border-none md:bg-transparent md:p-0',
-      )}
+      aria-label="Main navigation"
+      className="flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-none h-full"
     >
       {NAV.map((item) => {
         const ItemIcon = item.icon
@@ -61,39 +55,33 @@ function MainNav(): ReactElement {
             to={item.to}
             end={item.end}
             title={item.label}
-            className="group relative"
+            className={({ isActive }) =>
+              cn(
+                'group relative flex items-center gap-2 px-3.5 h-full text-xs sm:text-sm font-medium transition-colors duration-150',
+                isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+              )
+            }
           >
             {({ isActive }) => (
-              <span
-                className={cn(
-                  'flex items-center gap-2 px-3 py-1.5 transition-colors duration-150',
-                  'flex-col md:flex-row',
-                  isActive
-                    ? 'text-foreground font-semibold'
-                    : 'text-muted-foreground hover:text-foreground font-medium',
-                )}
-              >
-                <span
+              <>
+                <ItemIcon
                   className={cn(
-                    'relative flex h-8 w-8 items-center justify-center rounded-xl text-lg md:hidden',
-                    isActive && 'text-primary',
+                    'h-4 w-4 shrink-0 transition-colors',
+                    isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground',
                   )}
-                >
-                  <ItemIcon />
-                </span>
+                />
+                <span className="whitespace-nowrap">{item.label}</span>
 
-                <span className="text-xs md:text-sm">{item.label}</span>
-
-                {/* Active indicator bar on desktop */}
+                {/* Active indicator bar on sub-navbar */}
                 {isActive && (
                   <motion.span
-                    layoutId="top-nav-indicator"
+                    layoutId="sub-nav-indicator"
                     aria-hidden="true"
-                    className="absolute -bottom-1 inset-x-2 hidden h-[2px] rounded-full bg-primary md:block"
+                    className="absolute bottom-0 inset-x-2 h-[2px] rounded-full bg-primary"
                     transition={SPRING}
                   />
                 )}
-              </span>
+              </>
             )}
           </NavLink>
         )
@@ -159,7 +147,6 @@ export function AppShell(): ReactElement {
 
   const bagSnippets = useSnippetBagStore((s) => s.snippets)
   const [snippetBagOpen, setSnippetBagOpen] = useState(false)
-  const [quickLearnOpen, setQuickLearnOpen] = useState(false)
 
   const points =
     (dashboardData?.today?.reviews ?? 0) * 10 + (dashboardData?.streak?.current ?? 0) * 20 + 50
@@ -181,15 +168,16 @@ export function AppShell(): ReactElement {
         Skip to content
       </a>
 
-      {/* Top Header Navigation Bar (Trenning Inspo) */}
+      {/* Top Header Navigation Bar */}
       <header
         className={cn(
           'z-30 border-b border-border/60 bg-surface/85 backdrop-blur-md shrink-0',
           !isFileViewer && 'sticky top-0',
         )}
       >
+        {/* Main Navigation Bar */}
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
-          {/* Left: Brand Logo & Ask AI */}
+          {/* Left: Brand Logo */}
           <div className="flex items-center gap-3 shrink-0">
             <Link
               to="/"
@@ -198,24 +186,11 @@ export function AppShell(): ReactElement {
             >
               <Logo className="[&>span]:hidden sm:[&>span]:inline" withWordmark />
             </Link>
-
-            {/* "Ask AI" button inspired by Trenning header */}
-            <button
-              type="button"
-              onClick={() => setQuickLearnOpen(true)}
-              className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary transition-all duration-150 hover:bg-primary/20 hover:scale-[1.02] shadow-xs active:scale-95"
-            >
-              <SparklesIcon className="text-primary text-xs" />
-              <span>Ask AI</span>
-            </button>
           </div>
 
-          {/* Center: Search & Desktop Navigation Tabs */}
-          <div className="flex items-center gap-4 flex-1 justify-center max-w-xl">
+          {/* Center: Search */}
+          <div className="flex items-center justify-center flex-1 max-w-md mx-2">
             <SearchTrigger onOpen={palette.onOpen} />
-            <div className="hidden md:block">
-              <MainNav />
-            </div>
           </div>
 
           {/* Right: Gamification Badges, User Profile, Controls */}
@@ -316,12 +291,14 @@ export function AppShell(): ReactElement {
             </Button>
           </div>
         </div>
-      </header>
 
-      {/* Mobile Bottom Navigation Rail */}
-      <div className="md:hidden shrink-0">
-        <MainNav />
-      </div>
+        {/* Secondary Navigation Bar (Sub-navbar) */}
+        <div className="border-t border-border/50 bg-surface/50">
+          <div className="mx-auto flex h-11 max-w-7xl items-center px-4 sm:px-6">
+            <MainNav />
+          </div>
+        </div>
+      </header>
 
       {/* Main Content Area */}
       <main
@@ -330,7 +307,7 @@ export function AppShell(): ReactElement {
           'w-full flex-1 transition-all',
           isFileViewer
             ? 'px-2 sm:px-3 py-1 pb-1 max-w-none overflow-hidden flex flex-col min-h-0'
-            : 'mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 pb-24 md:pb-12',
+            : 'mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 pb-12',
         )}
       >
         <motion.div
@@ -348,7 +325,6 @@ export function AppShell(): ReactElement {
 
       {/* Global Modals */}
       <CommandPalette open={palette.open} onClose={palette.onClose} />
-      <QuickLearnDialog open={quickLearnOpen} onClose={() => setQuickLearnOpen(false)} />
       <SnippetBagModal open={snippetBagOpen} onClose={() => setSnippetBagOpen(false)} />
     </div>
   )

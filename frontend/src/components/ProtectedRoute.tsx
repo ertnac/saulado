@@ -38,7 +38,7 @@ export function ProtectedRoute({
   }
 
   if (status === 'anonymous') {
-    if (fallback) return fallback
+    if (fallback && location.pathname === '/') return fallback
     /**
      * Carries the attempted path so login can return the user to it. Without
      * this, following a deep link while signed out silently drops it and lands

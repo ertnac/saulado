@@ -12,6 +12,10 @@
  */
 
 @layer base {
+  html {
+    scrollbar-gutter: stable;
+  }
+
   :root {
     --background: 150 30% 97%;
     --surface: 0 0% 100%;
