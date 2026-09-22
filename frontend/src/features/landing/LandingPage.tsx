@@ -54,6 +54,7 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
+  const status = useAuthStore((s) => s.status)
   const register = useAuthStore((s) => s.register)
   const login = useAuthStore((s) => s.login)
   const googleLogin = useAuthStore((s) => s.googleLogin)
@@ -82,6 +83,15 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
 
   // Sync route / query parameters with modal state
   useEffect(() => {
+    if (status === 'authenticated') {
+      setShowAuthModal(false)
+      const auth = searchParams.get('auth')
+      if (auth || location.pathname === '/login' || location.pathname === '/register') {
+        void navigate('/dashboard', { replace: true })
+      }
+      return
+    }
+
     const auth = searchParams.get('auth')
     if (auth === 'login' || location.pathname === '/login' || initialModal === 'login') {
       setShowAuthModal(true)
@@ -94,7 +104,7 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
       setShowAuthModal(true)
       setAuthTab('register')
     }
-  }, [searchParams, location.pathname, initialModal])
+  }, [searchParams, location.pathname, initialModal, status, navigate])
 
   // Auth Form State
   const [authEmail, setAuthEmail] = useState('')
@@ -250,6 +260,27 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
               <DownloadIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               <span>Get Mobile App</span>
             </Link>
+
+            {status === 'authenticated' ? (
+              <Link
+                to="/dashboard"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full bg-surface-muted text-foreground border border-border/80 text-xs sm:text-sm font-bold shadow-xs hover:bg-surface active:scale-95 transition-all"
+              >
+                <span>Dashboard</span>
+                <ChevronRightIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAuthModal(true)
+                  setAuthTab('login')
+                }}
+                className="text-xs sm:text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-2 py-1"
+              >
+                Sign In
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -340,17 +371,27 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
                 className="overflow-hidden w-full flex flex-col items-center justify-center space-y-4 pt-2"
               >
                 <div className="flex flex-wrap items-center justify-center gap-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAuthModal(true)
-                      setAuthTab('register')
-                    }}
-                    className="clay-btn-primary px-7 py-3.5 text-base font-semibold inline-flex items-center gap-2 text-white shadow-lg cursor-pointer"
-                  >
-                    Start Studying Free
-                    <ChevronRightIcon className="h-4 w-4" />
-                  </button>
+                  {status === 'authenticated' ? (
+                    <Link
+                      to="/dashboard"
+                      className="clay-btn-primary px-7 py-3.5 text-base font-semibold inline-flex items-center gap-2 text-white shadow-lg cursor-pointer"
+                    >
+                      <span>Open Dashboard</span>
+                      <ChevronRightIcon className="h-4 w-4" />
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAuthModal(true)
+                        setAuthTab('register')
+                      }}
+                      className="clay-btn-primary px-7 py-3.5 text-base font-semibold inline-flex items-center gap-2 text-white shadow-lg cursor-pointer"
+                    >
+                      Start Studying Free
+                      <ChevronRightIcon className="h-4 w-4" />
+                    </button>
+                  )}
                   <a
                     href="#sandbox"
                     className="clay-pill px-6 py-3.5 text-base font-medium text-foreground hover:bg-surface-muted transition-all"
@@ -1071,18 +1112,28 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
               </p>
             </div>
             <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAuthModal(true)
-                  setAuthTab('register')
-                  window.scrollTo({ top: 0, behavior: 'smooth' })
-                }}
-                className="clay-btn-primary px-8 py-3.5 text-base font-semibold inline-flex items-center gap-2 text-white shadow-md cursor-pointer"
-              >
-                Create Free Account
-                <ChevronRightIcon className="h-4 w-4" />
-              </button>
+              {status === 'authenticated' ? (
+                <Link
+                  to="/dashboard"
+                  className="clay-btn-primary px-8 py-3.5 text-base font-semibold inline-flex items-center gap-2 text-white shadow-md cursor-pointer"
+                >
+                  <span>Open Dashboard</span>
+                  <ChevronRightIcon className="h-4 w-4" />
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAuthModal(true)
+                    setAuthTab('register')
+                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                  }}
+                  className="clay-btn-primary px-8 py-3.5 text-base font-semibold inline-flex items-center gap-2 text-white shadow-md cursor-pointer"
+                >
+                  Create Free Account
+                  <ChevronRightIcon className="h-4 w-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1099,28 +1150,39 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
             <Link to="/nfc" className="hover:text-foreground transition-colors">
               Android App (APK)
             </Link>
-            <button
-              type="button"
-              onClick={() => {
-                setShowAuthModal(true)
-                setAuthTab('login')
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-              }}
-              className="hover:text-foreground transition-colors cursor-pointer"
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowAuthModal(true)
-                setAuthTab('register')
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-              }}
-              className="hover:text-foreground transition-colors cursor-pointer"
-            >
-              Register
-            </button>
+            {status === 'authenticated' ? (
+              <Link
+                to="/dashboard"
+                className="hover:text-foreground transition-colors font-semibold text-primary"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAuthModal(true)
+                    setAuthTab('login')
+                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                  }}
+                  className="hover:text-foreground transition-colors cursor-pointer"
+                >
+                  Sign In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAuthModal(true)
+                    setAuthTab('register')
+                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                  }}
+                  className="hover:text-foreground transition-colors cursor-pointer"
+                >
+                  Register
+                </button>
+              </>
+            )}
             <a href="#how-it-works" className="hover:text-foreground transition-colors">
               Overview
             </a>

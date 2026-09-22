@@ -1,6 +1,6 @@
 import type { AuthResponse, PublicUser, UserSettings } from '@saulado/shared'
 import { create } from 'zustand'
-import { onSessionChange, setAccessToken } from '@/services/api'
+import { onSessionChange, setAccessToken, setStoredRefreshToken } from '@/services/api'
 import * as authApi from '@/services/auth'
 
 /**
@@ -46,11 +46,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   applySession: (session) => {
     if (!session) {
       setAccessToken(null)
+      setStoredRefreshToken(null)
       set({ status: 'anonymous', user: null, settings: null })
       return
     }
 
     setAccessToken(session.accessToken)
+    if (session.refreshToken) {
+      setStoredRefreshToken(session.refreshToken)
+    }
     set({ status: 'authenticated', user: session.user, settings: session.settings })
   },
 

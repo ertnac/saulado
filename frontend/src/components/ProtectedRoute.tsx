@@ -66,8 +66,19 @@ export function ProtectedRoute({
 export function AnonymousRoute({ children }: { children: ReactElement }): ReactElement {
   const status = useAuthStore((s) => s.status)
 
-  // No skeleton here: these pages are useful immediately and flashing a loader
-  // in front of a login form is worse than letting it render.
+  if (status === 'restoring') {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center p-4" aria-busy="true">
+        <SauladoLoader
+          starAnimation="star-gyro"
+          showBrand
+          showTagline
+          message="Restoring your session"
+        />
+      </div>
+    )
+  }
+
   if (status === 'authenticated') return <Navigate to="/" replace />
 
   return children

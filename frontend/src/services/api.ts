@@ -39,6 +39,28 @@ export class ApiError extends Error {
  */
 let accessToken: string | null = null
 
+const REFRESH_TOKEN_KEY = 'saulado_refresh_token'
+
+export function getStoredRefreshToken(): string | null {
+  try {
+    return localStorage.getItem(REFRESH_TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function setStoredRefreshToken(token: string | null): void {
+  try {
+    if (token) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, token)
+    } else {
+      localStorage.removeItem(REFRESH_TOKEN_KEY)
+    }
+  } catch {
+    // Graceful fallback if storage is restricted
+  }
+}
+
 export function getAccessToken(): string | null {
   return accessToken
 }
@@ -105,7 +127,10 @@ async function toApiError(res: Response): Promise<ApiError> {
 async function dispatch(path: string, options: RequestOptions): Promise<Response> {
   const { method = 'GET', body, signal, authorized } = options
 
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'X-Saulado-Client': 'native',
+  }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (authorized && accessToken) headers.Authorization = `Bearer ${accessToken}`
 
@@ -142,18 +167,25 @@ let refreshInFlight: Promise<AuthResponse | null> | null = null
 
 async function performRefresh(): Promise<AuthResponse | null> {
   try {
+    const storedToken = getStoredRefreshToken()
+    const body = storedToken ? { refreshToken: storedToken } : undefined
+
     // Deliberately not routed through `request`: that path retries on 401 by
     // refreshing, and a refresh that refreshes on failure never terminates.
-    const res = await dispatch('/api/auth/refresh', { method: 'POST' })
+    const res = await dispatch('/api/auth/refresh', { method: 'POST', body })
 
     if (!res.ok) {
       setAccessToken(null)
+      setStoredRefreshToken(null)
       notify(null)
       return null
     }
 
     const session = (await res.json()) as AuthResponse
     setAccessToken(session.accessToken)
+    if (session.refreshToken) {
+      setStoredRefreshToken(session.refreshToken)
+    }
     notify(session)
     return session
   } catch {

@@ -88,8 +88,9 @@ function unauthorized(): Response {
 }
 
 beforeEach(() => {
-  // The store and the in-memory token are module singletons, so they survive
-  // between tests and would otherwise leak a session into the next one.
+  // The store, in-memory token, and device storage survive between tests and
+  // would otherwise leak a session into the next test.
+  localStorage.clear()
   useAuthStore.setState({ status: 'restoring', user: null, settings: null })
   setAccessToken(null)
   window.history.pushState({}, '', '/')
@@ -113,6 +114,31 @@ describe('session restore', () => {
       ).toBeInTheDocument()
     })
     expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument()
+  })
+
+  it('restores session from device storage and rotates the stored token on reload', async () => {
+    localStorage.setItem('saulado_refresh_token', 'initial-device-token')
+    const fetchMock = mockFetch(jsonResponse(session({ refreshToken: 'rotated-device-token' })))
+    render(<App />)
+
+    expect(screen.getByText('Restoring your session')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /Welcome.*Learner/i, level: 1 }),
+      ).toBeInTheDocument()
+    })
+
+    // Verified that the stored token was sent in the body
+    const refreshCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes('/api/auth/refresh'),
+    )
+    expect(refreshCall).toBeDefined()
+    const requestOptions = refreshCall?.[1] as { body?: string } | undefined
+    expect(requestOptions?.body).toContain('initial-device-token')
+
+    // Verified that rotated token was updated in localStorage
+    expect(localStorage.getItem('saulado_refresh_token')).toBe('rotated-device-token')
   })
 
   it('lands on the landing page when visiting root with no session', async () => {
@@ -151,6 +177,21 @@ describe('session restore', () => {
     )
     expect(refreshCalls).toHaveLength(1)
   })
+
+  it('does not flash login or register page during session restore on /login', async () => {
+    window.history.pushState({}, '', '/login')
+    mockFetch(jsonResponse(session()))
+    render(<App />)
+
+    expect(screen.getByText('Restoring your session')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /Welcome.*Learner/i, level: 1 }),
+      ).toBeInTheDocument()
+    })
+  })
 })
 
 describe('routing', () => {
@@ -162,6 +203,32 @@ describe('routing', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /Welcome/, level: 1 })).toBeInTheDocument()
     })
+  })
+
+  it('shows Open Dashboard instead of sign-up prompts on the landing page when authenticated', async () => {
+    window.history.pushState({}, '', '/welcome')
+    mockFetch(jsonResponse(session()))
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('link', { name: /Open Dashboard/i })[0]).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('button', { name: 'Start Studying Free' })).not.toBeInTheDocument()
+  })
+
+  it('clears stored device token upon logout', async () => {
+    localStorage.setItem('saulado_refresh_token', 'token-to-be-cleared')
+    useAuthStore.setState({
+      status: 'authenticated',
+      user: session().user,
+      settings: session().settings,
+    })
+    mockFetch(jsonResponse({ message: 'Signed out.' }))
+
+    await useAuthStore.getState().logout()
+
+    expect(localStorage.getItem('saulado_refresh_token')).toBeNull()
+    expect(useAuthStore.getState().status).toBe('anonymous')
   })
 
   it('serves a 404 for an unknown path', async () => {

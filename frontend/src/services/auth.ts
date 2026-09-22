@@ -8,7 +8,14 @@ import type {
   ResetPasswordRequest,
   UserSettings,
 } from '@saulado/shared'
-import { authorizedRequest, refreshSession, request, setAccessToken } from './api'
+import {
+  authorizedRequest,
+  getStoredRefreshToken,
+  refreshSession,
+  request,
+  setAccessToken,
+  setStoredRefreshToken,
+} from './api'
 
 /**
  * Typed wrappers over the auth endpoints.
@@ -51,10 +58,15 @@ export function fetchMe(): Promise<{ user: PublicUser; settings: UserSettings }>
  * has no record of anyway.
  */
 export async function logout(): Promise<void> {
+  const refreshToken = getStoredRefreshToken()
   try {
-    await request<MessageResponse>('/api/auth/logout', { method: 'POST' })
+    await request<MessageResponse>('/api/auth/logout', {
+      method: 'POST',
+      body: refreshToken ? { refreshToken } : undefined,
+    })
   } finally {
     setAccessToken(null)
+    setStoredRefreshToken(null)
   }
 }
 
