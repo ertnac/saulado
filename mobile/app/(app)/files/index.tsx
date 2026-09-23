@@ -136,7 +136,7 @@ export default function FileRepositoryScreen(): ReactElement {
     try {
       const repoFilter: RepositoryFileType | 'all' = activeFilter === 'pdf' ? 'pdf' : 'all'
       const [fileList, folderList, fileStats, cloudMap] = await Promise.all([
-        getRepositoryFiles(userId, repoFilter, '', selectedFolderId ?? 'all'),
+        getRepositoryFiles(userId, repoFilter, '', selectedFolderId),
         getRepositoryFolders(userId),
         getRepositoryStats(userId),
         getDownloadedCloudFileMap(userId),
@@ -424,6 +424,8 @@ export default function FileRepositoryScreen(): ReactElement {
     },
   ]
 
+  const hasAnyFiles = (stats?.totalFiles ?? 0) > 0
+
   const displayFiles =
     tabScope === 'cloud'
       ? cloudFiles.map((cf) => {
@@ -459,14 +461,16 @@ export default function FileRepositoryScreen(): ReactElement {
             rawCloud: undefined as CloudFileSummary | undefined,
             rawFile: f,
           }))
-        : mockFiles.map((m) => ({
-            ...m,
-            isCloud: false,
-            isDownloaded: true,
-            isDownloading: false,
-            rawCloud: undefined as CloudFileSummary | undefined,
-            rawFile: undefined as RepositoryFile | undefined,
-          }))
+        : hasAnyFiles || selectedFolderId !== null
+          ? []
+          : mockFiles.map((m) => ({
+              ...m,
+              isCloud: false,
+              isDownloaded: true,
+              isDownloading: false,
+              rawCloud: undefined as CloudFileSummary | undefined,
+              rawFile: undefined as RepositoryFile | undefined,
+            }))
 
   const usedPercent =
     stats && stats.totalFiles > 0
@@ -955,7 +959,7 @@ export default function FileRepositoryScreen(): ReactElement {
                           selectedFolderId === null ? '#A6C2B5' : isDark ? '#889591' : '#4C5854',
                       }}
                     >
-                      {stats?.totalFiles ?? files.length} files
+                      {stats ? stats.uncategorizedCount : files.length} files
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -1276,6 +1280,77 @@ export default function FileRepositoryScreen(): ReactElement {
 
         {/* 6. Document Cards List */}
         <View style={{ gap: 12 }}>
+          {displayFiles.length === 0 && !loading && (
+            <View
+              style={{
+                padding: 32,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: isDark ? '#111A17' : '#FFFFFF',
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#EEF2EE',
+                gap: 12,
+              }}
+            >
+              <View
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 18,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#E8F3EE',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <FolderOpenIcon color={isDark ? '#A6C2B5' : '#317054'} size={28} />
+              </View>
+              <Text
+                style={{
+                  fontSize: 15,
+                  fontWeight: '700',
+                  color: isDark ? '#FFFFFF' : '#111A17',
+                  textAlign: 'center',
+                }}
+              >
+                {selectedFolderId !== null
+                  ? `No documents in "${activeFolder?.name || 'Folder'}"`
+                  : 'All files are organized into folders'}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 13,
+                  color: isDark ? '#889591' : '#4C5854',
+                  textAlign: 'center',
+                  maxWidth: 280,
+                }}
+              >
+                {selectedFolderId !== null
+                  ? 'Import documents or move existing files into this folder.'
+                  : 'Files moved to specific folders are kept inside those folders.'}
+              </Text>
+              <TouchableOpacity
+                onPress={() => void handleImport()}
+                activeOpacity={0.8}
+                style={{
+                  marginTop: 6,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: 14,
+                  backgroundColor: '#052E24',
+                }}
+              >
+                <FilePlusIcon color="#FFFFFF" size={16} />
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFFFF' }}>
+                  Import Document
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {displayFiles.map((item) => {
             const isSelected = selectedFileIds.has(item.id)
             const matchedFolder = item.rawFile?.folderId

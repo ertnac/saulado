@@ -456,6 +456,7 @@ export async function updateFileLastViewed(fileId: string): Promise<void> {
 
 export interface RepositoryStats {
   totalFiles: number
+  uncategorizedCount: number
   totalSizeBytes: number
   pdfCount: number
   docxCount: number
@@ -464,7 +465,14 @@ export interface RepositoryStats {
 
 export async function getRepositoryStats(userId: string): Promise<RepositoryStats> {
   if (!userId) {
-    return { totalFiles: 0, totalSizeBytes: 0, pdfCount: 0, docxCount: 0, docCount: 0 }
+    return {
+      totalFiles: 0,
+      uncategorizedCount: 0,
+      totalSizeBytes: 0,
+      pdfCount: 0,
+      docxCount: 0,
+      docCount: 0,
+    }
   }
   const db = await getDatabase()
   const rows = await db.getAllAsync<{
@@ -493,7 +501,13 @@ export async function getRepositoryStats(userId: string): Promise<RepositoryStat
     if (row.file_type === 'doc') docCount = row.count
   }
 
-  return { totalFiles, totalSizeBytes, pdfCount, docxCount, docCount }
+  const uncatRow = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM repository_files WHERE user_id = ? AND folder_id IS NULL',
+    [userId],
+  )
+  const uncategorizedCount = uncatRow?.count ?? 0
+
+  return { totalFiles, uncategorizedCount, totalSizeBytes, pdfCount, docxCount, docCount }
 }
 
 export async function createRepositoryFolder(

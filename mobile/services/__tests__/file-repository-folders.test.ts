@@ -39,6 +39,7 @@ import {
   deleteRepositoryFolder,
   getRepositoryFiles,
   getRepositoryFolders,
+  getRepositoryStats,
   moveFilesToFolder,
   updateRepositoryFolder,
 } from '../file-repository'
@@ -213,6 +214,32 @@ describe('file-repository folders service', () => {
       await getRepositoryFiles('user-1', 'all', '', null)
 
       expect(mockGetAllAsync).toHaveBeenCalledWith(
+        expect.stringContaining('AND folder_id IS NULL'),
+        ['user-1'],
+      )
+    })
+  })
+
+  describe('getRepositoryStats', () => {
+    it('accurately counts uncategorized files alongside total files', async () => {
+      const mockGetAllAsync = vi.fn().mockResolvedValue([
+        { file_type: 'pdf', count: 4, total_size: 4000 },
+        { file_type: 'docx', count: 2, total_size: 2000 },
+      ])
+      const mockGetFirstAsync = vi.fn().mockResolvedValue({ count: 3 })
+      const mockDb = {
+        getAllAsync: mockGetAllAsync,
+        getFirstAsync: mockGetFirstAsync,
+      }
+      vi.mocked(getDatabase).mockResolvedValue(mockDb as unknown as SQLiteDatabase)
+
+      const stats = await getRepositoryStats('user-1')
+
+      expect(stats.totalFiles).toBe(6)
+      expect(stats.uncategorizedCount).toBe(3)
+      expect(stats.pdfCount).toBe(4)
+      expect(stats.docxCount).toBe(2)
+      expect(mockGetFirstAsync).toHaveBeenCalledWith(
         expect.stringContaining('AND folder_id IS NULL'),
         ['user-1'],
       )
