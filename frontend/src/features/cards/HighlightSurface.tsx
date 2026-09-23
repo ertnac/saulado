@@ -88,7 +88,6 @@ interface HighlightSurfaceProps {
   answers: readonly EditorAnswer[]
   /** Called with every attempt, successful or not, so the caller can explain a rejection. */
   onSelect: (result: SelectionResult) => void
-  onOpenHighlight: (ordinal: number) => void
   onRemoveHighlight: (ordinal: number) => void
   /** Snap to word boundaries — on for touch, off for mouse and keyboard. */
   snap?: boolean
@@ -99,7 +98,6 @@ export function HighlightSurface({
   paragraph,
   answers,
   onSelect,
-  onOpenHighlight,
   onRemoveHighlight,
   snap = false,
   className,
@@ -190,7 +188,6 @@ export function HighlightSurface({
               key={piece.start}
               ordinal={piece.ordinal}
               text={piece.text}
-              onOpen={onOpenHighlight}
               onRemove={onRemoveHighlight}
             />
           ),
@@ -222,7 +219,6 @@ export function HighlightSurface({
 interface HighlightMarkProps {
   ordinal: number
   text: string
-  onOpen: (ordinal: number) => void
   onRemove: (ordinal: number) => void
 }
 
@@ -239,7 +235,7 @@ interface HighlightMarkProps {
  * {@link PARAGRAPH_DECORATION_ATTR}, without which its digits would be counted as
  * paragraph text and every offset after the first highlight would be wrong.
  */
-function HighlightMark({ ordinal, text, onOpen, onRemove }: HighlightMarkProps): ReactElement {
+function HighlightMark({ ordinal, text, onRemove }: HighlightMarkProps): ReactElement {
   const label = ordinal + 1
 
   return (
@@ -247,7 +243,7 @@ function HighlightMark({ ordinal, text, onOpen, onRemove }: HighlightMarkProps):
       type="button"
       {...{ [HIGHLIGHT_ORDINAL_ATTR]: ordinal }}
       onClick={() => {
-        onOpen(ordinal)
+        onRemove(ordinal)
       }}
       onKeyDown={(event) => {
         // Removes without confirmation, which is safe because the paragraph text
@@ -258,7 +254,7 @@ function HighlightMark({ ordinal, text, onOpen, onRemove }: HighlightMarkProps):
           onRemove(ordinal)
         }
       }}
-      aria-label={`Blank ${String(label)}: ${text}. Enter for options, Delete to remove.`}
+      aria-label={`Blank ${String(label)}: ${text}. Click or press Delete to remove.`}
       className={cn(
         'inline-flex items-center gap-1 mx-0.5 rounded-lg px-2 py-0.5 text-left align-baseline font-semibold transition-all shadow-2xs',
         'bg-highlight/35 text-foreground border border-highlight hover:bg-highlight/50 focus-visible:ring-2 focus-visible:ring-primary',

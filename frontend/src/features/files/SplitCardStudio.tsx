@@ -2,7 +2,15 @@ import { useEffect, useState, type ReactElement } from 'react'
 import type { AnswerInput, DraftAnswer } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { FolderIcon, ShoppingBagIcon, SparklesIcon, TrashIcon, XIcon } from '@/components/ui/icons'
+import {
+  FolderIcon,
+  ShoppingBagIcon,
+  SparklesIcon,
+  TrashIcon,
+  XIcon,
+  UndoIcon,
+  RedoIcon,
+} from '@/components/ui/icons'
 import { HighlightEditor } from '@/features/cards/HighlightEditor'
 import { useCardDraft } from '@/features/cards/useCardDraft'
 import { useCreateCard, useCreateSet, useSets } from '@/features/cards/queries'
@@ -11,7 +19,11 @@ import { toast } from '@/stores/toast'
 import { formatDocumentTextLayout } from '@/lib/text-formatting'
 import { cn } from '@/lib/utils'
 
+import type { RepositoryFileType } from '@saulado/shared'
+
 export interface SplitCardStudioProps {
+  fileId: string
+  fileType: RepositoryFileType
   documentName: string
   incomingNoteText?: string | null
   onClearIncomingNote?: () => void
@@ -28,6 +40,8 @@ function toAnswerInputs(answers: readonly DraftAnswer[]): AnswerInput[] {
 }
 
 export function SplitCardStudio({
+  fileId,
+  fileType,
   documentName,
   incomingNoteText,
   onClearIncomingNote,
@@ -39,6 +53,7 @@ export function SplitCardStudio({
   const snippets = useSnippetBagStore((s) => s.snippets)
   const removeSnippet = useSnippetBagStore((s) => s.removeSnippet)
   const clearBag = useSnippetBagStore((s) => s.clearBag)
+  const addSnippet = useSnippetBagStore((s) => s.addSnippet)
 
   const [selectedSetId, setSelectedSetId] = useState<string>('')
   const [isCreatingSet, setIsCreatingSet] = useState(false)
@@ -50,6 +65,9 @@ export function SplitCardStudio({
   // Drawer open / collapsed toggle state
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(true)
 
+  // Auto vs Manual Mode state
+  const [studioMode, setStudioMode] = useState<'auto' | 'manual'>('auto')
+
   // Track the active snippet ID currently loaded in the editor
   const [activeSnippetIdState, setActiveSnippetIdState] = useState<string | null>(() => {
     if (activeSnippetId) return activeSnippetId
@@ -57,6 +75,10 @@ export function SplitCardStudio({
     if (first && !incomingNoteText) return first.id
     return null
   })
+  const [manualSelection, setManualSelection] = useState<{ start: number; end: number } | null>(
+    null,
+  )
+  const [manualText, setManualText] = useState('')
 
   const currentSnippet = snippets.find((s) => s.id === activeSnippetIdState)
   const initialText = incomingNoteText
@@ -98,24 +120,48 @@ export function SplitCardStudio({
     }
   }, [activeSnippetIdState, snippets, draft, incomingNoteText])
 
+  // When active snippet changes, override editor state
+  useEffect(() => {
+    if (activeSnippetIdState && currentSnippet) {
+      draft.reset({ paragraph: currentSnippet.text, answers: [] })
+      draft.setMode('highlight') // automatically ready to add blanks
+      setStudioMode('auto') // automatically switch to auto mode to edit the card
+    }
+  }, [activeSnippetIdState, currentSnippet])
+
   // Listen for new incoming highlighted notes from the document
   useEffect(() => {
     if (incomingNoteText && incomingNoteText.trim().length > 0) {
       const formatted = formatDocumentTextLayout(incomingNoteText)
-      if (formatted !== draft.paragraph) {
-        draft.reset({ paragraph: formatted, answers: [] })
+
+      if (studioMode === 'manual') {
+        if (manualText.trim().length > 0) {
+          setManualText(manualText.trimRight() + '\n\n' + formatted)
+        } else {
+          setManualText(formatted)
+        }
+      } else {
+        if (draft.draftText.trim().length > 0) {
+          // Append to existing text with a blank line space
+          const newText = draft.draftText.trimRight() + '\n\n' + formatted
+          draft.reset({ paragraph: newText, answers: [] })
+        } else {
+          draft.reset({ paragraph: formatted, answers: [] })
+        }
         draft.setMode('highlight')
-        setActiveSnippetIdState(null) // Direct note from document
       }
+
+      setActiveSnippetIdState(null) // Direct note from document
       onClearIncomingNote?.()
     }
-  }, [incomingNoteText, draft, onClearIncomingNote])
+  }, [incomingNoteText, draft, manualText, studioMode, onClearIncomingNote])
 
   const handleLoadSnippet = (snippet: BaggedSnippet) => {
     setActiveSnippetIdState(snippet.id)
     const formatted = formatDocumentTextLayout(snippet.text)
     draft.reset({ paragraph: formatted, answers: [] })
     draft.setMode('highlight')
+    setStudioMode('auto')
   }
 
   const handleRemoveSnippet = (id: string) => {
@@ -147,9 +193,9 @@ export function SplitCardStudio({
       if (clipText && clipText.trim().length > 0) {
         const formatted = formatDocumentTextLayout(clipText)
         draft.reset({ paragraph: formatted, answers: [] })
-        draft.setMode('highlight')
+        draft.setMode('compose')
         setActiveSnippetIdState(null)
-        toast.success('Note pasted from clipboard! Drag across words to make blanks.')
+        toast.success('Note pasted from clipboard! You can edit it before highlighting.')
       } else {
         toast.info('Clipboard is empty. Copy a sentence from the PDF first (Ctrl+C).')
       }
@@ -170,13 +216,39 @@ export function SplitCardStudio({
       if (text && text.trim().length > 0) {
         const formatted = formatDocumentTextLayout(text)
         draft.reset({ paragraph: formatted, answers: [] })
-        draft.setMode('highlight')
+        draft.setMode('compose')
         setActiveSnippetIdState(null)
-        toast.success('Note captured from paste! Drag across words to make blanks.')
+        toast.success('Note captured from paste! You can edit it before highlighting.')
       }
     }
     window.addEventListener('paste', handleGlobalPaste)
     return () => window.removeEventListener('paste', handleGlobalPaste)
+  }, [draft])
+
+  // Undo/Redo keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement ? document.activeElement.tagName : ''
+      const isContentEditable = (document.activeElement as HTMLElement)?.isContentEditable
+      if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || isContentEditable) {
+        return
+      }
+
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        if (e.key === 'z') {
+          e.preventDefault()
+          if (draft.canUndo) draft.undo()
+        } else if (e.key === 'y') {
+          e.preventDefault()
+          if (draft.canRedo) draft.redo()
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (draft.canRedo) draft.redo()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
   }, [draft])
 
   // Mutation for creating card
@@ -246,7 +318,7 @@ export function SplitCardStudio({
           setActiveSnippetIdState(nextSnippet.id)
           const nextText = formatDocumentTextLayout(nextSnippet.text)
           draft.reset({ paragraph: nextText, answers: [] })
-          draft.setMode('highlight')
+          draft.setMode('compose')
           toast.success('Flashcard saved! Loaded next card from top of drawer. ✨')
         } else {
           setActiveSnippetIdState(null)
@@ -261,7 +333,7 @@ export function SplitCardStudio({
             setActiveSnippetIdState(topSnippet.id)
             const topText = formatDocumentTextLayout(topSnippet.text)
             draft.reset({ paragraph: topText, answers: [] })
-            draft.setMode('highlight')
+            draft.setMode('compose')
             toast.success('Flashcard saved! Loaded top card from drawer. ✨')
           }
         } else {
@@ -272,6 +344,72 @@ export function SplitCardStudio({
     } catch (err) {
       console.warn('[split-studio] failed to save card:', err)
       toast.error('Failed to save card. Please try again.')
+    }
+  }
+
+  const handleSaveNoteToBag = () => {
+    let textToSave = ''
+    let remainingText = ''
+    let isPartial = false
+
+    if (studioMode === 'manual') {
+      if (manualSelection && manualSelection.start !== manualSelection.end) {
+        const fullText = manualText
+        const start = manualSelection.start
+        const end = manualSelection.end
+        textToSave = fullText.substring(start, end).trim()
+
+        // Remove the selected portion and trim any resulting double newlines
+        remainingText = (fullText.substring(0, start) + fullText.substring(end)).trim()
+        isPartial = true
+
+        // Clear selection state after extracting
+        setManualSelection(null)
+      } else {
+        textToSave = manualText.trim()
+      }
+    } else {
+      draft.commitParagraph()
+      textToSave = draft.paragraph.trim()
+    }
+
+    if (!textToSave) {
+      toast.error('Note text cannot be empty. Select some text or type a note.')
+      return
+    }
+
+    // Don't add to bag if it's already in the bag
+    const matchingSnippet = snippets.find(
+      (s) => s.id === activeSnippetIdState || formatDocumentTextLayout(s.text) === textToSave,
+    )
+    if (matchingSnippet) {
+      toast.info('This note is already in your Study Bag.')
+      return
+    }
+
+    addSnippet({
+      fileId,
+      fileName: documentName,
+      fileType,
+      text: textToSave,
+      source: fileType,
+    })
+
+    if (isPartial) {
+      if (studioMode === 'manual') {
+        setManualText(remainingText)
+      } else {
+        draft.reset({ paragraph: remainingText, answers: [] }, false)
+      }
+      toast.success('Selected text extracted and added to Study Bag! 🛍️')
+    } else {
+      if (studioMode === 'manual') {
+        setManualText('')
+      } else {
+        setActiveSnippetIdState(null)
+        draft.reset({ paragraph: '', answers: [] })
+      }
+      toast.success('Note added to Study Bag! 🛍️')
     }
   }
 
@@ -472,6 +610,49 @@ export function SplitCardStudio({
             </div>
 
             <div className="flex items-center gap-1.5">
+              {studioMode === 'auto' && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] px-2 text-muted-foreground hover:text-foreground"
+                    disabled={!draft.canUndo}
+                    onClick={() => draft.undo()}
+                    title="Undo (Ctrl+Z)"
+                  >
+                    <UndoIcon className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] px-2 text-muted-foreground hover:text-foreground"
+                    disabled={!draft.canRedo}
+                    onClick={() => draft.redo()}
+                    title="Redo (Ctrl+Y)"
+                  >
+                    <RedoIcon className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex bg-surface-muted p-1 rounded-lg mr-2">
+                <Button
+                  variant={studioMode === 'auto' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-6 text-[10px] px-2"
+                  onClick={() => setStudioMode('auto')}
+                >
+                  Auto
+                </Button>
+                <Button
+                  variant={studioMode === 'manual' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-6 text-[10px] px-2"
+                  onClick={() => setStudioMode('manual')}
+                >
+                  Manual
+                </Button>
+              </div>
               {createdCount > 0 && (
                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                   +{createdCount} created
@@ -490,66 +671,68 @@ export function SplitCardStudio({
             </div>
           </div>
 
-          {/* Target Study Set Selector */}
-          <div className="rounded-xl border border-border/70 bg-surface-muted/40 p-2.5 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 font-medium text-muted-foreground">
-                <FolderIcon className="h-3.5 w-3.5 text-primary" />
-                <span>Target Set:</span>
+          {/* Target Study Set Selector (Auto Mode Only) */}
+          {studioMode === 'auto' && (
+            <div className="rounded-xl border border-border/70 bg-surface-muted/40 p-2.5 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5 font-medium text-muted-foreground">
+                  <FolderIcon className="h-3.5 w-3.5 text-primary" />
+                  <span>Target Set:</span>
+                </div>
+                {!isCreatingSet ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingSet(true)}
+                    className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                  >
+                    + New Set
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingSet(false)}
+                    className="text-[11px] font-medium text-muted-foreground hover:underline cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
-              {!isCreatingSet ? (
-                <button
-                  type="button"
-                  onClick={() => setIsCreatingSet(true)}
-                  className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
-                >
-                  + New Set
-                </button>
+
+              {isCreatingSet ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={newSetTitle}
+                    onChange={(e) => setNewSetTitle(e.target.value)}
+                    placeholder="e.g. Biology Exam Prep"
+                    className="flex-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <Button
+                    variant="default"
+                    size="sm"
+                    disabled={isSaving}
+                    onClick={() => void handleCreateNewSet()}
+                    className="text-xs h-7 px-2.5"
+                  >
+                    Create
+                  </Button>
+                </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsCreatingSet(false)}
-                  className="text-[11px] font-medium text-muted-foreground hover:underline cursor-pointer"
+                <select
+                  value={selectedSetId}
+                  onChange={(e) => setSelectedSetId(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  Cancel
-                </button>
+                  {sets.length === 0 && <option value="">No study sets found. Create one!</option>}
+                  {sets.map((set) => (
+                    <option key={set.id} value={set.id}>
+                      {set.title} ({set.cardCount} cards)
+                    </option>
+                  ))}
+                </select>
               )}
             </div>
-
-            {isCreatingSet ? (
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="text"
-                  value={newSetTitle}
-                  onChange={(e) => setNewSetTitle(e.target.value)}
-                  placeholder="e.g. Biology Exam Prep"
-                  className="flex-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-                <Button
-                  variant="default"
-                  size="sm"
-                  disabled={isSaving}
-                  onClick={() => void handleCreateNewSet()}
-                  className="text-xs h-7 px-2.5"
-                >
-                  Create
-                </Button>
-              </div>
-            ) : (
-              <select
-                value={selectedSetId}
-                onChange={(e) => setSelectedSetId(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                {sets.length === 0 && <option value="">No study sets found. Create one!</option>}
-                {sets.map((set) => (
-                  <option key={set.id} value={set.id}>
-                    {set.title} ({set.cardCount} cards)
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+          )}
         </div>
 
         {/* Editor Main Content Area */}
@@ -587,6 +770,31 @@ export function SplitCardStudio({
                 </Button>
               </div>
             </Card>
+          ) : studioMode === 'manual' ? (
+            <div className="flex flex-col h-full space-y-3">
+              <p className="text-xs text-muted-foreground px-1">
+                Type or paste text below. When you add it to your Study Bag, it will clear this box
+                and appear in your drawer queue.
+              </p>
+              <textarea
+                id="manual-note-textarea"
+                value={manualText}
+                onChange={(e) => {
+                  setManualText(e.target.value)
+                  setManualSelection(null) // Reset selection when text changes
+                }}
+                onSelect={(e) => {
+                  const target = e.target as HTMLTextAreaElement
+                  if (target.selectionStart !== target.selectionEnd) {
+                    setManualSelection({ start: target.selectionStart, end: target.selectionEnd })
+                  } else {
+                    setManualSelection(null)
+                  }
+                }}
+                placeholder="Paste copied text here..."
+                className="flex-1 min-h-[200px] w-full rounded-2xl border border-border/80 bg-background p-4 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none shadow-xs"
+              />
+            </div>
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed text-foreground">
@@ -629,26 +837,41 @@ export function SplitCardStudio({
               >
                 Clear
               </Button>
-              <span className="text-[11px] text-muted-foreground font-medium">
-                {draft.answers.length} {draft.answers.length === 1 ? 'blank' : 'blanks'}
-              </span>
+              {studioMode === 'auto' && (
+                <span className="text-[11px] text-muted-foreground font-medium">
+                  {draft.answers.length} {draft.answers.length === 1 ? 'blank' : 'blanks'}
+                </span>
+              )}
             </div>
 
-            <Button
-              variant="default"
-              size="sm"
-              disabled={isSaving || !selectedSetId}
-              onClick={() => void handleSaveCard()}
-              className="text-xs font-bold"
-            >
-              {isSaving
-                ? 'Saving…'
-                : isCurrentCardFromDrawer && snippets.length > 1
-                  ? `Save & Next (${snippets.length - 1} left) ➔`
-                  : isCurrentCardFromDrawer
-                    ? 'Save Final Drawer Card ✓'
-                    : `Save Card to "${selectedSet?.title || 'Set'}" ✓`}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={studioMode === 'manual' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => void handleSaveNoteToBag()}
+                className="text-xs font-semibold"
+              >
+                Save as Note 🛍️
+              </Button>
+
+              {studioMode === 'auto' && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={isSaving || !selectedSetId}
+                  onClick={() => void handleSaveCard()}
+                  className="text-xs font-bold"
+                >
+                  {isSaving
+                    ? 'Saving…'
+                    : isCurrentCardFromDrawer && snippets.length > 1
+                      ? `Save & Next (${snippets.length - 1} left) ➔`
+                      : isCurrentCardFromDrawer
+                        ? 'Save Final Drawer Card ✓'
+                        : `Save Card to "${selectedSet?.title || 'Set'}" ✓`}
+                </Button>
+              )}
+            </div>
           </div>
         )}
       </main>

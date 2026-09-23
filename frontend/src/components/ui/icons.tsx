@@ -466,3 +466,21 @@ export function TrashIcon(props: IconProps): ReactElement {
     </Icon>
   )
 }
+
+export function UndoIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <path d="M3 7v6h6" />
+      <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+    </Icon>
+  )
+}
+
+export function RedoIcon(props: IconProps): ReactElement {
+  return (
+    <Icon {...props}>
+      <path d="M21 7v6h-6" />
+      <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" />
+    </Icon>
+  )
+}

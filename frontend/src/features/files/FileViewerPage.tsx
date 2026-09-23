@@ -421,6 +421,8 @@ export function FileViewerPage(): ReactElement {
             )}
           >
             <SplitCardStudio
+              fileId={fileId!}
+              fileType={fileType}
               documentName={fileName}
               incomingNoteText={incomingNoteText}
               onClearIncomingNote={() => setIncomingNoteText(null)}

@@ -518,14 +518,32 @@ export function generatePdfViewerHtml({
       }
     }
 
-    document.addEventListener('selectionchange', function() {
-      setTimeout(checkSelection, 80);
+    var isMouseDown = false;
+    var selectionTimeout = null;
+
+    document.addEventListener('mousedown', function() {
+      isMouseDown = true;
     });
+    document.addEventListener('touchstart', function() {
+      isMouseDown = true;
+    });
+
+    document.addEventListener('selectionchange', function() {
+      if (!isMouseDown) {
+        clearTimeout(selectionTimeout);
+        selectionTimeout = setTimeout(checkSelection, 300);
+      }
+    });
+
     document.addEventListener('mouseup', function() {
-      setTimeout(checkSelection, 120);
+      isMouseDown = false;
+      clearTimeout(selectionTimeout);
+      setTimeout(checkSelection, 50);
     });
     document.addEventListener('touchend', function() {
-      setTimeout(checkSelection, 150);
+      isMouseDown = false;
+      clearTimeout(selectionTimeout);
+      setTimeout(checkSelection, 50);
     });
 
     function showFallbackError(err) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
 import {
   ANSWERS_MAX_PER_CARD,
   codePointLength,
@@ -6,7 +6,7 @@ import {
   sliceCodePoints,
 } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
-import { AlertIcon } from '@/components/ui/icons'
+import { AlertIcon, PencilIcon, CheckIcon } from '@/components/ui/icons'
 import { cn } from '@/lib/utils'
 import type { SelectionResult } from '@/lib/selection'
 import { ClozePreview } from './ClozePreview'
@@ -132,21 +132,29 @@ export function HighlightEditor({ draft, showPreview = true }: HighlightEditorPr
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div
-          role="tablist"
-          aria-label="Editor mode"
-          className="inline-flex gap-1 rounded-full bg-surface-muted p-1"
-        >
-          <ModeTab active={mode === 'compose'} onClick={toComposeMode}>
-            Write
-          </ModeTab>
-          <ModeTab
-            active={mode === 'highlight'}
-            onClick={toHighlightMode}
-            disabled={draftText.trim().length === 0 || overLimit}
-          >
-            Highlight
-          </ModeTab>
+        <div>
+          {mode === 'highlight' ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={toComposeMode}
+              className="h-8 rounded-md px-4 font-bold text-xs"
+            >
+              <PencilIcon className="h-3.5 w-3.5 mr-2" />
+              Edit Text
+            </Button>
+          ) : (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={toHighlightMode}
+              disabled={draftText.trim().length === 0 || overLimit}
+              className="h-8 rounded-md px-4 font-bold text-xs"
+            >
+              <CheckIcon className="h-3.5 w-3.5 mr-2" />
+              Done Editing
+            </Button>
+          )}
         </div>
 
         <p
@@ -309,27 +317,5 @@ export function HighlightEditor({ draft, showPreview = true }: HighlightEditorPr
         </section>
       )}
     </div>
-  )
-}
-
-interface ModeTabProps {
-  active: boolean
-  disabled?: boolean
-  onClick: () => void
-  children: ReactNode
-}
-
-function ModeTab({ active, disabled, onClick, children }: ModeTabProps): ReactElement {
-  return (
-    <Button
-      role="tab"
-      aria-selected={active}
-      size="sm"
-      variant={active ? 'default' : 'ghost'}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </Button>
   )
 }

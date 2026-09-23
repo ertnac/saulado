@@ -48,6 +48,8 @@ export interface CardDraftState {
   answers: EditorAnswer[]
   /** Highlights whose text vanished in the last edit. Never dropped silently. */
   orphaned: DraftAnswer[]
+  canUndo: boolean
+  canRedo: boolean
 }
 
 export interface CardDraftActions {
@@ -61,7 +63,12 @@ export interface CardDraftActions {
   removeHighlight: (ordinal: number) => void
   setAltAnswers: (ordinal: number, alts: string[]) => void
   dismissOrphans: () => void
-  reset: (next: { paragraph: string; answers?: readonly DraftAnswer[] }) => void
+  reset: (
+    next: { paragraph: string; answers?: readonly DraftAnswer[] },
+    clearHistory?: boolean,
+  ) => void
+  undo: () => void
+  redo: () => void
 }
 
 export interface CardDraftInit {
@@ -92,6 +99,42 @@ export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDra
   const [answers, setAnswers] = useState<EditorAnswer[]>(() => renumber(init.answers ?? []))
   const [orphaned, setOrphaned] = useState<DraftAnswer[]>([])
 
+  const [past, setPast] = useState<{ paragraph: string; answers: EditorAnswer[] }[]>([])
+  const [future, setFuture] = useState<{ paragraph: string; answers: EditorAnswer[] }[]>([])
+
+  const pushHistory = useCallback(() => {
+    setPast((p) => [...p, { paragraph, answers }])
+    setFuture([])
+  }, [paragraph, answers])
+
+  const undo = useCallback(() => {
+    if (past.length === 0) return
+    const previous = past[past.length - 1]
+    if (!previous) return
+
+    setFuture((f) => [{ paragraph, answers }, ...f])
+    setPast((p) => p.slice(0, -1))
+
+    setParagraph(previous.paragraph)
+    setDraftText(previous.paragraph)
+    setAnswers(previous.answers)
+    setOrphaned([])
+  }, [past, paragraph, answers])
+
+  const redo = useCallback(() => {
+    if (future.length === 0) return
+    const next = future[0]
+    if (!next) return
+
+    setPast((p) => [...p, { paragraph, answers }])
+    setFuture((f) => f.slice(1))
+
+    setParagraph(next.paragraph)
+    setDraftText(next.paragraph)
+    setAnswers(next.answers)
+    setOrphaned([])
+  }, [future, paragraph, answers])
+
   /**
    * Reads `answers` directly rather than through a functional updater: the
    * re-anchor also has to set `orphaned`, and a state updater that calls another
@@ -103,13 +146,20 @@ export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDra
     setParagraph(next)
     setDraftText(next)
 
-    if (answers.length === 0) return
+    if (answers.length === 0) {
+      if (paragraph !== next) pushHistory()
+      return
+    }
 
     // The cheap pre-check: appending to the end leaves every offset valid, and
     // that is the common case. Skipping the search there also avoids re-anchoring
     // relocating an answer onto an identical word elsewhere when nothing moved.
-    if (!needsReanchoring(paragraph, next, answers)) return
+    if (!needsReanchoring(paragraph, next, answers)) {
+      if (paragraph !== next) pushHistory()
+      return
+    }
 
+    pushHistory()
     const { matched, orphaned: lost } = reanchorAnswers(paragraph, next, answers)
     setAnswers(renumber(matched))
     setOrphaned(lost)
@@ -143,16 +193,22 @@ export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDra
         throw error
       }
 
+      pushHistory()
       setAnswers(renumber([...answers, answer]))
     },
-    [answers, paragraph],
+    [answers, paragraph, pushHistory],
   )
 
-  const removeHighlight = useCallback((ordinal: number) => {
-    setAnswers((current) => renumber(current.filter((answer) => answer.ordinal !== ordinal)))
-  }, [])
+  const removeHighlight = useCallback(
+    (ordinal: number) => {
+      pushHistory()
+      setAnswers((current) => renumber(current.filter((answer) => answer.ordinal !== ordinal)))
+    },
+    [pushHistory],
+  )
 
   const setAltAnswers = useCallback((ordinal: number, alts: string[]) => {
+    pushHistory()
     setAnswers((current) =>
       current.map((answer) =>
         answer.ordinal === ordinal
@@ -166,13 +222,22 @@ export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDra
     setOrphaned([])
   }, [])
 
-  const reset = useCallback((next: { paragraph: string; answers?: readonly DraftAnswer[] }) => {
-    const normalized = normalizeParagraph(next.paragraph)
-    setParagraph(normalized)
-    setDraftText(normalized)
-    setAnswers(renumber(next.answers ?? []))
-    setOrphaned([])
-  }, [])
+  const reset = useCallback(
+    (next: { paragraph: string; answers?: readonly DraftAnswer[] }, clearHistory = true) => {
+      if (!clearHistory) {
+        pushHistory()
+      } else {
+        setPast([])
+        setFuture([])
+      }
+      const normalized = normalizeParagraph(next.paragraph)
+      setParagraph(normalized)
+      setDraftText(normalized)
+      setAnswers(renumber(next.answers ?? []))
+      setOrphaned([])
+    },
+    [pushHistory],
+  )
 
   return {
     mode,
@@ -180,6 +245,8 @@ export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDra
     draftText,
     answers,
     orphaned,
+    canUndo: past.length > 0,
+    canRedo: future.length > 0,
     setMode,
     setDraftText,
     commitParagraph,
@@ -189,5 +256,7 @@ export function useCardDraft(init: CardDraftInit = {}): CardDraftState & CardDra
     setAltAnswers,
     dismissOrphans,
     reset,
+    undo,
+    redo,
   }
 }
