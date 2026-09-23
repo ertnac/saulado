@@ -28,10 +28,6 @@ export function CardHighlightEditor({
   cards,
   onUpdateAnswers,
 }: CardHighlightEditorProps): ReactElement {
-  const [activePopover, setActivePopover] = useState<{
-    paragraphIndex: number
-    ordinal: number
-  } | null>(null)
   const [rejections, setRejections] = useState<Record<number, string>>({})
 
   const handleSelect = (index: number, paragraphText: string, result: SelectionResult): void => {
@@ -79,9 +75,6 @@ export function CardHighlightEditor({
       index,
       current.filter((a) => a.startOffset !== target.startOffset),
     )
-    if (activePopover?.paragraphIndex === index && activePopover.ordinal === ordinal) {
-      setActivePopover(null)
-    }
   }
 
   return (
@@ -134,9 +127,6 @@ export function CardHighlightEditor({
                   paragraph={paragraph}
                   answers={assigned}
                   onSelect={(res) => handleSelect(index, paragraph, res)}
-                  onOpenHighlight={(ord) =>
-                    setActivePopover({ paragraphIndex: index, ordinal: ord })
-                  }
                   onRemoveHighlight={(ord) => handleRemove(index, ord)}
                 />
               </div>

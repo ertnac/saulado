@@ -206,7 +206,6 @@ export function HighlightEditor({ draft, showPreview = true }: HighlightEditorPr
             paragraph={paragraph}
             answers={answers}
             onSelect={onSelect}
-            onOpenHighlight={setOpenOrdinal}
             onRemoveHighlight={(ordinal) => {
               removeHighlight(ordinal)
               // Ordinals renumber on removal, so an open panel would otherwise be
