@@ -1,9 +1,13 @@
 import type { ReactElement } from 'react'
-import { FileImportDialog, type FileImportDialogProps } from './import/FileImportDialog'
+import { PasteToCardsDialog, type PasteToCardsDialogProps } from './import/PasteToCardsDialog'
 
-export { FileImportDialog as ImportDialog, type FileImportDialogProps as ImportDialogProps }
-export { FileImportDialog }
+export {
+  PasteToCardsDialog as ImportDialog,
+  type PasteToCardsDialogProps as ImportDialogProps,
+  PasteToCardsDialog as FileImportDialog,
+  type PasteToCardsDialogProps as FileImportDialogProps,
+}
 
-export default function ImportDialogDefault(props: FileImportDialogProps): ReactElement {
-  return <FileImportDialog {...props} />
+export default function ImportDialogDefault(props: PasteToCardsDialogProps): ReactElement {
+  return <PasteToCardsDialog {...props} />
 }

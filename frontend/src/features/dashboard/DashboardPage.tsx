@@ -12,11 +12,11 @@ import {
   ChartIcon,
   ChevronRightIcon,
   ClockIcon,
+  FileTextIcon,
   FlameIcon,
   PlusIcon,
   SparklesIcon,
   TrophyIcon,
-  UploadIcon,
   ZapIcon,
 } from '@/components/ui/icons'
 import { ProgressRing } from '@/components/ui/ProgressRing'
@@ -24,7 +24,7 @@ import { OnboardingModal } from '@/features/onboarding/OnboardingModal'
 import { GoalRing } from '@/components/charts/GoalRing'
 import { Sparkline } from '@/components/charts/Sparkline'
 import { SetDialog } from '@/features/cards/SetDialog'
-import { FileImportDialog } from '@/features/cards/import/FileImportDialog'
+import { PasteToCardsDialog } from '@/features/cards/import/PasteToCardsDialog'
 import { UniversalImportDialog } from '@/features/cards/transfer/UniversalImportDialog'
 import { SeedDecksDialog } from '@/features/cards/transfer/SeedDecksDialog'
 import { QuickLearnDialog } from '@/features/study/QuickLearnDialog'
@@ -111,7 +111,7 @@ function MetricChip({
 
 interface QuickActionsProps {
   onQuickLearn: () => void
-  onImportOcr: () => void
+  onPasteCards: () => void
   onSeedDecks: () => void
   onImportDeck: () => void
   onNewSet: () => void
@@ -119,7 +119,7 @@ interface QuickActionsProps {
 
 function QuickActions({
   onQuickLearn,
-  onImportOcr,
+  onPasteCards,
   onSeedDecks,
   onImportDeck,
   onNewSet,
@@ -155,12 +155,12 @@ function QuickActions({
         <Button
           variant="outline"
           className="h-auto flex-col items-center justify-center py-3.5 gap-2 rounded-2xl border-border/70"
-          onClick={onImportOcr}
+          onClick={onPasteCards}
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/10 text-accent">
-            <UploadIcon className="h-5 w-5" />
+            <FileTextIcon className="h-5 w-5" />
           </span>
-          <span className="text-xs font-semibold">Import Document</span>
+          <span className="text-xs font-semibold">Paste to Cards</span>
         </Button>
 
         <Button
@@ -618,7 +618,7 @@ export function DashboardPage(): ReactElement {
   const navigate = useNavigate()
 
   const [creating, setCreating] = useState(false)
-  const [importingOcr, setImportingOcr] = useState(false)
+  const [pasteCardsOpen, setPasteCardsOpen] = useState(false)
   const [seedDecksOpen, setSeedDecksOpen] = useState(false)
   const [universalImportOpen, setUniversalImportOpen] = useState(false)
   const [quickLearnOpen, setQuickLearnOpen] = useState(false)
@@ -742,7 +742,7 @@ export function DashboardPage(): ReactElement {
       {/* ── Quick Action Shortcuts ── */}
       <QuickActions
         onQuickLearn={() => setQuickLearnOpen(true)}
-        onImportOcr={() => setImportingOcr(true)}
+        onPasteCards={() => setPasteCardsOpen(true)}
         onSeedDecks={() => setSeedDecksOpen(true)}
         onImportDeck={() => setUniversalImportOpen(true)}
         onNewSet={() => setCreating(true)}
@@ -769,11 +769,11 @@ export function DashboardPage(): ReactElement {
         />
       )}
 
-      <FileImportDialog
-        open={importingOcr}
-        onClose={() => setImportingOcr(false)}
+      <PasteToCardsDialog
+        open={pasteCardsOpen}
+        onClose={() => setPasteCardsOpen(false)}
         onImport={() => {
-          setImportingOcr(false)
+          setPasteCardsOpen(false)
           void navigate('/sets')
         }}
       />

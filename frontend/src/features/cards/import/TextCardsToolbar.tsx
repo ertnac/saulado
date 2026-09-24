@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { SparkIcon } from '@/components/ui/icons'
 import { cn } from '@/lib/utils'
 
-export interface OcrToolbarProps {
+export interface TextCardsToolbarProps {
   mode: 'edit' | 'highlight'
   onModeChange: (mode: 'edit' | 'highlight') => void
   onInsertSymbol: (symbol: string) => void
@@ -31,7 +31,7 @@ export const QUICK_SYMBOLS = [
   { label: '✓', value: '✓', title: 'Check' },
 ]
 
-export function OcrToolbar({
+export function TextCardsToolbar({
   mode,
   onModeChange,
   onInsertSymbol,
@@ -40,7 +40,7 @@ export function OcrToolbar({
   disabled = false,
   wordCount,
   paragraphCount,
-}: OcrToolbarProps): ReactElement {
+}: TextCardsToolbarProps): ReactElement {
   return (
     <div className="space-y-3 border-b border-border/60 bg-surface-muted/40 p-3.5 sm:p-4 rounded-t-xl">
       {/* ── Top Bar: Mode Switcher & Actions ── */}
@@ -48,7 +48,7 @@ export function OcrToolbar({
         {/* Mode Toggle */}
         <div
           role="radiogroup"
-          aria-label="Document review mode"
+          aria-label="Notes review mode"
           className="inline-flex gap-1 rounded-full border border-border/50 bg-surface-muted p-1"
         >
           <button
@@ -65,7 +65,7 @@ export function OcrToolbar({
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            1. Edit Text
+            1. Paste / Edit Text
           </button>
           <button
             type="button"
@@ -92,11 +92,11 @@ export function OcrToolbar({
             size="sm"
             disabled={disabled}
             onClick={onAutoClean}
-            title="Auto-fix common OCR errors, broken words, and symbols"
+            title="Auto-format punctuation, spaces, and mathematical symbols"
             className="h-8 text-xs px-2.5 sm:px-3"
           >
             <SparkIcon className="mr-1 text-accent-strong" />
-            Auto-Clean OCR
+            Auto-Clean Text
           </Button>
 
           <Button

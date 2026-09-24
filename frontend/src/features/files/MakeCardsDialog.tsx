@@ -4,7 +4,7 @@ import type { AnswerRange } from '@saulado/shared'
 import { Dialog } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/stores/toast'
-import { OcrReviewEditor } from '../cards/import/OcrReviewEditor'
+import { PasteTextEditor } from '../cards/import/PasteTextEditor'
 import { useCreateSet, useSets } from '../cards/queries'
 
 export interface MakeCardsDialogProps {
@@ -90,7 +90,7 @@ export function MakeCardsDialog({
     >
       {step === 'review' && (
         <div className="mt-2 -mx-6 -mb-6">
-          <OcrReviewEditor
+          <PasteTextEditor
             initialText={extractedText}
             onCommitCards={handleCommitCards}
             onCancel={onClose}

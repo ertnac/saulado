@@ -1040,10 +1040,11 @@ export function LandingPage({ initialModal }: LandingPageProps = {}): ReactEleme
               <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
                 <FileTextIcon className="h-6 w-6" />
               </div>
-              <h4 className="text-xl font-bold text-foreground">Document & Image OCR</h4>
+              <h4 className="text-xl font-bold text-foreground">Instant Paste & Cloze Cards</h4>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Drag-and-drop lecture slides, PDFs, or photos of textbooks. Saulado extracts
-                sentences and turns highlighted phrases into instant recall cards.
+                Paste lecture summaries, textbook passages, or notes. Saulado cleans up typography,
+                splits paragraphs into cards, and turns highlighted phrases into instant recall
+                cloze blanks.
               </p>
             </div>
 

@@ -1,25 +1,27 @@
 import { useRef, useState, type ReactElement } from 'react'
-import { enhanceOcrText, type AnswerRange } from '@saulado/shared'
+import { enhanceNotesText, type AnswerRange } from '@saulado/shared'
 import { Button } from '@/components/ui/button'
-import { OcrToolbar } from './OcrToolbar'
+import { TextCardsToolbar } from './TextCardsToolbar'
 import { CardHighlightEditor } from './CardHighlightEditor'
 import { cn } from '@/lib/utils'
 
-export interface OcrReviewEditorProps {
-  initialText: string
+export interface PasteTextEditorProps {
+  initialText?: string
   onCommitCards: (cards: { text: string; answers: AnswerRange[] }[]) => void
   onCancel: () => void
   isSubmitting?: boolean
 }
 
-export function OcrReviewEditor({
-  initialText,
+export function PasteTextEditor({
+  initialText = '',
   onCommitCards,
   onCancel,
   isSubmitting = false,
-}: OcrReviewEditorProps): ReactElement {
+}: PasteTextEditorProps): ReactElement {
   const [text, setText] = useState(initialText)
-  const [mode, setMode] = useState<'edit' | 'highlight'>('highlight')
+  const [mode, setMode] = useState<'edit' | 'highlight'>(
+    initialText.trim().length > 0 ? 'highlight' : 'edit',
+  )
   const [cardAnswers, setCardAnswers] = useState<Record<number, AnswerRange[]>>({})
   const [selection, setSelection] = useState<{ start: number; end: number }>({
     start: text.length,
@@ -28,7 +30,7 @@ export function OcrReviewEditor({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Split into card paragraphs on blank lines
+  // Split into card paragraphs on blank lines (\n\n)
   const paragraphs = text
     .split(/\n\s*\n+/)
     .map((p) => p.trim())
@@ -60,7 +62,7 @@ export function OcrReviewEditor({
   }
 
   const handleAutoClean = (): void => {
-    const cleaned = enhanceOcrText(text)
+    const cleaned = enhanceNotesText(text)
     setText(cleaned)
     setCardAnswers({})
   }
@@ -90,7 +92,7 @@ export function OcrReviewEditor({
   return (
     <div className="flex flex-col h-full max-h-[85vh] overflow-hidden rounded-xl border border-border bg-surface shadow-2xl">
       {/* ── Fixed Toolbar at top ── */}
-      <OcrToolbar
+      <TextCardsToolbar
         mode={mode}
         onModeChange={setMode}
         onInsertSymbol={handleInsertSymbol}
@@ -105,15 +107,20 @@ export function OcrReviewEditor({
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-surface-muted/20">
         <div className="mx-auto max-w-3xl rounded-xl border border-border/70 bg-surface p-6 sm:p-8 shadow-sm">
           {mode === 'edit' ? (
-            <div className="space-y-2">
-              <label
-                htmlFor="ocr-document-textarea"
-                className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block"
-              >
-                Document Text (Editable)
-              </label>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="paste-document-textarea"
+                  className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block"
+                >
+                  Notes Text (Editable)
+                </label>
+                <span className="text-xs text-muted-foreground">
+                  Press Enter twice to split into multiple cards
+                </span>
+              </div>
               <textarea
-                id="ocr-document-textarea"
+                id="paste-document-textarea"
                 ref={textareaRef}
                 value={text}
                 disabled={isSubmitting}
@@ -125,17 +132,29 @@ export function OcrReviewEditor({
                   const target = e.target as HTMLTextAreaElement
                   setSelection({ start: target.selectionStart, end: target.selectionEnd })
                 }}
-                placeholder="Paste or type document text here. Leave blank lines between questions..."
+                placeholder="Paste lecture notes, study guides, outlines, or textbook excerpts here. Leave a blank line between separate questions or flashcards..."
                 rows={16}
                 className={cn(
                   'w-full resize-y rounded-lg border border-border bg-surface p-4 font-mono text-sm leading-relaxed text-foreground',
                   'focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all',
                 )}
               />
-              <p className="text-xs text-muted-foreground">
-                Tip: Separate each question or flashcard paragraph with a blank line. Switch to
-                &quot;Highlight Cards&quot; when ready.
-              </p>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <p>
+                  Tip: Separate each question or card paragraph with an empty line. Switch to
+                  &quot;2. Highlight Cards&quot; when ready.
+                </p>
+                {paragraphs.length > 0 && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="soft"
+                    onClick={() => setMode('highlight')}
+                  >
+                    Highlight Blanks →
+                  </Button>
+                )}
+              </div>
             </div>
           ) : (
             <CardHighlightEditor
