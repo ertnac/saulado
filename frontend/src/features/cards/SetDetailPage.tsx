@@ -65,10 +65,7 @@ type Composing = { kind: 'new' } | { kind: 'edit'; cardId: string; inRow: boolea
 /**
  * Lazy, and this is the only import of `ImportDialog` anywhere.
  *
- * That dialog reaches `tesseract.js` and its several megabytes of WASM and
- * English training data. Imported statically it would join this route's chunk
- * and be fetched by every user who opens a set, including the ones who never
- * import an image.
+ * Imported dynamically to keep the set detail route's initial chunk lightweight.
  */
 const ImportDialog = lazy(async () => ({
   default: (await import('./ImportDialog')).ImportDialog,
