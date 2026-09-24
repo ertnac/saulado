@@ -512,8 +512,8 @@ export default function SetDetailScreen(): ReactElement {
               )}
             </Text>
             {items.length > 0 && (
-              <TouchableOpacity onPress={() => router.push(`/scan?setId=${setId}`)}>
-                <Text className="text-sm font-medium text-primary">Scan Note</Text>
+              <TouchableOpacity onPress={() => router.push(`/paste-cards?setId=${setId}`)}>
+                <Text className="text-sm font-medium text-primary">Paste Notes</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -538,11 +538,11 @@ export default function SetDetailScreen(): ReactElement {
                 No cards yet. Tap "+ Card" to create your first flashcard!
               </Text>
               <Button
-                label="Read a page with the camera"
+                label="Create cards from pasted text"
                 variant="outline"
                 className="mt-2"
                 onPress={() => {
-                  router.push(`/scan?setId=${setId}`)
+                  router.push(`/paste-cards?setId=${setId}`)
                 }}
               />
             </View>

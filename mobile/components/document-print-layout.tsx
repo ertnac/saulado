@@ -15,7 +15,7 @@ import {
   ANSWERS_MAX_PER_CARD,
   assignOrdinals,
   createAnswer,
-  enhanceOcrText,
+  enhanceNotesText,
   type DraftAnswer,
 } from '@saulado/shared'
 import {
@@ -32,7 +32,8 @@ import { useTokenColor } from '../stores/theme'
 interface DocumentPrintLayoutProps {
   initialText: string
   onSaveCards: (cards: { paragraph: string; answers: DraftAnswer[] }[]) => void
-  onScanAgain: () => void
+  onScanAgain?: () => void
+  onCancel?: () => void
   title?: string
   isSaving?: boolean
   initialMode?: 'edit' | 'highlight'
@@ -61,10 +62,11 @@ export function DocumentPrintLayout({
   initialText,
   onSaveCards,
   onScanAgain,
-  title = 'Scanned Document',
+  onCancel,
+  title = 'Paste & Review Notes',
   isSaving = false,
   initialMode,
-  scanAgainLabel = 'Scan another page',
+  scanAgainLabel = 'Cancel',
 }: DocumentPrintLayoutProps): ReactElement {
   const [text, setText] = useState(initialText)
   const [isEditingFullDoc, setIsEditingFullDoc] = useState(
@@ -137,7 +139,7 @@ export function DocumentPrintLayout({
   }
 
   function handleFormatClean(): void {
-    const formatted = enhanceOcrText(text)
+    const formatted = enhanceNotesText(text)
     updateText(formatted)
   }
 
@@ -679,7 +681,16 @@ export function DocumentPrintLayout({
               loading={isSaving}
               onPress={handleCommitCards}
             />
-            <Button label={scanAgainLabel} variant="ghost" onPress={onScanAgain} />
+            {(onCancel || onScanAgain) && (
+              <Button
+                label={scanAgainLabel}
+                variant="ghost"
+                onPress={() => {
+                  if (onCancel) onCancel()
+                  else if (onScanAgain) onScanAgain()
+                }}
+              />
+            )}
           </View>
         )}
       </KeyboardAvoidingView>

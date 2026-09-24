@@ -103,19 +103,9 @@ const config: ExpoConfig = {
     'expo-router',
     '@react-native-google-signin/google-signin',
     [
-      'expo-camera',
-      {
-        cameraPermission:
-          'Saulado uses the camera to read text from a page you point it at. The photo is processed on this device and is never uploaded or saved.',
-        recordAudioAndroid: false,
-        barcodeScannerEnabled: false,
-      },
-    ],
-    [
       'expo-image-picker',
       {
-        photosPermission:
-          'Saulado reads text from a photo you choose. It stays on this device and is never uploaded.',
+        photosPermission: 'Saulado allows choosing an image for your profile avatar.',
         microphonePermission: false,
       },
     ],

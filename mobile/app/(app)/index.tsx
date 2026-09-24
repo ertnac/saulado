@@ -7,8 +7,8 @@ import type { RecentSet } from '@saulado/shared'
 import {
   ArrowRightIcon,
   BoxCubeIcon,
-  CameraIcon,
   ClockIcon,
+  FileTextIcon,
   FlameIcon,
   PlusIcon,
   ZapIcon,
@@ -383,13 +383,13 @@ export default function HomeScreen(): ReactElement {
           </TouchableOpacity>
         </View>
 
-        {/* 3. 1-Tap Quick Action Row (Scan Paper / Quick Learn / New Set) */}
+        {/* 3. 1-Tap Quick Action Row (Paste Notes / Quick Learn / New Set) */}
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          {/* Action 1: Scan Paper */}
+          {/* Action 1: Paste Notes */}
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel="Scan paper: Import cards"
-            onPress={() => router.push('/scan')}
+            accessibilityLabel="Paste notes: Create cards from text"
+            onPress={() => router.push('/paste-cards')}
             activeOpacity={0.75}
             style={{
               flex: 1,
@@ -412,7 +412,7 @@ export default function HomeScreen(): ReactElement {
                 justifyContent: 'center',
               }}
             >
-              <CameraIcon color={isDark ? '#A6C2B5' : '#317054'} size={20} />
+              <FileTextIcon color={isDark ? '#A6C2B5' : '#317054'} size={20} />
             </View>
             <View style={{ alignItems: 'center' }}>
               <Text
@@ -422,7 +422,7 @@ export default function HomeScreen(): ReactElement {
                   color: isDark ? '#FFFFFF' : '#111A17',
                 }}
               >
-                Scan Paper
+                Paste Notes
               </Text>
               <Text
                 style={{
@@ -431,7 +431,7 @@ export default function HomeScreen(): ReactElement {
                   marginTop: 2,
                 }}
               >
-                Import cards
+                From text
               </Text>
             </View>
           </TouchableOpacity>

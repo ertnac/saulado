@@ -1,14 +1,12 @@
-import { useSyncExternalStore, type ReactElement } from 'react'
+import { type ReactElement } from 'react'
 import { Text, TouchableOpacity, View } from 'react-native'
 import { useRouter, type Tabs } from 'expo-router'
-import { onlineManager } from '@tanstack/react-query'
 import { useTheme } from '../stores/theme'
 import {
   FileTextIcon,
   FolderIcon,
   HomeIcon,
   LayersIcon,
-  ScanQRIcon,
   TrendingUpIcon,
   type IconProps,
 } from './icons'
@@ -20,10 +18,10 @@ export type BottomTabBarProps = Parameters<
 /**
  * Redesigned Floating Bottom Navigation Pill Bar.
  *
- * Implements the unified 5-tab layout matching Image 5:
+ * Implements the unified 5-tab layout:
  * - Home (HomeIcon + Label)
  * - Sets (LayersIcon + Label)
- * - Scan (Center elevated circular Hero button with ScanQRIcon)
+ * - Paste (Center elevated circular Hero button with FileTextIcon)
  * - Progress (TrendingUpIcon + Label)
  * - Files (FolderIcon + Label)
  *
@@ -51,18 +49,14 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
   const router = useRouter()
   const { isDark } = useTheme()
 
-  const isOnline = useSyncExternalStore(
-    (onStoreChange) => onlineManager.subscribe(onStoreChange),
-    () => onlineManager.isOnline(),
-  )
-
   const active = state.routes[state.index]?.name ?? ''
 
-  // Hide tab bar during immersion/study/camera flows
+  // Hide tab bar during immersion/study/editor flows
   if (
     active === 'study' ||
     active === 'scan' ||
     active === 'scan-review' ||
+    active === 'paste-cards' ||
     active === 'files/bag-studio'
   ) {
     return null
@@ -164,24 +158,16 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
           {LEFT_DESTINATIONS.map(renderTabItem)}
         </View>
 
-        {/* Center Hero Button: Scan / Camera FAB */}
+        {/* Center Hero Button: Paste Notes to Cards FAB */}
         <View style={{ alignItems: 'center', justifyContent: 'center', marginHorizontal: 4 }}>
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel={
-              isOnline
-                ? 'Scan a page with the camera or import documents'
-                : 'Create cards from pasted text'
-            }
+            accessibilityLabel="Create cards from pasted text"
             accessibilityState={{
-              selected: isOnline ? active === 'scan' : active === 'scan-review',
+              selected: active === 'paste-cards' || active === 'scan-review' || active === 'scan',
             }}
             onPress={() => {
-              if (isOnline) {
-                go('scan')
-              } else {
-                router.push('/scan-review?mode=paste')
-              }
+              router.push('/paste-cards')
             }}
             activeOpacity={0.85}
             style={{
@@ -200,11 +186,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps): ReactE
               elevation: 9,
             }}
           >
-            {isOnline ? (
-              <ScanQRIcon color="#ffffff" size={24} />
-            ) : (
-              <FileTextIcon color="#ffffff" size={24} />
-            )}
+            <FileTextIcon color="#ffffff" size={24} />
           </TouchableOpacity>
         </View>
 

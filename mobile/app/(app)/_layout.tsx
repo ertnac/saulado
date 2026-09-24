@@ -35,10 +35,9 @@ const SCREENS: { name: string; title: string }[] = [
   { name: 'files/index', title: 'Study Bag' },
   { name: 'files/[fileId]', title: 'Document Viewer' },
   { name: 'files/bag-studio', title: 'Card Creation Studio' },
-  { name: 'scan', title: 'Scan a page' },
+  { name: 'paste-cards', title: 'Paste Notes to Cards' },
   { name: 'sets/[setId]', title: 'Set' },
   { name: 'study', title: 'Study' },
-  { name: 'scan-review', title: 'Review the scan' },
   { name: 'settings', title: 'Settings' },
   { name: 'account', title: 'Account' },
 ]
@@ -141,7 +140,7 @@ export default function AppLayout(): ReactElement {
           {SCREENS.map(({ name, title }) => {
             const options = {
               title,
-              ...(name === 'files/bag-studio' || name === 'scan-review'
+              ...(name === 'files/bag-studio' || name === 'scan-review' || name === 'paste-cards'
                 ? {
                     unmountOnBlur: true,
                   }
@@ -152,6 +151,7 @@ export default function AppLayout(): ReactElement {
                   }
                 : name === 'scan' ||
                     name === 'scan-review' ||
+                    name === 'paste-cards' ||
                     name === 'sets/[setId]' ||
                     name === 'files/bag-studio' ||
                     name === 'settings' ||
