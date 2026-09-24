@@ -85,3 +85,5 @@ export function enhanceOcrText(text: string): string {
 
   return result.trim()
 }
+
+export { enhanceOcrText as enhanceNotesText }

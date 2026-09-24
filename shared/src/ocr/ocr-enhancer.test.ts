@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { enhanceOcrText } from './ocr-enhancer.js'
+import { enhanceNotesText, enhanceOcrText } from './ocr-enhancer.js'
 
 describe('enhanceOcrText', () => {
   it('rejoins broken words across lines', () => {
@@ -39,5 +39,10 @@ describe('enhanceOcrText', () => {
     const input = 'Testing ( in app ) , with multiple items [ 1 ] .'
     const output = enhanceOcrText(input)
     expect(output).toBe('Testing (in app), with multiple items [1].')
+  })
+
+  it('exports enhanceNotesText identical to enhanceOcrText', () => {
+    const raw = 'The fi-rst step is photosynthesis.'
+    expect(enhanceNotesText(raw)).toBe(enhanceOcrText(raw))
   })
 })

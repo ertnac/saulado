@@ -9,5 +9,5 @@
 export type { ExtractedParagraph } from './segment.js'
 export { segmentParagraphs } from './segment.js'
 export { dewrap } from './dewrap.js'
-export { enhanceOcrText } from './ocr-enhancer.js'
+export { enhanceOcrText, enhanceNotesText } from './ocr-enhancer.js'
 export { extractTextFromPdfStream } from './pdf.js'
