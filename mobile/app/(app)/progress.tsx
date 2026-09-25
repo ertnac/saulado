@@ -1,14 +1,23 @@
-import { type ReactElement } from 'react'
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native'
+import { useRef, useState, type ReactElement } from 'react'
+import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native'
 import Svg, { Circle, Path } from 'react-native-svg'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowRightIcon } from '../../components/icons'
 import { useDashboard, useProgress } from '../../hooks/progress'
+import { useDueCounts } from '../../hooks/study'
+import {
+  computeAccuracyTrend,
+  computeGoalMetrics,
+  computeKeyMetrics,
+  compute4WeekHeatmap,
+  type TrendPoint,
+} from '../../lib/progress-metrics'
+import { useAuthStore } from '../../stores/auth'
 import { useTheme } from '../../stores/theme'
 
 /**
- * Large circular gauge for Daily Review Goal matching Image 2 ("15/20").
+ * Large circular gauge for Daily Review Goal matching design.
  */
 function DailyGoalGauge({
   completed,
@@ -70,31 +79,35 @@ function DailyGoalGauge({
 }
 
 /**
- * Accuracy Trend Line Chart matching Image 2.
+ * Accuracy Trend Line Chart with dynamic points and empty state support.
  */
-function AccuracyTrendChart({ isDark }: { isDark: boolean }): ReactElement {
+function AccuracyTrendChart({
+  points,
+  isDark,
+}: {
+  points: TrendPoint[]
+  isDark: boolean
+}): ReactElement {
   const width = 290
   const height = 90
-  const points = [
-    { day: 'Mon', val: 78 },
-    { day: 'Tue', val: 86 },
-    { day: 'Wed', val: 82 },
-    { day: 'Thu', val: 94 },
-    { day: 'Fri', val: 84 },
-    { day: 'Sat', val: 88 },
-    { day: 'Sun', val: 92 },
-  ]
+  const stepX = width / Math.max(1, points.length - 1)
+  const hasAnyData = points.some((p) => p.hasData)
 
-  // Compute SVG polyline path
-  const minVal = 70
+  const minVal = 50
   const maxVal = 100
-  const stepX = width / (points.length - 1)
-  const pathData = points
-    .map((p, i) => {
-      const x = i * stepX
-      const y = height - ((p.val - minVal) / (maxVal - minVal)) * (height - 20) - 10
-      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
-    })
+
+  // Compute SVG polyline path and dot coordinates
+  const coords = points.map((p, i) => {
+    const x = i * stepX
+    const clampedVal = Math.max(minVal, Math.min(maxVal, p.val))
+    const y = hasAnyData
+      ? height - ((clampedVal - minVal) / (maxVal - minVal)) * (height - 24) - 12
+      : height / 2
+    return { x, y, hasData: p.hasData }
+  })
+
+  const pathData = coords
+    .map((c, i) => `${i === 0 ? 'M' : 'L'} ${c.x.toFixed(1)} ${c.y.toFixed(1)}`)
     .join(' ')
 
   return (
@@ -103,11 +116,25 @@ function AccuracyTrendChart({ isDark }: { isDark: boolean }): ReactElement {
         <Path
           d={pathData}
           fill="none"
-          stroke="#317054"
+          stroke={hasAnyData ? '#317054' : isDark ? 'rgba(255,255,255,0.15)' : '#E0E7E4'}
           strokeWidth={2.5}
+          strokeDasharray={hasAnyData ? undefined : '4 4'}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
+        {coords.map((c, i) =>
+          c.hasData ? (
+            <Circle
+              key={i}
+              cx={c.x}
+              cy={c.y}
+              r={3.5}
+              fill="#317054"
+              stroke={isDark ? '#111A17' : '#FFFFFF'}
+              strokeWidth={1.5}
+            />
+          ) : null,
+        )}
       </Svg>
 
       <View
@@ -118,9 +145,9 @@ function AccuracyTrendChart({ isDark }: { isDark: boolean }): ReactElement {
           marginTop: 8,
         }}
       >
-        {points.map((p) => (
+        {points.map((p, idx) => (
           <Text
-            key={p.day}
+            key={`${p.day}-${idx}`}
             style={{
               fontSize: 11,
               fontWeight: '500',
@@ -139,31 +166,52 @@ export default function ProgressScreen(): ReactElement {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { isDark } = useTheme()
+  const scrollViewRef = useRef<ScrollView>(null)
+  const [reportY, setReportY] = useState(0)
+
+  // Dynamic user data queries
   const dashboard = useDashboard()
   const progressQuery = useProgress('30d')
+  const dueCounts = useDueCounts()
+  const settings = useAuthStore((s) => s.settings)
 
-  const todayReviews = dashboard.data?.today?.reviews ?? 15
-  const todayGoal = dashboard.data?.today?.goal ?? 20
-  const goalPercent =
-    todayGoal > 0 ? Math.min(100, Math.round((todayReviews / todayGoal) * 100)) : 75
+  const isRefreshing =
+    dashboard.isRefetching || progressQuery.isRefetching || dueCounts.isRefetching
 
-  const dueCount = dashboard.data?.totalDue ?? 18
-  const calculatedAccuracy =
-    progressQuery.data?.totals && progressQuery.data.totals.reviews > 0
-      ? ((progressQuery.data.totals.correct / progressQuery.data.totals.reviews) * 100).toFixed(1)
-      : '92.4'
+  const handleRefresh = async (): Promise<void> => {
+    await Promise.all([dashboard.refetch(), progressQuery.refetch(), dueCounts.refetch()])
+  }
 
-  // 4-Week Activity Heatmap (4 rows x 7 days)
-  // Palette: 5+ cards (#052E24), 3-4 cards (#317054), 1-2 cards (#6B9985), 1 card (#A6C2B5), No cards (#E8F3EE)
-  const heatmapData = [
-    ['#317054', '#A6C2B5', '#E8F3EE', '#052E24', '#E8F3EE', '#E8F3EE', '#6B9985'],
-    ['#E8F3EE', '#E8F3EE', '#317054', '#6B9985', '#A6C2B5', '#052E24', '#E8F3EE'],
-    ['#E8F3EE', '#A6C2B5', '#E8F3EE', '#E8F3EE', '#317054', '#6B9985', '#A6C2B5'],
-    ['#6B9985', '#052E24', '#317054', '#A6C2B5', '#052E24', '#E8F3EE', '#E8F3EE'],
-  ]
+  // Derive all dynamic metrics via pure helpers
+  const goalMetrics = computeGoalMetrics(dashboard.data?.today, settings?.dailyGoal)
+  const keyMetrics = computeKeyMetrics(
+    dueCounts.data?.totalMastered,
+    dashboard.data?.totalDue ?? dueCounts.data?.totalDue,
+    progressQuery.data?.totals,
+  )
+  const heatmapRows = compute4WeekHeatmap(progressQuery.data?.days)
+  const trendResult = computeAccuracyTrend(progressQuery.data?.days ?? dashboard.data?.sparkline)
+
+  const getHeatmapColor = (tier: number): string => {
+    switch (tier) {
+      case 3:
+        return '#052E24'
+      case 2:
+        return '#317054'
+      case 1:
+        return '#6B9985'
+      default:
+        return isDark ? 'rgba(255,255,255,0.06)' : '#E8F3EE'
+    }
+  }
+
+  const handleViewReport = (): void => {
+    scrollViewRef.current?.scrollTo({ y: Math.max(0, reportY - 20), animated: true })
+  }
 
   return (
     <ScrollView
+      ref={scrollViewRef}
       style={{ flex: 1, backgroundColor: isDark ? '#050D0A' : '#FAFBF9' }}
       contentContainerStyle={{
         paddingHorizontal: 20,
@@ -172,8 +220,17 @@ export default function ProgressScreen(): ReactElement {
         gap: 20,
       }}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={() => {
+            void handleRefresh()
+          }}
+          tintColor="#317054"
+        />
+      }
     >
-      {/* 1. Daily Goal Section (Image 2) */}
+      {/* 1. Daily Goal Section */}
       <View style={{ gap: 12 }}>
         <Text
           style={{
@@ -203,9 +260,9 @@ export default function ProgressScreen(): ReactElement {
           }}
         >
           <DailyGoalGauge
-            completed={todayReviews}
-            total={todayGoal}
-            percent={goalPercent}
+            completed={goalMetrics.todayReviews}
+            total={goalMetrics.todayGoal}
+            percent={goalMetrics.goalPercent}
             isDark={isDark}
           />
 
@@ -228,7 +285,7 @@ export default function ProgressScreen(): ReactElement {
                 textAlign: 'center',
               }}
             >
-              You've completed {goalPercent}% of today's review cards.
+              {goalMetrics.subtitle}
             </Text>
           </View>
 
@@ -257,7 +314,7 @@ export default function ProgressScreen(): ReactElement {
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="View Report"
-              onPress={() => {}}
+              onPress={handleViewReport}
               activeOpacity={0.75}
               style={{
                 flex: 1,
@@ -282,7 +339,7 @@ export default function ProgressScreen(): ReactElement {
         </View>
       </View>
 
-      {/* 2. Key Metrics Section (Image 2) */}
+      {/* 2. Key Metrics Section */}
       <View style={{ gap: 12 }}>
         <Text
           style={{
@@ -316,10 +373,10 @@ export default function ProgressScreen(): ReactElement {
             <Text
               style={{ fontSize: 16, fontWeight: '800', color: isDark ? '#FFFFFF' : '#111A17' }}
             >
-              128 cards
+              {keyMetrics.masteredCount} cards
             </Text>
             <Text style={{ fontSize: 11, fontWeight: '600', color: '#317054', marginTop: 2 }}>
-              +12 this week
+              Mastered cards
             </Text>
           </View>
 
@@ -343,10 +400,10 @@ export default function ProgressScreen(): ReactElement {
             <Text
               style={{ fontSize: 16, fontWeight: '800', color: isDark ? '#FFFFFF' : '#111A17' }}
             >
-              {dueCount} cards
+              {keyMetrics.dueCount} cards
             </Text>
             <Text style={{ fontSize: 11, color: isDark ? '#889591' : '#4C5854', marginTop: 2 }}>
-              Ready for review
+              {keyMetrics.dueSubtitle}
             </Text>
           </View>
 
@@ -368,17 +425,22 @@ export default function ProgressScreen(): ReactElement {
               Review Accuracy
             </Text>
             <Text style={{ fontSize: 16, fontWeight: '800', color: '#317054' }}>
-              {calculatedAccuracy}%
+              {keyMetrics.accuracyText}
             </Text>
             <Text style={{ fontSize: 11, fontWeight: '600', color: '#317054', marginTop: 2 }}>
-              +1.5% vs average
+              {keyMetrics.accuracySubtitle}
             </Text>
           </View>
         </View>
       </View>
 
-      {/* 3. Activity Heatmap Section (Image 2) */}
-      <View style={{ gap: 12 }}>
+      {/* 3. Activity Heatmap Section */}
+      <View
+        style={{ gap: 12 }}
+        onLayout={(e) => {
+          setReportY(e.nativeEvent.layout.y)
+        }}
+      >
         <Text
           style={{
             fontSize: 18,
@@ -417,7 +479,14 @@ export default function ProgressScreen(): ReactElement {
               <Text style={{ fontSize: 9, color: isDark ? '#889591' : '#4C5854' }}>3-4</Text>
               <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: '#6B9985' }} />
               <Text style={{ fontSize: 9, color: isDark ? '#889591' : '#4C5854' }}>1-2</Text>
-              <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: '#E8F3EE' }} />
+              <View
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 2,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#E8F3EE',
+                }}
+              />
               <Text style={{ fontSize: 9, color: isDark ? '#889591' : '#4C5854' }}>0</Text>
             </View>
           </View>
@@ -444,7 +513,7 @@ export default function ProgressScreen(): ReactElement {
 
           {/* Grid rows */}
           <View style={{ gap: 8 }}>
-            {heatmapData.map((row, rIdx) => (
+            {heatmapRows.map((row, rIdx) => (
               <View
                 key={rIdx}
                 style={{
@@ -453,15 +522,15 @@ export default function ProgressScreen(): ReactElement {
                   paddingHorizontal: 4,
                 }}
               >
-                {row.map((color, cIdx) => (
+                {row.map((cell) => (
                   <View
-                    key={cIdx}
+                    key={cell.dayKey}
+                    accessibilityLabel={`${cell.dayKey}: ${cell.count} cards reviewed`}
                     style={{
                       width: 32,
                       height: 32,
                       borderRadius: 8,
-                      backgroundColor:
-                        isDark && color === '#E8F3EE' ? 'rgba(255,255,255,0.06)' : color,
+                      backgroundColor: getHeatmapColor(cell.tier),
                     }}
                   />
                 ))}
@@ -471,7 +540,7 @@ export default function ProgressScreen(): ReactElement {
         </View>
       </View>
 
-      {/* 4. Accuracy Trend Section (Image 2) */}
+      {/* 4. Accuracy Trend Section */}
       <View style={{ gap: 12 }}>
         <Text
           style={{
@@ -498,12 +567,12 @@ export default function ProgressScreen(): ReactElement {
             <Text
               style={{ fontSize: 13, fontWeight: '700', color: isDark ? '#FFFFFF' : '#111A17' }}
             >
-              Average: 88%
+              Average: {trendResult.averageAccuracyText}
             </Text>
             <Text style={{ fontSize: 12, color: isDark ? '#889591' : '#4C5854' }}>Last 7 Days</Text>
           </View>
 
-          <AccuracyTrendChart isDark={isDark} />
+          <AccuracyTrendChart points={trendResult.points} isDark={isDark} />
         </View>
       </View>
     </ScrollView>

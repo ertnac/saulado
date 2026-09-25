@@ -75,11 +75,11 @@ describe('progress-metrics', () => {
       ]
       const grid = compute4WeekHeatmap(days, refDate)
       expect(grid.length).toBe(4)
-      expect(grid[0].length).toBe(7)
-      expect(grid[3].length).toBe(7)
+      expect(grid[0]!.length).toBe(7)
+      expect(grid[3]!.length).toBe(7)
 
       // The last element of week 4 (index [3][6]) corresponds to Sunday 2026-09-27
-      const sundayCell = grid[3][6]
+      const sundayCell = grid[3]![6]!
       expect(sundayCell.dayKey).toBe('2026-09-27')
       expect(sundayCell.count).toBe(6)
       expect(sundayCell.tier).toBe(3) // 5+ reviews => tier 3

@@ -149,7 +149,7 @@ export function computeAccuracyTrend(
     const key = `${yyyy}-${mm}-${dd}`
     const stat = dayStatsMap.get(key)
 
-    const dayName = dayNames[d.getDay()]
+    const dayName = dayNames[d.getDay()] ?? 'Day'
     if (stat && stat.reviews > 0) {
       const accuracy = Math.round((stat.correct / stat.reviews) * 100)
       points.push({ day: dayName, val: accuracy, hasData: true })
